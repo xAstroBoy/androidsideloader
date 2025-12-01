@@ -1433,7 +1433,7 @@ namespace AndroidSideloader
             this.downloadInstallGameButton.Stroke = true;
             this.downloadInstallGameButton.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
             this.downloadInstallGameButton.TabIndex = 94;
-            this.downloadInstallGameButton.Text = "Download and Install Game/Add To Queue ⮩ ";
+            this.downloadInstallGameButton.Text = "Download and Install / Add To Queue ⮩ ";
             this.downloadInstallGameButton.Transparency = false;
             this.downloadInstallGameButton.Click += new System.EventHandler(this.downloadInstallGameButton_Click);
             this.downloadInstallGameButton.DragDrop += new System.Windows.Forms.DragEventHandler(this.Form1_DragDrop);

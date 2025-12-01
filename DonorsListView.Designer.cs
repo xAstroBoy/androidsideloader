@@ -37,6 +37,7 @@ namespace AndroidSideloader
             this.VersionCodeIndex = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.UpdateOrNew = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.panel1 = new System.Windows.Forms.Panel();
+            this.skip_forever = new AndroidSideloader.RoundButton();
             this.SkipButton = new AndroidSideloader.RoundButton();
             this.DonateButton = new AndroidSideloader.RoundButton();
             this.panel2 = new System.Windows.Forms.Panel();
@@ -49,9 +50,9 @@ namespace AndroidSideloader
             this.panel1.SuspendLayout();
             this.panel2.SuspendLayout();
             this.SuspendLayout();
-            //
+            // 
             // DonorsListView
-            //
+            // 
             this.DonorsListView.AccessibleRole = System.Windows.Forms.AccessibleRole.None;
             this.DonorsListView.BackColor = global::AndroidSideloader.Properties.Settings.Default.ComboBoxColor;
             this.DonorsListView.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
@@ -84,34 +85,35 @@ namespace AndroidSideloader
             this.DonorsListView.MouseDown += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseDown);
             this.DonorsListView.MouseMove += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseMove);
             this.DonorsListView.MouseUp += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseUp);
-            //
+            // 
             // GameNameIndex
-            //
-            this.GameNameIndex.Text = "Game Name";
+            // 
+            this.GameNameIndex.Text = "App Name";
             this.GameNameIndex.Width = 219;
-            //
+            // 
             // PackageNameIndex
-            //
+            // 
             this.PackageNameIndex.DisplayIndex = 2;
             this.PackageNameIndex.Text = "Packagename";
             this.PackageNameIndex.Width = 0;
-            //
+            // 
             // VersionCodeIndex
-            //
+            // 
             this.VersionCodeIndex.DisplayIndex = 3;
             this.VersionCodeIndex.Text = "Version";
             this.VersionCodeIndex.Width = 113;
-            //
+            // 
             // UpdateOrNew
-            //
+            // 
             this.UpdateOrNew.DisplayIndex = 1;
             this.UpdateOrNew.Text = "Donation Type";
             this.UpdateOrNew.Width = 85;
-            //
+            // 
             // panel1
-            //
+            // 
             this.panel1.BackColor = global::AndroidSideloader.Properties.Settings.Default.BackColor;
             this.panel1.BackgroundImage = global::AndroidSideloader.Properties.Resources.pattern_cubes;
+            this.panel1.Controls.Add(this.skip_forever);
             this.panel1.Controls.Add(this.SkipButton);
             this.panel1.Controls.Add(this.DonateButton);
             this.panel1.Controls.Add(this.panel2);
@@ -123,14 +125,40 @@ namespace AndroidSideloader
             this.panel1.DataBindings.Add(new System.Windows.Forms.Binding("BackColor", global::AndroidSideloader.Properties.Settings.Default, "BackColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
             this.panel1.Location = new System.Drawing.Point(-7, -7);
             this.panel1.Name = "panel1";
-            this.panel1.Size = new System.Drawing.Size(463, 345);
+            this.panel1.Size = new System.Drawing.Size(463, 373);
             this.panel1.TabIndex = 1;
             this.panel1.MouseDown += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseDown);
             this.panel1.MouseMove += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseMove);
             this.panel1.MouseUp += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseUp);
-            //
+            // 
+            // skip_forever
+            // 
+            this.skip_forever.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
+            this.skip_forever.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
+            this.skip_forever.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.skip_forever.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(20)))), ((int)(((byte)(20)))));
+            this.skip_forever.DataBindings.Add(new System.Windows.Forms.Binding("BackColor", global::AndroidSideloader.Properties.Settings.Default, "SubButtonColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
+            this.skip_forever.DataBindings.Add(new System.Windows.Forms.Binding("ForeColor", global::AndroidSideloader.Properties.Settings.Default, "FontColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
+            this.skip_forever.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
+            this.skip_forever.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.skip_forever.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
+            this.skip_forever.ForeColor = global::AndroidSideloader.Properties.Settings.Default.FontColor;
+            this.skip_forever.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(20)))), ((int)(((byte)(20)))));
+            this.skip_forever.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(20)))), ((int)(((byte)(20)))));
+            this.skip_forever.Location = new System.Drawing.Point(22, 337);
+            this.skip_forever.Margin = new System.Windows.Forms.Padding(0);
+            this.skip_forever.Name = "skip_forever";
+            this.skip_forever.Radius = 5;
+            this.skip_forever.Size = new System.Drawing.Size(419, 27);
+            this.skip_forever.Stroke = true;
+            this.skip_forever.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
+            this.skip_forever.TabIndex = 97;
+            this.skip_forever.Text = "Add to blacklist / Never ask for the selected apps again";
+            this.skip_forever.Transparency = false;
+            this.skip_forever.Click += new System.EventHandler(this.skip_forever_Click);
+            // 
             // SkipButton
-            //
+            // 
             this.SkipButton.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.SkipButton.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.SkipButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
@@ -154,9 +182,9 @@ namespace AndroidSideloader
             this.SkipButton.Text = "Skip";
             this.SkipButton.Transparency = false;
             this.SkipButton.Click += new System.EventHandler(this.SkipButton_Click);
-            //
+            // 
             // DonateButton
-            //
+            // 
             this.DonateButton.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.DonateButton.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.DonateButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
@@ -180,9 +208,9 @@ namespace AndroidSideloader
             this.DonateButton.Text = "Automatically share selected apps";
             this.DonateButton.Transparency = false;
             this.DonateButton.Click += new System.EventHandler(this.DonateButton_Click);
-            //
+            // 
             // panel2
-            //
+            // 
             this.panel2.BackColor = global::AndroidSideloader.Properties.Settings.Default.SubButtonColor;
             this.panel2.Controls.Add(this.DonorsListView);
             this.panel2.DataBindings.Add(new System.Windows.Forms.Binding("BackColor", global::AndroidSideloader.Properties.Settings.Default, "SubButtonColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
@@ -190,9 +218,9 @@ namespace AndroidSideloader
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(430, 230);
             this.panel2.TabIndex = 2;
-            //
+            // 
             // bothdet
-            //
+            // 
             this.bothdet.AutoSize = true;
             this.bothdet.BackColor = System.Drawing.Color.Transparent;
             this.bothdet.Font = new System.Drawing.Font("Microsoft Sans Serif", 10.25F, System.Drawing.FontStyle.Bold);
@@ -206,9 +234,9 @@ namespace AndroidSideloader
             this.bothdet.MouseDown += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseDown);
             this.bothdet.MouseMove += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseMove);
             this.bothdet.MouseUp += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseUp);
-            //
+            // 
             // newdet
-            //
+            // 
             this.newdet.AutoSize = true;
             this.newdet.BackColor = System.Drawing.Color.Transparent;
             this.newdet.Font = new System.Drawing.Font("Microsoft Sans Serif", 10.25F, System.Drawing.FontStyle.Bold);
@@ -222,9 +250,9 @@ namespace AndroidSideloader
             this.newdet.MouseDown += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseDown);
             this.newdet.MouseMove += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseMove);
             this.newdet.MouseUp += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseUp);
-            //
+            // 
             // upddet
-            //
+            // 
             this.upddet.AutoSize = true;
             this.upddet.BackColor = System.Drawing.Color.Transparent;
             this.upddet.Font = new System.Drawing.Font("Microsoft Sans Serif", 10.25F, System.Drawing.FontStyle.Bold);
@@ -238,9 +266,9 @@ namespace AndroidSideloader
             this.upddet.MouseDown += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseDown);
             this.upddet.MouseMove += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseMove);
             this.upddet.MouseUp += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseUp);
-            //
+            // 
             // label2
-            //
+            // 
             this.label2.AutoSize = true;
             this.label2.BackColor = System.Drawing.Color.Transparent;
             this.label2.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
@@ -253,13 +281,13 @@ namespace AndroidSideloader
             this.label2.MouseDown += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseDown);
             this.label2.MouseMove += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseMove);
             this.label2.MouseUp += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseUp);
-            //
+            // 
             // TimerDesc
-            //
+            // 
             this.TimerDesc.AutoSize = true;
             this.TimerDesc.BackColor = System.Drawing.Color.Transparent;
             this.TimerDesc.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.TimerDesc.Location = new System.Drawing.Point(28, 321);
+            this.TimerDesc.Location = new System.Drawing.Point(28, 318);
             this.TimerDesc.Name = "TimerDesc";
             this.TimerDesc.Size = new System.Drawing.Size(406, 13);
             this.TimerDesc.TabIndex = 3;
@@ -268,13 +296,13 @@ namespace AndroidSideloader
             this.TimerDesc.MouseDown += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseDown);
             this.TimerDesc.MouseMove += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseMove);
             this.TimerDesc.MouseUp += new System.Windows.Forms.MouseEventHandler(this.DonorsListViewForm_MouseUp);
-            //
+            // 
             // DonorsListViewForm
-            //
+            // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.Gainsboro;
-            this.ClientSize = new System.Drawing.Size(449, 336);
+            this.ClientSize = new System.Drawing.Size(449, 366);
             this.ControlBox = false;
             this.Controls.Add(this.panel1);
             this.ForeColor = System.Drawing.Color.White;
@@ -310,5 +338,6 @@ namespace AndroidSideloader
         private System.Windows.Forms.Panel panel2;
         private RoundButton DonateButton;
         private RoundButton SkipButton;
+        private RoundButton skip_forever;
     }
 }

@@ -1754,10 +1754,36 @@ namespace AndroidSideloader
             string[] packageList = installedApps.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
             string[] blacklist = new string[] { };
             string[] whitelist = new string[] { };
+
+            // Load server blacklist from nouns folder
             if (File.Exists($"{settings.MainDir}\\nouns\\blacklist.txt"))
             {
                 blacklist = File.ReadAllLines($"{settings.MainDir}\\nouns\\blacklist.txt");
             }
+
+            // Load local user blacklist from main directory and merge with server blacklist
+            string localBlacklistPath = Path.Combine(settings.MainDir, "blacklist.json");
+            if (File.Exists(localBlacklistPath))
+            {
+                try
+                {
+                    string jsonContent = File.ReadAllText(localBlacklistPath);
+                    string[] localBlacklist = Newtonsoft.Json.JsonConvert.DeserializeObject<string[]>(jsonContent);
+                    if (localBlacklist != null && localBlacklist.Length > 0)
+                    {
+                        // Merge server and local blacklists
+                        var combinedBlacklist = new List<string>(blacklist);
+                        combinedBlacklist.AddRange(localBlacklist);
+                        blacklist = combinedBlacklist.ToArray();
+                        Logger.Log($"Loaded {localBlacklist.Length} entries from local blacklist");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Error loading local blacklist: {ex.Message}", LogLevel.WARNING);
+                }
+            }
+
             if (File.Exists($"{settings.MainDir}\\nouns\\whitelist.txt"))
             {
                 whitelist = File.ReadAllLines($"{settings.MainDir}\\nouns\\whitelist.txt");
@@ -1839,7 +1865,7 @@ namespace AndroidSideloader
                                     {
                                         newerThanListCount++;
                                         bool dontget = false;
-                                        if (blacklist.Contains(packagename))
+                                        if (blacklistItems.Contains(packagename, StringComparer.OrdinalIgnoreCase))
                                         {
                                             dontget = true;
                                         }
@@ -1954,46 +1980,6 @@ namespace AndroidSideloader
                         }
                     }
 
-                    //This is for WhiteListed Games, they will be asked for first, if we don't get many bogus prompts we can remove this entire duplicate section.
-                    /* foreach (string newGamesToUpload in newGamesToUploadList)
-                       {
-                           string RlsName = Sideloader.PackageNametoGameName(newGamesToUpload);
-
-                           //start of code to get official Release Name from APK by first extracting APK then running AAPT on it.
-                           string apppath = ADB.RunAdbCommandToString($"shell pm path {newGamesToUpload}").Output;
-                           apppath = Utilities.StringUtilities.RemoveEverythingBeforeFirst(apppath, "/");
-                           apppath = Utilities.StringUtilities.RemoveEverythingAfterFirst(apppath, "\r\n");
-                           if (File.Exists($"C:\\RSL\\platform-tools\\base.apk"))
-                               File.Delete($"C:\\RSL\\platform-tools\\base.apk");
-                           ADB.RunAdbCommandToString($"pull \"{apppath}\"");
-                           string cmd = $"\"C:\\RSL\\platform-tools\\aapt.exe\" dump badging \"C:\\RSL\\platform-tools\\base.apk\" | findstr -i \"application-label\"";
-                           string workingpath = "C:\\RSL\\platform-tools\\aapt.exe";
-                           string ReleaseName = ADB.RunCommandToString(cmd, workingpath).Output;
-                           ReleaseName = Utilities.StringUtilities.RemoveEverythingBeforeFirst(ReleaseName, "'");
-                           ReleaseName = Utilities.StringUtilities.RemoveEverythingAfterFirst(ReleaseName, "\r\n");
-                           ReleaseName = ReleaseName.Replace("'", "");
-                           File.Delete($"C:\\RSL\\platform-tools\\base.apk");
-                           //end
-
-                           string GameName = Sideloader.gameNameToSimpleName(RlsName);
-                           Logger.Log(newGamesToUpload);
-                           if (!updatesnotified)
-                           {
-                               DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, $"You have an in demand game:\n\n{ReleaseName}\n\nRSL can AUTOMATICALLY UPLOAD the clean files to a shared drive in the background,\nthis is the only way to keep the apps up to date for everyone.\n\nNOTE: Rookie will only extract the APK/OBB which contain NO personal information whatsoever.", "CONTRIBUTE CLEAN FILES?", MessageBoxButtons.YesNo);
-                               if (dialogResult == DialogResult.Yes)
-                               {
-                                   string InstalledVersionCode;
-                                   InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {newGamesToUpload} | grep versionCode -F\"").Output;
-                                   InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
-                                   InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingAfterFirst(InstalledVersionCode, " ");
-                                   ulong installedVersionInt = UInt64.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
-                               }
-                               else
-                               {
-                                   return;
-                               }
-                           }
-                       }*/
                     //This is for games that are not blacklisted and we dont have on rookie
                     string baseApkPath = Path.Combine(Environment.CurrentDirectory, "platform-tools", "base.apk");
                     if (blacklistItems.Count > 100 && rookieList.Count > 100 && !noAppCheck)
