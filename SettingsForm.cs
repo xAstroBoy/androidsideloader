@@ -33,7 +33,6 @@ namespace AndroidSideloader
             nodevicemodeBox.Checked = _settings.NodeviceMode;
             bmbfBox.Checked = _settings.BMBFChecked;
             AutoReinstBox.Checked = _settings.AutoReinstall;
-            trailersOn.Checked = _settings.TrailersOn;
             chkSingleThread.Checked = _settings.SingleThreadMode;
             virtualFilesystemCompatibilityCheckbox.Checked = _settings.VirtualFilesystemCompatibility;
             bandwidthLimitTextBox.Text = _settings.BandwidthLimit.ToString();
@@ -235,12 +234,6 @@ namespace AndroidSideloader
                     AutoReinstBox.Checked = false;
                 }
             }
-        }
-
-        private void trailersOn_CheckedChanged(object sender, EventArgs e)
-        {
-            _settings.TrailersOn = trailersOn.Checked;
-            _settings.Save();
         }
 
         private void btnOpenDebug_Click(object sender, EventArgs e)
