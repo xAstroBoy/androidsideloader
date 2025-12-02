@@ -2356,6 +2356,7 @@ namespace AndroidSideloader
         private async Task initMirrors()
         {
             _ = Logger.Log("Looking for Additional Mirrors...");
+
             int index = 0;
             await Task.Run(() => remotesList.Invoke(() =>
             {
@@ -2363,10 +2364,70 @@ namespace AndroidSideloader
                 remotesList.Items.Clear();
             }));
 
-            string[] mirrors = await Task.Run(() => RCLONE.runRcloneCommand_DownloadConfig("listremotes").Output.Split('\n'));
+            // Retry logic for RCLONE availability
+            string[] mirrors = null;
+            int maxRetries = 10;
+            int retryCount = 0;
+
+            while (retryCount < maxRetries)
+            {
+                try
+                {
+                    mirrors = await Task.Run(() => RCLONE.runRcloneCommand_DownloadConfig("listremotes").Output.Split('\n'));
+                    break; // Success, exit retry loop
+                }
+                catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 2) // File not found
+                {
+                    retryCount++;
+                    Logger.Log($"RCLONE not ready yet, attempt {retryCount}/{maxRetries}. Waiting...", LogLevel.WARNING);
+
+                    if (retryCount >= maxRetries)
+                    {
+                        Logger.Log("RCLONE failed to initialize after multiple attempts", LogLevel.ERROR);
+                        _ = FlexibleMessageBox.Show(Program.form,
+                            "RCLONE could not be initialized. Please check your internet connection and restart the application.\n\nIf the problem persists, try running as Administrator.",
+                            "RCLONE Initialization Failed",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+
+                        // Fallback: Add only public mirror if available
+                        if (hasPublicConfig)
+                        {
+                            await Task.Run(() => remotesList.Invoke(() =>
+                            {
+                                _ = remotesList.Items.Add("Public");
+                                remotesList.SelectedIndex = 0;
+                            }));
+                            currentRemote = "Public";
+                            UsingPublicConfig = true;
+                        }
+                        return;
+                    }
+
+                    // Wait before retry (exponential backoff: 500ms, 1s, 2s, 4s, ...)
+                    await Task.Delay(Math.Min(500 * (int)Math.Pow(2, retryCount - 1), 5000));
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Unexpected error initializing mirrors: {ex.Message}", LogLevel.ERROR);
+                    _ = FlexibleMessageBox.Show(Program.form,
+                        $"Error initializing mirrors: {ex.Message}",
+                        "Mirror Initialization Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    return;
+                }
+            }
+
+            if (mirrors == null)
+            {
+                Logger.Log("Failed to retrieve mirrors list", LogLevel.ERROR);
+                return;
+            }
 
             _ = Logger.Log("Loaded following mirrors: ");
             int itemsCount = 0;
+
             if (hasPublicConfig)
             {
                 _ = remotesList.Items.Add("Public");
@@ -2390,7 +2451,7 @@ namespace AndroidSideloader
             {
                 await Task.Run(() => remotesList.Invoke(() =>
                 {
-                    remotesList.SelectedIndex = 0; // Set mirror to first item in array.
+                    remotesList.SelectedIndex = 0;
                     string selectedRemote = remotesList.SelectedItem.ToString();
                     currentRemote = "";
 
@@ -2404,11 +2465,8 @@ namespace AndroidSideloader
         }
 
         public static string processError = string.Empty;
-
         public static string currentRemote = string.Empty;
-
         private readonly string wrDelimiter = "-------";
-
 
         private void deviceDropContainer_Click(object sender, EventArgs e)
         {
