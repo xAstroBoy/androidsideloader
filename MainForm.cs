@@ -573,8 +573,8 @@ namespace AndroidSideloader
             downloadInstallGameButton.Enabled = true;
             isLoading = false;
 
-            // Initialize list view in background
-            _ = Task.Run(() => initListView(false));
+            // Initialize list view
+            initListView(false);
 
             // Cleanup in background
             _ = Task.Run(() =>
