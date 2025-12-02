@@ -350,7 +350,7 @@ namespace AndroidSideloader
             // Disclaimer thread
             new Thread(() =>
             {
-                Thread.Sleep(10000);
+                Thread.Sleep(5000);
                 freeDisclaimer.Invoke(() =>
                 {
                     freeDisclaimer.Dispose();
@@ -556,7 +556,7 @@ namespace AndroidSideloader
             }
 
             progressBar.Style = ProgressBarStyle.Marquee;
-            changeTitle("Populating Game Update List, Almost There!");
+            changeTitle("Populating Game List...");
 
             _ = await CheckForDevice();
             if (ADB.DeviceID.Length < 5)
@@ -1791,7 +1791,6 @@ namespace AndroidSideloader
         private readonly List<UpdateGameData> gamesToAskForUpdate = new List<UpdateGameData>();
         public static bool loaded = false;
         public static string rookienamelist;
-        private bool errorOnList;
         public static bool updates = false;
         public static bool newapps = false;
         public static int newint = 0;
@@ -1800,359 +1799,338 @@ namespace AndroidSideloader
         public static bool either = false;
         private bool _allItemsInitialized = false;
 
-
         private async void initListView(bool favoriteView)
         {
+            // Stopwatch for perf logging
+            var sw = Stopwatch.StartNew();
+            Logger.Log("initListView started");
+
             int upToDateCount = 0;
             int updateAvailableCount = 0;
             int newerThanListCount = 0;
-            rookienamelist = String.Empty;
+            rookienamelist = string.Empty;
             loaded = false;
+
+            // Read installed packages prepared by listAppsBtn()
             string installedApps = settings.InstalledApps;
             string[] packageList = installedApps.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+            // Early return if no packages available
+            if (packageList.Length == 0)
+            {
+                Logger.Log("No installed packages found");
+                loaded = true;
+                return;
+            }
+
             string[] blacklist = new string[] { };
             string[] whitelist = new string[] { };
 
-            // Load server blacklist from nouns folder
-            if (File.Exists($"{settings.MainDir}\\nouns\\blacklist.txt"))
-            {
-                blacklist = File.ReadAllLines($"{settings.MainDir}\\nouns\\blacklist.txt");
-            }
-
-            // Load local user blacklist from main directory and merge with server blacklist
-            string localBlacklistPath = Path.Combine(settings.MainDir, "blacklist.json");
-            if (File.Exists(localBlacklistPath))
-            {
-                try
+            // Load blacklists/whitelists concurrently
+            await Task.WhenAll(
+                Task.Run(() =>
                 {
-                    string jsonContent = File.ReadAllText(localBlacklistPath);
-                    string[] localBlacklist = Newtonsoft.Json.JsonConvert.DeserializeObject<string[]>(jsonContent);
-                    if (localBlacklist != null && localBlacklist.Length > 0)
+                    if (File.Exists($"{settings.MainDir}\\nouns\\blacklist.txt"))
                     {
-                        // Merge server and local blacklists
-                        var combinedBlacklist = new List<string>(blacklist);
-                        combinedBlacklist.AddRange(localBlacklist);
-                        blacklist = combinedBlacklist.ToArray();
-                        Logger.Log($"Loaded {localBlacklist.Length} entries from local blacklist");
+                        blacklist = File.ReadAllLines($"{settings.MainDir}\\nouns\\blacklist.txt");
                     }
-                }
-                catch (Exception ex)
+
+                    // Merge local blacklist.json if present
+                    string localBlacklistPath = Path.Combine(settings.MainDir, "blacklist.json");
+                    if (File.Exists(localBlacklistPath))
+                    {
+                        try
+                        {
+                            string jsonContent = File.ReadAllText(localBlacklistPath);
+                            string[] localBlacklist = JsonConvert.DeserializeObject<string[]>(jsonContent);
+                            if (localBlacklist != null && localBlacklist.Length > 0)
+                            {
+                                var combined = new List<string>(blacklist);
+                                combined.AddRange(localBlacklist);
+                                blacklist = combined.ToArray();
+                                Logger.Log($"Loaded {localBlacklist.Length} entries from local blacklist");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log($"Error loading local blacklist: {ex.Message}", LogLevel.WARNING);
+                        }
+                    }
+                }),
+                Task.Run(() =>
                 {
-                    Logger.Log($"Error loading local blacklist: {ex.Message}", LogLevel.WARNING);
-                }
-            }
+                    if (File.Exists($"{settings.MainDir}\\nouns\\whitelist.txt"))
+                    {
+                        whitelist = File.ReadAllLines($"{settings.MainDir}\\nouns\\whitelist.txt");
+                    }
+                })
+            );
 
-            if (File.Exists($"{settings.MainDir}\\nouns\\whitelist.txt"))
-            {
-                whitelist = File.ReadAllLines($"{settings.MainDir}\\nouns\\whitelist.txt");
-            }
+            Logger.Log($"Blacklist/Whitelist loaded in {sw.ElapsedMilliseconds}ms");
 
-            List<ListViewItem> GameList = new List<ListViewItem>();
-            GameList.Clear();
+            var GameList = new List<ListViewItem>();
+            var rookieList = new List<string>();
+            var installedGames = packageList.ToList();
+            var blacklistItems = blacklist.ToList();
+            var whitelistItems = whitelist.ToList();
 
-            List<string> rookieList = new List<string>();
-            List<string> installedGames = packageList.ToList();
-            List<string> blacklistItems = blacklist.ToList();
-            List<string> whitelistItems = whitelist.ToList();
-            errorOnList = false;
-            //This is for the black list, but temporarily will be the whitelist
-            //This list contains games that we are actually going to upload
             newGamesToUploadList = whitelistItems.Intersect(installedGames, StringComparer.OrdinalIgnoreCase).ToList();
-            progressBar.Style = ProgressBarStyle.Marquee;
+
             if (SideloaderRCLONE.games.Count > 5)
             {
-                Thread t1 = new Thread(() =>
+                progressBar.Style = ProgressBarStyle.Marquee;
+
+                // Fast path: collect all installed version codes in one call
+                Dictionary<string, ulong> installedVersions = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase);
+
+                await Task.Run(() =>
                 {
-                    foreach (string[] release in SideloaderRCLONE.games)
+                    Logger.Log("Fast path fetching version codes...");
+
+                    // Single dumpsys parse
+                    try
                     {
-                        rookieList.Add(release[SideloaderRCLONE.PackageNameIndex].ToString());
-                        if (!rookienamelist.Contains(release[SideloaderRCLONE.GameNameIndex].ToString()))
+                        var dump = ADB.RunAdbCommandToString("shell dumpsys package").Output;
+                        var map = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase);
+                        string currentPkg = null;
+
+                        // dumpsys package structure:
+                        // Package [com.example.app] (..)
+                        //   versionCode=12345 ...
+                        foreach (var rawLine in dump.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
                         {
-                            rookienamelist += release[SideloaderRCLONE.GameNameIndex].ToString() + "\n";
+                            var line = rawLine.Trim();
+
+                            if (line.StartsWith("Package [", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var start = line.IndexOf('[');
+                                var end = line.IndexOf(']');
+                                if (start >= 0 && end > start)
+                                {
+                                    currentPkg = line.Substring(start + 1, end - start - 1);
+                                }
+                                else
+                                {
+                                    currentPkg = null;
+                                }
+                                continue;
+                            }
+
+                            if (currentPkg != null && line.StartsWith("versionCode=", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var after = line.Substring("versionCode=".Length).Trim();
+                                var digits = new string(after.TakeWhile(char.IsDigit).ToArray());
+                                if (!string.IsNullOrEmpty(digits) && ulong.TryParse(digits, out var v))
+                                {
+                                    map[currentPkg] = v;
+                                }
+                                continue;
+                            }
                         }
 
-                        ListViewItem Game = new ListViewItem(release);
-
-                        Color colorFont_installedGame = ColorTranslator.FromHtml("#3c91e6");
-                        lblUpToDate.ForeColor = colorFont_installedGame;
-                        Color colorFont_updateAvailable = ColorTranslator.FromHtml("#4daa57");
-                        lblUpdateAvailable.ForeColor = colorFont_updateAvailable;
-                        Color colorFont_donateGame = ColorTranslator.FromHtml("#cb9cf2");
-                        lblNeedsDonate.ForeColor = colorFont_donateGame;
-                        Color colorFont_error = ColorTranslator.FromHtml("#f52f57");
-
-                        foreach (string packagename in packageList)
+                        // Filter to the installed third-party packages
+                        var set = new HashSet<string>(packageList, StringComparer.OrdinalIgnoreCase);
+                        foreach (var kv in map)
                         {
-                            if (string.Equals(release[SideloaderRCLONE.PackageNameIndex], packagename))
+                            if (set.Contains(kv.Key))
                             {
-                                Game.ForeColor = colorFont_installedGame;
-                                string InstalledVersionCode;
-                                InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {packagename} | grep versionCode -F\"").Output;
-                                InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
-                                InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingAfterFirst(InstalledVersionCode, " ");
-                                try
+                                installedVersions[kv.Key] = kv.Value;
+                            }
+                        }
+
+                        Logger.Log($"Collected {installedVersions.Count} version codes in {sw.ElapsedMilliseconds}ms");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"'dumpsys package' failed: {ex.Message}", LogLevel.ERROR);
+                    }
+                });
+
+                // Precompute cloud max version per package to avoid scanning inside the loop
+                var cloudMaxVersionByPackage = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase);
+                foreach (var release in SideloaderRCLONE.games)
+                {
+                    string pkg = release[SideloaderRCLONE.PackageNameIndex];
+                    // Parse cloud version once
+                    ulong v = 0;
+                    try
+                    {
+                        v = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(release[SideloaderRCLONE.VersionCodeIndex]));
+                    }
+                    catch
+                    {
+                        v = 0;
+                    }
+
+                    if (cloudMaxVersionByPackage.TryGetValue(pkg, out var existing))
+                    {
+                        if (v > existing) cloudMaxVersionByPackage[pkg] = v;
+                    }
+                    else
+                    {
+                        cloudMaxVersionByPackage[pkg] = v;
+                    }
+                }
+
+                Logger.Log($"Precomputed cloud max versions in {sw.ElapsedMilliseconds}ms");
+
+                // Process games and colorize based on version comparisons
+                await Task.Run(() =>
+                {
+                    Color colorFont_installedGame = ColorTranslator.FromHtml("#3c91e6");
+                    Color colorFont_updateAvailable = ColorTranslator.FromHtml("#4daa57");
+                    Color colorFont_donateGame = ColorTranslator.FromHtml("#cb9cf2");
+                    Color colorFont_error = ColorTranslator.FromHtml("#f52f57");
+
+                    foreach (string[] release in SideloaderRCLONE.games)
+                    {
+                        string packagename = release[SideloaderRCLONE.PackageNameIndex];
+                        rookieList.Add(packagename);
+
+                        if (!rookienamelist.Contains(release[SideloaderRCLONE.GameNameIndex]))
+                        {
+                            rookienamelist += release[SideloaderRCLONE.GameNameIndex] + "\n";
+                        }
+
+                        var item = new ListViewItem(release);
+
+                        // Installed?
+                        if (installedVersions.TryGetValue(packagename, out ulong installedVersionInt))
+                        {
+                            item.ForeColor = colorFont_installedGame;
+
+                            try
+                            {
+                                ulong cloudVersionInt = 0;
+                                cloudMaxVersionByPackage.TryGetValue(packagename, out cloudVersionInt);
+
+                                if (installedVersionInt == cloudVersionInt)
                                 {
-                                    ulong installedVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
-                                    ulong cloudVersionInt = 0;
-                                    foreach (string[] releaseGame in SideloaderRCLONE.games)
+                                    upToDateCount++;
+                                }
+                                else if (installedVersionInt < cloudVersionInt)
+                                {
+                                    item.ForeColor = colorFont_updateAvailable;
+                                    updateAvailableCount++;
+                                }
+                                else if (installedVersionInt > cloudVersionInt)
+                                {
+                                    newerThanListCount++;
+                                    bool dontget = blacklistItems.Contains(packagename, StringComparer.OrdinalIgnoreCase);
+
+                                    if (!dontget)
                                     {
-                                        if (string.Equals(releaseGame[SideloaderRCLONE.PackageNameIndex], packagename))
-                                        {
-                                            ulong releaseGameVersionCode = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(releaseGame[SideloaderRCLONE.VersionCodeIndex]));
-                                            if (releaseGameVersionCode > cloudVersionInt)
-                                            {
-                                                Logger.Log($"Updated cloudVersionInt for {packagename} from {cloudVersionInt} to {releaseGameVersionCode}");
-                                                cloudVersionInt = releaseGameVersionCode;
-                                            }
-                                        }
-                                    }
-                                    if (installedVersionInt == cloudVersionInt)
-                                    {
-                                        upToDateCount++;
-                                    }
-                                    //ulong cloudVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(release[SideloaderRCLONE.VersionCodeIndex]));
+                                        item.ForeColor = colorFont_donateGame;
 
-                                    _ = Logger.Log($"Checked game {release[SideloaderRCLONE.GameNameIndex]}; cloudversion={cloudVersionInt} localversion={installedVersionInt}");
-                                    if (installedVersionInt < cloudVersionInt)
-                                    {
-                                        Game.ForeColor = colorFont_updateAvailable;
-                                        updateAvailableCount++;
-                                    }
-
-                                    if (installedVersionInt > cloudVersionInt)
-                                    {
-                                        newerThanListCount++;
-                                        bool dontget = false;
-                                        if (blacklistItems.Contains(packagename, StringComparer.OrdinalIgnoreCase))
-                                        {
-                                            dontget = true;
-                                        }
-
-                                        if (!dontget)
-                                        {
-                                            Game.ForeColor = colorFont_donateGame;
-                                        }
-
-                                        string RlsName = Sideloader.PackageNametoGameName(packagename);
-                                        string GameName = Sideloader.gameNameToSimpleName(RlsName);
-
-                                        if (!dontget && !updatesNotified && !isworking && updint < 6 && !settings.SubmittedUpdates.Contains(packagename))
+                                        if (!updatesNotified && !isworking && updint < 6 && !settings.SubmittedUpdates.Contains(packagename))
                                         {
                                             either = true;
                                             updates = true;
                                             updint++;
-                                            UpdateGameData gameData = new UpdateGameData(GameName, packagename, installedVersionInt);
+
+                                            string RlsName = Sideloader.PackageNametoGameName(packagename);
+                                            string GameName = Sideloader.gameNameToSimpleName(RlsName);
+                                            var gameData = new UpdateGameData(GameName, packagename, installedVersionInt);
                                             gamesToAskForUpdate.Add(gameData);
                                         }
                                     }
                                 }
-                                catch (Exception ex)
-                                {
-                                    Game.ForeColor = colorFont_error;
-                                    _ = Logger.Log($"An error occured while rendering game {release[SideloaderRCLONE.GameNameIndex]} in ListView", LogLevel.ERROR);
-                                    _ = ADB.RunAdbCommandToString($"shell \"dumpsys package {packagename}\"");
-                                    _ = Logger.Log($"ExMsg: {ex.Message}Installed:\"{InstalledVersionCode}\" Cloud:\"{Utilities.StringUtilities.KeepOnlyNumbers(release[SideloaderRCLONE.VersionCodeIndex])}\"", LogLevel.ERROR);
-                                }
+
+                                //Logger.Log($"Checked game {release[SideloaderRCLONE.GameNameIndex]}; cloudversion={cloudVersionInt} localversion={installedVersionInt}");
+                            }
+                            catch (Exception ex)
+                            {
+                                item.ForeColor = colorFont_error;
+                                Logger.Log($"An error occurred while rendering game {release[SideloaderRCLONE.GameNameIndex]} in ListView", LogLevel.ERROR);
+                                Logger.Log($"ExMsg: {ex.Message}", LogLevel.ERROR);
                             }
                         }
+
                         if (favoriteView)
                         {
-                            if (settings.FavoritedGames.Contains(Game.SubItems[1].Text))
+                            // Only add favorited games when favoriteView is true
+                            if (settings.FavoritedGames.Contains(item.SubItems[1].Text))
                             {
-                                GameList.Add(Game);
+                                GameList.Add(item);
                             }
                         }
                         else
                         {
-                            GameList.Add(Game);
+                            GameList.Add(item);
                         }
                     }
-                })
-                {
-                    IsBackground = true
-                };
-                t1.Start();
-                while (t1.IsAlive)
-                {
-                    await Task.Delay(100);
-                }
+                });
+
+                Logger.Log($"Game processing completed in {sw.ElapsedMilliseconds}ms");
             }
             else if (!isOffline)
             {
+                // If no games are loaded, try switching mirrors then rebuild
                 SwitchMirrors();
-                if (!isOffline){
+                if (!isOffline)
+                {
                     initListView(false);
                 }
+                return;
             }
-
 
             if (blacklistItems.Count == 0 && GameList.Count == 0 && !settings.NodeviceMode && !isOffline)
             {
-                //This means either the user does not have headset connected or the blacklist
-                //did not load, so we are just going to skip everything
-                errorOnList = true;
-                _ = FlexibleMessageBox.Show(Program.form, $"Rookie seems to have failed to load all resources. Please try restarting Rookie a few times.\nIf error still persists please disable any VPN or firewalls (rookie uses direct download so a VPN is not needed)\nIf this error still persists try a system reboot, reinstalling the program, and lastly posting the problem on telegram.", "Error loading blacklist or game list!");
-            }
-            newGamesList = installedGames.Except(rookieList, StringComparer.OrdinalIgnoreCase).Except(blacklistItems, StringComparer.OrdinalIgnoreCase).ToList();
-            int topItemIndex = 0;
-            try
-            {
-                if (gamesListView.Items.Count > 1)
-                {
-                    topItemIndex = gamesListView.TopItem.Index;
-                }
-            }
-            catch (Exception ex)
-            {
-                _ = FlexibleMessageBox.Show(Program.form, $"Error building game list: {ex.Message}");
+                _ = FlexibleMessageBox.Show(Program.form,
+                    "Rookie seems to have failed to load all resources. Please try restarting Rookie a few times.\nIf error still persists please disable any VPN or firewalls (rookie uses direct download so a VPN is not needed)\nIf this error still persists try a system reboot, reinstalling the program, and lastly posting the problem on telegram.",
+                    "Error loading blacklist or game list!");
             }
 
-            try
+            // New apps detection
+            newGamesList = installedGames
+                .Except(rookieList, StringComparer.OrdinalIgnoreCase)
+                .Except(blacklistItems, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (blacklistItems.Count > 100 && rookieList.Count > 100)
             {
-                if (topItemIndex != 0)
-                {
-                    gamesListView.TopItem = gamesListView.Items[topItemIndex];
-                }
+                await ProcessNewApps(newGamesList, blacklistItems);
             }
-            catch (Exception ex)
-            {
-                _ = FlexibleMessageBox.Show(Program.form, $"Error building game list: {ex.Message}");
-            }
-            Thread t2 = new Thread(() =>
-            {
-                if (!errorOnList)
-                {
 
-                    //This is for games that we already have on rookie and user has an update
-                    if (blacklistItems.Count > 100 && rookieList.Count > 100)
-                    {
-                        foreach (UpdateGameData gameData in gamesToAskForUpdate)
-                        {
-                            if (!updatesNotified && !settings.SubmittedUpdates.Contains(gameData.Packagename))
-                            {
-                                either = true;
-                                updates = true;
-                                donorApps += gameData.GameName + ";" + gameData.Packagename + ";" + gameData.InstalledVersionInt + ";" + "Update" + "\n";
-                            }
-
-                        }
-                    }
-
-                    //This is for games that are not blacklisted and we dont have on rookie
-                    string baseApkPath = Path.Combine(Environment.CurrentDirectory, "platform-tools", "base.apk");
-                    if (blacklistItems.Count > 100 && rookieList.Count > 100 && !noAppCheck)
-                    {
-                        foreach (string newGamesToUpload in newGamesList)
-                        {
-                            try
-                            {
-                                changeTitle("Unrecognized App Found. Downloading APK to take a closer look. (This may take a minute)");
-                                bool onapplist = false;
-                                string NewApp = settings.NonAppPackages + "\n" + settings.AppPackages;
-                                if (NewApp.Contains(newGamesToUpload))
-                                {
-                                    onapplist = true;
-                                    Logger.Log($"App '{newGamesToUpload}' found in app list.", LogLevel.INFO);
-                                }
-
-                                string RlsName = Sideloader.PackageNametoGameName(newGamesToUpload);
-                                Logger.Log($"Release name obtained: {RlsName}", LogLevel.INFO);
-                                if (!updatesNotified && !onapplist && newint < 6)
-                                {
-                                    either = true;
-                                    newapps = true;
-                                    Logger.Log($"New app detected: {newGamesToUpload}, starting APK extraction and AAPT process.", LogLevel.INFO);
-                                    //start of code to get official Release Name from APK by first extracting APK then running AAPT on it.
-                                    string apppath = ADB.RunAdbCommandToString($"shell pm path {newGamesToUpload}").Output;
-                                    Logger.Log($"ADB command 'pm path' executed. Path: {apppath}", LogLevel.INFO);
-                                    apppath = Utilities.StringUtilities.RemoveEverythingBeforeFirst(apppath, "/");
-                                    apppath = Utilities.StringUtilities.RemoveEverythingAfterFirst(apppath, "\r\n");
-                                    if (File.Exists(baseApkPath))
-                                    {
-                                        File.Delete(baseApkPath);
-                                        Logger.Log("Old base.apk file deleted.", LogLevel.INFO);
-                                    }
-
-                                    Logger.Log($"Pulling APK from path: {apppath}", LogLevel.INFO);
-                                    _ = ADB.RunAdbCommandToString($"pull \"{apppath}\"");
-                                    string cmd = $"\"{aaptPath}\" dump badging \"{baseApkPath}\" | findstr -i \"application-label\"";
-                                    Logger.Log($"Running AAPT command: {cmd}", LogLevel.INFO);
-                                    string ReleaseName = ADB.RunCommandToString(cmd, aaptPath).Output;
-                                    Logger.Log($"AAPT command output: {ReleaseName}", LogLevel.INFO);
-                                    ReleaseName = Utilities.StringUtilities.RemoveEverythingBeforeFirst(ReleaseName, "'");
-                                    ReleaseName = Utilities.StringUtilities.RemoveEverythingAfterFirst(ReleaseName, "\r\n");
-                                    ReleaseName = ReleaseName.Replace("'", "");
-                                    File.Delete(baseApkPath);
-                                    Logger.Log("Base.apk deleted after extracting release name.", LogLevel.INFO);
-                                    if (ReleaseName.Contains("Microsoft Windows"))
-                                    {
-                                        ReleaseName = RlsName;
-                                        Logger.Log("Release name fallback to RlsName due to Microsoft Windows detection.", LogLevel.INFO);
-                                    }
-                                    Logger.Log($"Final Release Name: {ReleaseName}", LogLevel.INFO);
-                                    //end
-                                    string GameName = Sideloader.gameNameToSimpleName(RlsName);
-                                    //Logger.Log(newGamesToUpload);
-                                    Logger.Log($"Fetching version code for app: {newGamesToUpload}", LogLevel.INFO);
-                                    string InstalledVersionCode;
-                                    InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {newGamesToUpload} | grep versionCode -F\"").Output;
-                                    Logger.Log($"Version code command output: {InstalledVersionCode}", LogLevel.INFO);
-                                    InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
-                                    InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingAfterFirst(InstalledVersionCode, " ");
-                                    ulong installedVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
-                                    Logger.Log($"Parsed installed version code: {installedVersionInt}", LogLevel.INFO);
-                                    donorApps += ReleaseName + ";" + newGamesToUpload + ";" + installedVersionInt + ";" + "New App" + "\n";
-                                    Logger.Log($"Donor app info updated: {ReleaseName}; {newGamesToUpload}; {installedVersionInt}", LogLevel.INFO);
-                                    newint++;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger.Log($"Exception occured in initListView (Unrecognized App Found): {ex.Message}", LogLevel.ERROR);
-                            }
-                        }
-                    }
-                }
-            })
-            {
-                IsBackground = true
-            };
-            t2.Start();
-            while (t2.IsAlive)
-            {
-                await Task.Delay(100);
-            }
             progressBar.Style = ProgressBarStyle.Continuous;
 
             if (either && !updatesNotified && !noAppCheck)
             {
                 changeTitle("\n\n");
-                DonorsListViewForm DonorForm = new DonorsListViewForm();
-                _ = DonorForm.ShowDialog(this);
+                DonorsListViewForm donorForm = new DonorsListViewForm();
+                _ = donorForm.ShowDialog(this);
                 _ = Focus();
             }
-            changeTitle("Populating update list...\n\n");
-            lblUpToDate.Text = $"[{upToDateCount}] UP TO DATE";
-            lblUpdateAvailable.Text = $"[{updateAvailableCount}] UPDATE AVAILABLE";
-            lblNeedsDonate.Text = $"[{newerThanListCount}] NEWER THAN LIST";
-            ListViewItem[] arr = GameList.ToArray();
-            gamesListView.BeginUpdate();
-            gamesListView.Items.Clear();
-            gamesListView.Items.AddRange(arr);
-            gamesListView.EndUpdate();
+
+            // Update UI with computed list
+            this.Invoke(() =>
+            {
+                changeTitle("Populating update list...\n\n");
+                lblUpToDate.Text = $"[{upToDateCount}] UP TO DATE";
+                lblUpToDate.ForeColor = ColorTranslator.FromHtml("#3c91e6");
+                lblUpdateAvailable.Text = $"[{updateAvailableCount}] UPDATE AVAILABLE";
+                lblUpdateAvailable.ForeColor = ColorTranslator.FromHtml("#4daa57");
+                lblNeedsDonate.Text = $"[{newerThanListCount}] NEWER THAN LIST";
+                lblNeedsDonate.ForeColor = ColorTranslator.FromHtml("#cb9cf2");
+
+                ListViewItem[] arr = GameList.ToArray();
+                gamesListView.BeginUpdate();
+                gamesListView.Items.Clear();
+                gamesListView.Items.AddRange(arr);
+                gamesListView.EndUpdate();
+            });
+
             changeTitle("\n\n");
+
+            // Build search index only once
             if (!_allItemsInitialized)
             {
                 _allItems = gamesListView.Items.Cast<ListViewItem>().ToList();
 
-                // Build search index for faster lookups
                 _searchIndex = new Dictionary<string, List<ListViewItem>>(StringComparer.OrdinalIgnoreCase);
-
-                HashSet<string> uniqueNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (var item in _allItems)
                 {
-                    // Index by game name
                     string gameName = item.Text;
                     if (!_searchIndex.ContainsKey(gameName))
                     {
@@ -2160,7 +2138,6 @@ namespace AndroidSideloader
                     }
                     _searchIndex[gameName].Add(item);
 
-                    // Index by release name
                     if (item.SubItems.Count > 1)
                     {
                         string releaseName = item.SubItems[1].Text;
@@ -2174,7 +2151,103 @@ namespace AndroidSideloader
 
                 _allItemsInitialized = true;
             }
+
             loaded = true;
+            Logger.Log($"initListView completed in {sw.ElapsedMilliseconds}ms");
+        }
+
+        private async Task ProcessNewApps(List<string> newGamesList, List<string> blacklistItems)
+        {
+            foreach (UpdateGameData gameData in gamesToAskForUpdate)
+            {
+                if (!updatesNotified && !settings.SubmittedUpdates.Contains(gameData.Packagename))
+                {
+                    either = true;
+                    updates = true;
+                    donorApps += gameData.GameName + ";" + gameData.Packagename + ";" + gameData.InstalledVersionInt + ";" + "Update" + "\n";
+                }
+            }
+
+            string baseApkPath = Path.Combine(Environment.CurrentDirectory, "platform-tools", "base.apk");
+            if (blacklistItems.Count > 100 && !noAppCheck)
+            {
+                foreach (string newGamesToUpload in newGamesList)
+                {
+                    try
+                    {
+                        changeTitle("Unrecognized App Found. Downloading APK to take a closer look. (This may take a minute)");
+                        bool onapplist = false;
+                        string NewApp = settings.NonAppPackages + "\n" + settings.AppPackages;
+                        if (NewApp.Contains(newGamesToUpload))
+                        {
+                            onapplist = true;
+                            Logger.Log($"App '{newGamesToUpload}' found in app list.", LogLevel.INFO);
+                        }
+
+                        string RlsName = Sideloader.PackageNametoGameName(newGamesToUpload);
+                        Logger.Log($"Release name obtained: {RlsName}", LogLevel.INFO);
+
+                        if (!updatesNotified && !onapplist && newint < 6)
+                        {
+                            either = true;
+                            newapps = true;
+                            Logger.Log($"New app detected: {newGamesToUpload}, starting APK extraction and AAPT process.", LogLevel.INFO);
+
+                            string apppath = ADB.RunAdbCommandToString($"shell pm path {newGamesToUpload}").Output;
+                            Logger.Log($"ADB command 'pm path' executed. Path: {apppath}", LogLevel.INFO);
+                            apppath = Utilities.StringUtilities.RemoveEverythingBeforeFirst(apppath, "/");
+                            apppath = Utilities.StringUtilities.RemoveEverythingAfterFirst(apppath, "\r\n");
+
+                            if (File.Exists(baseApkPath))
+                            {
+                                File.Delete(baseApkPath);
+                                Logger.Log("Old base.apk file deleted.", LogLevel.INFO);
+                            }
+
+                            Logger.Log($"Pulling APK from path: {apppath}", LogLevel.INFO);
+                            _ = ADB.RunAdbCommandToString($"pull \"{apppath}\"");
+
+                            string cmd = $"\"{aaptPath}\" dump badging \"{baseApkPath}\" | findstr -i \"application-label\"";
+                            Logger.Log($"Running AAPT command: {cmd}", LogLevel.INFO);
+                            string ReleaseName = ADB.RunCommandToString(cmd, aaptPath).Output;
+                            Logger.Log($"AAPT command output: {ReleaseName}", LogLevel.INFO);
+
+                            ReleaseName = Utilities.StringUtilities.RemoveEverythingBeforeFirst(ReleaseName, "'");
+                            ReleaseName = Utilities.StringUtilities.RemoveEverythingAfterFirst(ReleaseName, "\r\n");
+                            ReleaseName = ReleaseName.Replace("'", "");
+                            File.Delete(baseApkPath);
+                            Logger.Log("Base.apk deleted after extracting release name.", LogLevel.INFO);
+
+                            if (ReleaseName.Contains("Microsoft Windows"))
+                            {
+                                ReleaseName = RlsName;
+                                Logger.Log("Release name fallback to RlsName due to Microsoft Windows detection.", LogLevel.INFO);
+                            }
+
+                            Logger.Log($"Final Release Name: {ReleaseName}", LogLevel.INFO);
+
+                            string GameName = Sideloader.gameNameToSimpleName(RlsName);
+                            Logger.Log($"Fetching version code for app: {newGamesToUpload}", LogLevel.INFO);
+
+                            string InstalledVersionCode;
+                            InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {newGamesToUpload} | grep versionCode -F\"").Output;
+                            Logger.Log($"Version code command output: {InstalledVersionCode}", LogLevel.INFO);
+                            InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
+                            InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingAfterFirst(InstalledVersionCode, " ");
+                            ulong installedVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
+                            Logger.Log($"Parsed installed version code: {installedVersionInt}", LogLevel.INFO);
+
+                            donorApps += ReleaseName + ";" + newGamesToUpload + ";" + installedVersionInt + ";" + "New App" + "\n";
+                            Logger.Log($"Donor app info updated: {ReleaseName}; {newGamesToUpload}; {installedVersionInt}", LogLevel.INFO);
+                            newint++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"Exception occured in ProcessNewApps: {ex.Message}", LogLevel.ERROR);
+                    }
+                }
+            }
         }
 
         private static readonly HttpClient HttpClient = new HttpClient();

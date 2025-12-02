@@ -1,22 +1,12 @@
 ﻿using AndroidSideloader.Utilities;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
 
 namespace AndroidSideloader
 {
-    internal class rcloneFolder
-    {
-        public string Path { get; set; }
-        public string Name { get; set; }
-        public string Size { get; set; }
-        public string ModTime { get; set; }
-    }
-
     internal class SideloaderRCLONE
     {
         public static List<string> RemotesList = new List<string>();
@@ -78,45 +68,66 @@ namespace AndroidSideloader
             try
             {
                 _ = Logger.Log($"Extracting Metadata");
-                Zip.ExtractFile(Path.Combine(Environment.CurrentDirectory, "meta.7z"), Path.Combine(Environment.CurrentDirectory, "meta"),
-                    MainForm.PublicConfigFile.Password);
+
+                // Cache commonly used paths to avoid repeated Path.Combine calls
+                string currentDir = Environment.CurrentDirectory;
+                string metaRoot = Path.Combine(currentDir, "meta");
+                string metaArchive = Path.Combine(currentDir, "meta.7z");
+                string metaDotMeta = Path.Combine(metaRoot, ".meta");
+
+                Zip.ExtractFile(metaArchive, metaRoot, MainForm.PublicConfigFile.Password);
 
                 _ = Logger.Log($"Updating Metadata");
 
-                if (Directory.Exists(Nouns))
-                {
-                    Directory.Delete(Nouns, true);
-                }
+                // Use a fast directory reset: delete if exists, then move (avoids partial state)
+                SafeDeleteDirectory(Nouns);
+                SafeDeleteDirectory(ThumbnailsFolder);
+                SafeDeleteDirectory(NotesFolder);
 
-                if (Directory.Exists(ThumbnailsFolder))
-                {
-                    Directory.Delete(ThumbnailsFolder, true);
-                }
-
-                if (Directory.Exists(NotesFolder))
-                {
-                    Directory.Delete(NotesFolder, true);
-                }
-
-                Directory.Move(Path.Combine(Environment.CurrentDirectory, "meta", ".meta", "nouns"), Nouns);
-                Directory.Move(Path.Combine(Environment.CurrentDirectory, "meta", ".meta", "thumbnails"), ThumbnailsFolder);
-                Directory.Move(Path.Combine(Environment.CurrentDirectory, "meta", ".meta", "notes"), NotesFolder);
+                // Avoid throwing if source folders are missing
+                MoveIfExists(Path.Combine(metaDotMeta, "nouns"), Nouns);
+                MoveIfExists(Path.Combine(metaDotMeta, "thumbnails"), ThumbnailsFolder);
+                MoveIfExists(Path.Combine(metaDotMeta, "notes"), NotesFolder);
 
                 _ = Logger.Log($"Initializing Games List");
-                string gameList = File.ReadAllText(Path.Combine(Environment.CurrentDirectory, "meta", "VRP-GameList.txt"));
 
-                string[] splitList = gameList.Split('\n');
-                splitList = splitList.Skip(1).ToArray();
-                foreach (string game in splitList)
+                // Stream the file line-by-line instead of reading the whole file into memory
+                string gameListPath = Path.Combine(metaRoot, "VRP-GameList.txt");
+                if (File.Exists(gameListPath))
                 {
-                    if (game.Length > 1)
+                    games.Clear();
+                    bool isFirstLine = true;
+                    foreach (var line in File.ReadLines(gameListPath))
                     {
-                        string[] splitGame = game.Split(';');
-                        games.Add(splitGame);
+                        // Skip header line only once
+                        if (isFirstLine)
+                        {
+                            isFirstLine = false;
+                            continue;
+                        }
+
+                        // Skip empty/whitespace lines without allocating split arrays
+                        if (string.IsNullOrWhiteSpace(line))
+                        {
+                            continue;
+                        }
+
+                        // Split with RemoveEmptyEntries to avoid trailing empty fields
+                        var splitGame = line.Split(new[] { ';' }, StringSplitOptions.None);
+                        // Minimal validation: require at least 2 fields
+                        if (splitGame.Length > 1)
+                        {
+                            games.Add(splitGame);
+                        }
                     }
                 }
+                else
+                {
+                    _ = Logger.Log("VRP-GameList.txt not found in extracted metadata.", LogLevel.WARNING);
+                }
 
-                Directory.Delete(Path.Combine(Environment.CurrentDirectory, "meta"), true);
+                // Delete meta folder at the end to avoid leaving partial state if something fails earlier
+                SafeDeleteDirectory(metaRoot);
             }
             catch (Exception e)
             {
@@ -129,19 +140,34 @@ namespace AndroidSideloader
         {
             _ = Logger.Log($"Refresh / List Remotes");
             RemotesList.Clear();
-            string[] remotes = RCLONE.runRcloneCommand_DownloadConfig("listremotes").Output.Split('\n');
+
+            // Avoid unnecessary ToArray; directly iterate lines
+            var output = RCLONE.runRcloneCommand_DownloadConfig("listremotes").Output;
+            if (string.IsNullOrEmpty(output))
+            {
+                _ = Logger.Log("No remotes returned from rclone.");
+                return;
+            }
 
             _ = Logger.Log("Loaded following remotes: ");
-            foreach (string r in remotes)
+            foreach (var r in SplitLines(output))
             {
-                if (r.Length > 1)
+                if (r.Length <= 1)
                 {
-                    string remote = r.Remove(r.Length - 1);
-                    if (remote.Contains("mirror"))
-                    {
-                        _ = Logger.Log(remote);
-                        RemotesList.Add(remote);
-                    }
+                    continue;
+                }
+
+                // Trim whitespace and trailing colon if present
+                var remote = r.TrimEnd();
+                if (remote.EndsWith(":"))
+                {
+                    remote = remote.Substring(0, remote.Length - 1);
+                }
+
+                if (remote.IndexOf("mirror", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    _ = Logger.Log(remote);
+                    RemotesList.Add(remote);
                 }
             }
         }
@@ -152,96 +178,41 @@ namespace AndroidSideloader
 
             gameProperties.Clear();
             games.Clear();
+
+            // Fetch once, then process as lines
             string tempGameList = RCLONE.runRcloneCommand_DownloadConfig($"cat \"{remote}:{RcloneGamesFolder}/VRP-GameList.txt\"").Output;
             if (MainForm.debugMode)
             {
-                File.WriteAllText("VRP-GamesList.txt", tempGameList);
-            }
-            if (!tempGameList.Equals(""))
-            {
-                string[] gameListSplited = tempGameList.Split(new[] { '\n' });
-                gameListSplited = gameListSplited.Skip(1).ToArray();
-                foreach (string game in gameListSplited)
+                // Avoid redundant disk I/O: write only if non-empty
+                if (!string.IsNullOrEmpty(tempGameList))
                 {
-                    if (game.Length > 1)
+                    File.WriteAllText("VRP-GamesList.txt", tempGameList);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(tempGameList))
+            {
+                bool isFirstLine = true;
+                foreach (var line in SplitLines(tempGameList))
+                {
+                    if (isFirstLine)
                     {
-                        string[] splitGame = game.Split(';');
+                        isFirstLine = false; // skip header
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    var splitGame = line.Split(new[] { ';' }, StringSplitOptions.None);
+                    if (splitGame.Length > 1)
+                    {
                         games.Add(splitGame);
                     }
                 }
             }
-        }
-
-        public static void updateDownloadConfig()
-        {
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls
-                                                 | SecurityProtocolType.Tls11
-                                                 | SecurityProtocolType.Tls12
-                                                 | SecurityProtocolType.Ssl3;
-            _ = Logger.Log($"Attempting to Update Download Config");
-
-            string downloadConfigFilename = "vrp.download.config";
-
-            try
-            {
-                string configUrl = $"https://vrpirates.wiki/downloads/{downloadConfigFilename}";
-
-                HttpWebRequest getUrl = (HttpWebRequest)WebRequest.Create(configUrl);
-                using (StreamReader responseReader = new StreamReader(getUrl.GetResponse().GetResponseStream()))
-                {
-                    string resultString = responseReader.ReadToEnd();
-
-                    _ = Logger.Log($"Retrieved updated config from: {configUrl}");
-
-                    if (File.Exists(Path.Combine(Environment.CurrentDirectory, "rclone", $"{downloadConfigFilename}_new")))
-                    {
-                        File.Delete(Path.Combine(Environment.CurrentDirectory, "rclone", $"{downloadConfigFilename}_new"));
-                    }
-
-                    File.Create(Path.Combine(Environment.CurrentDirectory, "rclone", $"{downloadConfigFilename}_new")).Close();
-                    File.WriteAllText(Path.Combine(Environment.CurrentDirectory, "rclone", $"{downloadConfigFilename}_new"), resultString);
-
-                    if (!File.Exists(Path.Combine(Environment.CurrentDirectory, "rclone", "hash.txt")))
-                    {
-                        File.Create(Path.Combine(Environment.CurrentDirectory, "rclone", "hash.txt")).Close();
-                    }
-
-                    string newConfig = CalculateMD5(Path.Combine(Environment.CurrentDirectory, "rclone", $"{downloadConfigFilename}_new"));
-                    string oldConfig = File.ReadAllText(Path.Combine(Environment.CurrentDirectory, "rclone", "hash.txt"));
-
-                    if (!File.Exists(Path.Combine(Environment.CurrentDirectory, "rclone", $"{downloadConfigFilename}")))
-                    {
-                        oldConfig = "Config Doesnt Exist!";
-                    }
-
-                    _ = Logger.Log($"Online Config Hash: {newConfig}; Local Config Hash: {oldConfig}");
-
-                    if (newConfig != oldConfig)
-                    {
-                        _ = Logger.Log($"Updated Config Hash is different than the current Config. Updating Configuration File.");
-
-                        if (File.Exists(Path.Combine(Environment.CurrentDirectory, "rclone", $"{downloadConfigFilename}")))
-                        {
-                            File.Delete(Path.Combine(Environment.CurrentDirectory, "rclone", $"{downloadConfigFilename}"));
-                        }
-
-                        File.Move(Path.Combine(Environment.CurrentDirectory, "rclone", $"{downloadConfigFilename}_new"), Path.Combine(Environment.CurrentDirectory, "rclone", $"{downloadConfigFilename}"));
-
-                        File.WriteAllText(Path.Combine(Environment.CurrentDirectory, "rclone", "hash.txt"), string.Empty);
-                        File.WriteAllText(Path.Combine(Environment.CurrentDirectory, "rclone", "hash.txt"), newConfig);
-                    }
-                    else
-                    {
-                        _ = Logger.Log($"Updated Config Hash matches last download. Not updating.");
-
-                        if (File.Exists(Path.Combine(Environment.CurrentDirectory, "rclone", $"{downloadConfigFilename}_new")))
-                        {
-                            File.Delete(Path.Combine(Environment.CurrentDirectory, "rclone", $"{downloadConfigFilename}g_new"));
-                        }
-                    }
-                }
-            }
-            catch { }
         }
 
         public static void updateUploadConfig()
@@ -255,14 +226,18 @@ namespace AndroidSideloader
             {
                 string configUrl = "https://vrpirates.wiki/downloads/vrp.upload.config";
 
-                HttpWebRequest getUrl = (HttpWebRequest)WebRequest.Create(configUrl);
-                using (StreamReader responseReader = new StreamReader(getUrl.GetResponse().GetResponseStream()))
+                var getUrl = (HttpWebRequest)WebRequest.Create(configUrl);
+                using (var response = getUrl.GetResponse())
+                using (var stream = response.GetResponseStream())
+                using (var responseReader = new StreamReader(stream))
                 {
                     string resultString = responseReader.ReadToEnd();
 
                     _ = Logger.Log($"Retrieved updated config from: {configUrl}");
 
-                    File.WriteAllText(Path.Combine(Environment.CurrentDirectory, "rclone", "vrp.upload.config"), resultString);
+                    // Avoid multiple combines; write once
+                    string uploadConfigPath = Path.Combine(Environment.CurrentDirectory, "rclone", "vrp.upload.config");
+                    File.WriteAllText(uploadConfigPath, resultString);
 
                     _ = Logger.Log("Upload config updated successfully.");
                 }
@@ -273,14 +248,44 @@ namespace AndroidSideloader
             }
         }
 
-        private static string CalculateMD5(string filename)
+        // Robust directory delete without throwing if not present
+        private static void SafeDeleteDirectory(string path)
         {
-            using (MD5 md5 = MD5.Create())
+            // Avoid exceptions when directory is missing
+            if (Directory.Exists(path))
             {
-                using (FileStream stream = File.OpenRead(filename))
+                Directory.Delete(path, true);
+            }
+        }
+
+        // Move directory only if source exists
+        private static void MoveIfExists(string sourceDir, string destDir)
+        {
+            if (Directory.Exists(sourceDir))
+            {
+                // Ensure destination does not exist to prevent IOException
+                if (Directory.Exists(destDir))
                 {
-                    byte[] hash = md5.ComputeHash(stream);
-                    return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+                    Directory.Delete(destDir, true);
+                }
+                Directory.Move(sourceDir, destDir);
+            }
+            else
+            {
+                _ = Logger.Log($"Source directory not found: {sourceDir}", LogLevel.WARNING);
+            }
+        }
+
+        // Efficient, cross-platform line splitting for string buffers
+        private static IEnumerable<string> SplitLines(string s)
+        {
+            // Handle both \r\n and \n without allocating intermediate arrays
+            using (var reader = new StringReader(s))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    yield return line;
                 }
             }
         }
