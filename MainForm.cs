@@ -61,7 +61,6 @@ namespace AndroidSideloader
         public static bool enviromentCreated = false;
         public static PublicConfig PublicConfigFile;
         public static string PublicMirrorExtraArgs = " --tpslimit 1.0 --tpslimit-burst 3";
-        public static Splash SplashScreen;
         public static string storedIpPath;
         public static string aaptPath;
         private bool manualIP;
@@ -77,10 +76,6 @@ namespace AndroidSideloader
             InitializeComponent();
             Logger.Initialize();
             InitializeTimeReferences();
-
-            SplashScreen = new Splash();
-            SplashScreen.Show();
-
             CheckCommandLineArguments();
 
             // Initialize debounce timer for search
@@ -224,45 +219,11 @@ namespace AndroidSideloader
         {
             _ = Logger.Log("Starting AndroidSideloader Application");
 
-            if (isOffline)
-            {
-                SplashScreen.UpdateBackgroundImage(AndroidSideloader.Properties.Resources.splashimage_offline);
-                changeTitle("Starting in Offline Mode...");
-            }
-            else
-            {
-                // download dependencies
-                GetDependencies.downloadFiles();
-                SplashScreen.UpdateBackgroundImage(AndroidSideloader.Properties.Resources.splashimage);
-            }
+            // Show the form immediately
+            this.Show();
+            Application.DoEvents();
 
-            settings.MainDir = Environment.CurrentDirectory;
-            settings.Save();
-
-            if (Directory.Exists(Sideloader.TempFolder))
-            {
-                Directory.Delete(Sideloader.TempFolder, true);
-                _ = Directory.CreateDirectory(Sideloader.TempFolder);
-            }
-
-            // Delete the Debug file if it is more than 5MB
-            string logFilePath = settings.CurrentLogPath;
-            if (File.Exists(logFilePath))
-            {
-                FileInfo fileInfo = new FileInfo(logFilePath);
-                long fileSizeInBytes = fileInfo.Length;
-                long maxSizeInBytes = 5 * 1024 * 1024; // 5MB in bytes
-
-                if (fileSizeInBytes > maxSizeInBytes)
-                {
-                    File.Delete(logFilePath);
-                }
-            }
-            if (!isOffline)
-            {
-                RCLONE.Init();
-            }
-
+            // Basic UI setup
             CenterToScreen();
             gamesListView.View = View.Details;
             gamesListView.FullRowSelect = true;
@@ -271,6 +232,60 @@ namespace AndroidSideloader
             speedLabel.Text = String.Empty;
             diskLabel.Text = String.Empty;
             verLabel.Text = Updater.LocalVersion;
+
+            settings.MainDir = Environment.CurrentDirectory;
+            settings.Save();
+
+            changeTitle(isOffline ? "Starting in Offline Mode..." : "Initializing...");
+
+            // Non-blocking background cleanup
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    if (Directory.Exists(Sideloader.TempFolder))
+                    {
+                        Directory.Delete(Sideloader.TempFolder, true);
+                        _ = Directory.CreateDirectory(Sideloader.TempFolder);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Error cleaning temp folder: {ex.Message}", LogLevel.WARNING);
+                }
+            });
+
+            // Non-blocking log file cleanup
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    string logFilePath = settings.CurrentLogPath;
+                    if (File.Exists(logFilePath))
+                    {
+                        FileInfo fileInfo = new FileInfo(logFilePath);
+                        if (fileInfo.Length > 5 * 1024 * 1024)
+                        {
+                            File.Delete(logFilePath);
+                        }
+                    }
+                }
+                catch { }
+            });
+
+            // Dependencies and RCLONE in background
+            if (!isOffline)
+            {
+                _ = Task.Run(() =>
+                {
+                    changeTitle("Downloading Dependencies...");
+                    GetDependencies.downloadFiles();
+                    changeTitle("Initializing RCLONE...");
+                    RCLONE.Init();
+                });
+            }
+
+            // Crashlog handling
             if (File.Exists("crashlog.txt"))
             {
                 if (File.Exists(settings.CurrentCrashPath))
@@ -278,7 +293,10 @@ namespace AndroidSideloader
                     File.Delete(settings.CurrentCrashPath);
                 }
 
-                DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, $"Sideloader crashed during your last use.\nPress OK if you'd like to send us your crash log.\n\n NOTE: THIS CAN TAKE UP TO 30 SECONDS.", "Crash Detected", MessageBoxButtons.OKCancel);
+                DialogResult dialogResult = FlexibleMessageBox.Show(Program.form,
+                    $"Sideloader crashed during your last use.\nPress OK if you'd like to send us your crash log.\n\n NOTE: THIS CAN TAKE UP TO 30 SECONDS.",
+                    "Crash Detected", MessageBoxButtons.OKCancel);
+
                 if (dialogResult == DialogResult.OK)
                 {
                     if (File.Exists(Path.Combine(Environment.CurrentDirectory, "crashlog.txt")))
@@ -290,9 +308,18 @@ namespace AndroidSideloader
                         settings.Save();
 
                         Clipboard.SetText(UUID);
-                        _ = RCLONE.runRcloneCommand_UploadConfig($"copy \"{settings.CurrentCrashPath}\" RSL-gameuploads:CrashLogs");
-                        _ = FlexibleMessageBox.Show(Program.form, $"Your CrashLog has been copied to the server.\nPlease mention your CrashLogID ({settings.CurrentCrashName}) to the Mods.\nIt has been automatically copied to your clipboard.");
-                        Clipboard.SetText(settings.CurrentCrashName);
+
+                        // Upload in background
+                        _ = Task.Run(() =>
+                        {
+                            _ = RCLONE.runRcloneCommand_UploadConfig($"copy \"{settings.CurrentCrashPath}\" RSL-gameuploads:CrashLogs");
+                            this.Invoke(() =>
+                            {
+                                _ = FlexibleMessageBox.Show(Program.form,
+                                    $"Your CrashLog has been copied to the server.\nPlease mention your CrashLogID ({settings.CurrentCrashName}) to the Mods.\nIt has been automatically copied to your clipboard.");
+                                Clipboard.SetText(settings.CurrentCrashName);
+                            });
+                        });
                     }
                 }
                 else
@@ -301,28 +328,32 @@ namespace AndroidSideloader
                 }
             }
 
-            _ = Logger.Log("Attempting to Initalize ADB Server");
-            if (File.Exists(Path.Combine(Environment.CurrentDirectory, "platform-tools", "adb.exe")))
+            // ADB initialization in background
+            _ = Task.Run(() =>
             {
-                _ = ADB.RunAdbCommandToString("kill-server");
-                _ = ADB.RunAdbCommandToString("start-server");
-            }
+                _ = Logger.Log("Attempting to Initialize ADB Server");
+                if (File.Exists(Path.Combine(Environment.CurrentDirectory, "platform-tools", "adb.exe")))
+                {
+                    _ = ADB.RunAdbCommandToString("kill-server");
+                    _ = ADB.RunAdbCommandToString("start-server");
+                }
+            });
 
+            // Continue with Form1_Shown
             this.Form1_Shown(sender, e);
         }
 
         private async void Form1_Shown(object sender, EventArgs e)
         {
             searchTextBox.Enabled = false;
+
+            // Disclaimer thread
             new Thread(() =>
             {
                 Thread.Sleep(10000);
                 freeDisclaimer.Invoke(() =>
                 {
                     freeDisclaimer.Dispose();
-                });
-                freeDisclaimer.Invoke(() =>
-                {
                     freeDisclaimer.Enabled = false;
                 });
             }).Start();
@@ -330,24 +361,33 @@ namespace AndroidSideloader
             if (!isOffline)
             {
                 string configFilePath = Path.Combine(Environment.CurrentDirectory, "vrp-public.json");
+
+                // Public config check
                 if (File.Exists(configFilePath))
                 {
                     await GetPublicConfigAsync();
                     if (!hasPublicConfig)
                     {
-                        _ = FlexibleMessageBox.Show(Program.form, "Failed to fetch public mirror config, and the current one is unreadable.\r\nPlease ensure you can access https://vrpirates.wiki/ in your browser.", "Config Update Failed", MessageBoxButtons.OK);
+                        _ = FlexibleMessageBox.Show(Program.form,
+                            "Failed to fetch public mirror config, and the current one is unreadable.\r\nPlease ensure you can access https://vrpirates.wiki/ in your browser.",
+                            "Config Update Failed", MessageBoxButtons.OK);
                     }
                 }
                 else if (settings.AutoUpdateConfig && settings.CreatePubMirrorFile)
                 {
-                    DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, "Rookie has detected that you are missing the public config file, would you like to create it?", "Public Config Missing", MessageBoxButtons.YesNo);
+                    DialogResult dialogResult = FlexibleMessageBox.Show(Program.form,
+                        "Rookie has detected that you are missing the public config file, would you like to create it?",
+                        "Public Config Missing", MessageBoxButtons.YesNo);
+
                     if (dialogResult == DialogResult.Yes)
                     {
-                        File.Create(configFilePath).Close(); // Ensure the file is closed after creation
+                        File.Create(configFilePath).Close();
                         await GetPublicConfigAsync();
                         if (!hasPublicConfig)
                         {
-                            _ = FlexibleMessageBox.Show(Program.form, "Failed to fetch public mirror config, and the current one is unreadable.\r\nPlease ensure you can access https://vrpirates.wiki/ in your browser.", "Config Update Failed", MessageBoxButtons.OK);
+                            _ = FlexibleMessageBox.Show(Program.form,
+                                "Failed to fetch public mirror config, and the current one is unreadable.\r\nPlease ensure you can access https://vrpirates.wiki/ in your browser.",
+                                "Config Update Failed", MessageBoxButtons.OK);
                         }
                     }
                     else
@@ -358,20 +398,29 @@ namespace AndroidSideloader
                     }
                 }
 
-                string webViewDirectoryPath = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL", "EBWebView");
-                if (Directory.Exists(webViewDirectoryPath))
+                // WebView cleanup in background
+                _ = Task.Run(() =>
                 {
-                    Directory.Delete(webViewDirectoryPath, true);
-                }
+                    try
+                    {
+                        string webViewDirectoryPath = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL", "EBWebView");
+                        if (Directory.Exists(webViewDirectoryPath))
+                        {
+                            Directory.Delete(webViewDirectoryPath, true);
+                        }
+                    }
+                    catch { }
+                });
 
-                // Pre-initialize trailer player
+                // Pre-initialize trailer player in background
                 try
                 {
-                     await EnsureTrailerEnvironmentAsync();
+                    await EnsureTrailerEnvironmentAsync();
                 }
                 catch { /* swallow – prewarm should never crash startup */ }
             }
 
+            // UI setup
             remotesList.Items.Clear();
             if (hasPublicConfig)
             {
@@ -389,10 +438,9 @@ namespace AndroidSideloader
                 btnNoDevice.Text = "Enable Sideloading";
             }
 
-            SplashScreen.Close();
-
             progressBar.Style = ProgressBarStyle.Marquee;
 
+            // Update check
             if (!debugMode && settings.CheckForUpdates && !isOffline)
             {
                 Updater.AppName = "AndroidSideloader";
@@ -403,18 +451,17 @@ namespace AndroidSideloader
             if (!isOffline)
             {
                 changeTitle("Getting Upload Config...");
-                SideloaderRCLONE.updateUploadConfig();
+                await Task.Run(() => SideloaderRCLONE.updateUploadConfig());
 
                 _ = Logger.Log("Initializing Servers");
                 changeTitle("Initializing Servers...");
 
-                // Wait for mirrors to initialize
                 await initMirrors();
 
                 if (!UsingPublicConfig)
                 {
                     changeTitle("Grabbing the Games List...");
-                    SideloaderRCLONE.initGames(currentRemote);
+                    await Task.Run(() => SideloaderRCLONE.initGames(currentRemote));
                 }
             }
             else
@@ -449,7 +496,11 @@ namespace AndroidSideloader
                     ProcessOutput IPoutput = ADB.RunAdbCommandToString(IPcmndfromtxt);
                     if (IPoutput.Output.Contains("attempt failed") || IPoutput.Output.Contains("refused"))
                     {
-                        _ = FlexibleMessageBox.Show(Program.form, "Attempt to connect to saved IP has failed. This is usually due to rebooting the device or not having a STATIC IP set in your router.\nYou must enable Wireless ADB again!");
+                        this.Invoke(() =>
+                        {
+                            _ = FlexibleMessageBox.Show(Program.form,
+                                "Attempt to connect to saved IP has failed. This is usually due to rebooting the device or not having a STATIC IP set in your router.\nYou must enable Wireless ADB again!");
+                        });
                         settings.IPAddress = "";
                         settings.Save();
                         try { File.Delete(storedIpPath); }
@@ -468,6 +519,7 @@ namespace AndroidSideloader
                 }
             });
 
+            // Metadata updates
             if (UsingPublicConfig)
             {
                 await Task.Run(() =>
@@ -490,11 +542,15 @@ namespace AndroidSideloader
                     SideloaderRCLONE.UpdateGamePhotos(currentRemote);
 
                     SideloaderRCLONE.UpdateNouns(currentRemote);
+
                     if (!Directory.Exists(SideloaderRCLONE.ThumbnailsFolder) ||
                         !Directory.Exists(SideloaderRCLONE.NotesFolder))
                     {
-                        _ = FlexibleMessageBox.Show(Program.form,
-                            "It seems you are missing the thumbnails and/or notes database, the first start of the sideloader takes a bit more time, so dont worry if it looks stuck!");
+                        this.Invoke(() =>
+                        {
+                            _ = FlexibleMessageBox.Show(Program.form,
+                                "It seems you are missing the thumbnails and/or notes database, the first start of the sideloader takes a bit more time, so dont worry if it looks stuck!");
+                        });
                     }
                 });
             }
@@ -508,28 +564,34 @@ namespace AndroidSideloader
                 nodeviceonstart = true;
             }
 
-            listAppsBtn();
-            showAvailableSpace();
+            // Parallel execution
+            await Task.WhenAll(
+                Task.Run(() => listAppsBtn()),
+                Task.Run(() => showAvailableSpace())
+            );
+
             downloadInstallGameButton.Enabled = true;
             isLoading = false;
-            initListView(false);
 
-            string[] files = Directory.GetFiles(Environment.CurrentDirectory);
-            foreach (string file in files)
+            // Initialize list view in background
+            _ = Task.Run(() => initListView(false));
+
+            // Cleanup in background
+            _ = Task.Run(() =>
             {
-                string fileName = file;
-                while (fileName.Contains("\\"))
+                string[] files = Directory.GetFiles(Environment.CurrentDirectory);
+                foreach (string file in files)
                 {
-                    fileName = fileName.Substring(fileName.IndexOf("\\") + 1);
-                }
-                if (!fileName.Contains(settings.CurrentLogName) && !fileName.Contains(settings.CurrentCrashName))
-                {
-                    if (!fileName.Contains("debuglog") && fileName.EndsWith(".txt"))
+                    string fileName = Path.GetFileName(file);
+                    if (!fileName.Contains(settings.CurrentLogName) &&
+                        !fileName.Contains(settings.CurrentCrashName) &&
+                        !fileName.Contains("debuglog") &&
+                        fileName.EndsWith(".txt"))
                     {
-                        System.IO.File.Delete(fileName);
+                        try { System.IO.File.Delete(file); } catch { }
                     }
                 }
-            }
+            });
 
             searchTextBox.Enabled = true;
 
@@ -540,6 +602,7 @@ namespace AndroidSideloader
                 _ = Logger.Log($"Using Offline Mode");
             }
         }
+
 
         private void timer_Tick(object sender, EventArgs e)
         {
