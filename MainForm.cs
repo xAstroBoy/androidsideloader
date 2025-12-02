@@ -68,6 +68,8 @@ namespace AndroidSideloader
         private System.Windows.Forms.Timer _debounceTimer;
         private CancellationTokenSource _cts;
         private List<ListViewItem> _allItems;
+        private Dictionary<string, List<ListViewItem>> _searchIndex;
+
         public MainForm()
         {
             storedIpPath = Path.Combine(Environment.CurrentDirectory, "platform-tools", "StoredIP.txt");
@@ -79,30 +81,23 @@ namespace AndroidSideloader
             SplashScreen = new Splash();
             SplashScreen.Show();
 
-            // Check for Offline Mode or No RCLONE Updating
             CheckCommandLineArguments();
 
             // Initialize debounce timer for search
             _debounceTimer = new System.Windows.Forms.Timer
             {
-                Interval = 1000, // 1 second delay
+                Interval = 100, // 100ms delay for fast response
                 Enabled = false
             };
             _debounceTimer.Tick += async (sender, e) => await RunSearch();
 
-            // Set data source for games queue list
             gamesQueListBox.DataSource = gamesQueueList;
-
-            // Set current log path if not already set
             SetCurrentLogPath();
-
             StartTimers();
 
-            // Setup list view column sorting
             lvwColumnSorter = new ListViewColumnSorter();
             gamesListView.ListViewItemSorter = lvwColumnSorter;
 
-            // Focus on search text box if visible
             if (searchTextBox.Visible)
             {
                 _ = searchTextBox.Focus();
@@ -2068,12 +2063,12 @@ namespace AndroidSideloader
 
             if (either && !updatesNotified && !noAppCheck)
             {
-                changeTitle("                                                \n\n");
+                changeTitle("\n\n");
                 DonorsListViewForm DonorForm = new DonorsListViewForm();
                 _ = DonorForm.ShowDialog(this);
                 _ = Focus();
             }
-            changeTitle("Populating update list...                               \n\n");
+            changeTitle("Populating update list...\n\n");
             lblUpToDate.Text = $"[{upToDateCount}] UP TO DATE";
             lblUpdateAvailable.Text = $"[{updateAvailableCount}] UPDATE AVAILABLE";
             lblNeedsDonate.Text = $"[{newerThanListCount}] NEWER THAN LIST";
@@ -2082,11 +2077,39 @@ namespace AndroidSideloader
             gamesListView.Items.Clear();
             gamesListView.Items.AddRange(arr);
             gamesListView.EndUpdate();
-            changeTitle("                                                \n\n");
+            changeTitle("\n\n");
             if (!_allItemsInitialized)
             {
                 _allItems = gamesListView.Items.Cast<ListViewItem>().ToList();
-                _allItemsInitialized = true; // Set the flag to true after initialization
+
+                // Build search index for faster lookups
+                _searchIndex = new Dictionary<string, List<ListViewItem>>(StringComparer.OrdinalIgnoreCase);
+
+                HashSet<string> uniqueNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var item in _allItems)
+                {
+                    // Index by game name
+                    string gameName = item.Text;
+                    if (!_searchIndex.ContainsKey(gameName))
+                    {
+                        _searchIndex[gameName] = new List<ListViewItem>();
+                    }
+                    _searchIndex[gameName].Add(item);
+
+                    // Index by release name
+                    if (item.SubItems.Count > 1)
+                    {
+                        string releaseName = item.SubItems[1].Text;
+                        if (!_searchIndex.ContainsKey(releaseName))
+                        {
+                            _searchIndex[releaseName] = new List<ListViewItem>();
+                        }
+                        _searchIndex[releaseName].Add(item);
+                    }
+                }
+
+                _allItemsInitialized = true;
             }
             loaded = true;
         }
@@ -3606,8 +3629,6 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
 
         }
 
-
-
         private async void searchTextBox_TextChanged(object sender, EventArgs e)
         {
             _debounceTimer.Stop();
@@ -3622,34 +3643,95 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
             _cts?.Cancel();
 
             string searchTerm = searchTextBox.Text;
-            if (!string.IsNullOrEmpty(searchTerm))
+
+            // Ignore placeholder text
+            if (searchTerm == "Search" || string.IsNullOrWhiteSpace(searchTerm))
             {
-                _cts = new CancellationTokenSource();
+                RestoreFullList();
+                return;
+            }
 
-                try
+            _cts = new CancellationTokenSource();
+            var token = _cts.Token;
+
+            try
+            {
+                // Perform search using index for faster lookups
+                var matches = await Task.Run(() =>
                 {
-                    var matches = _allItems
-                        .Where(i => i.Text.IndexOf(searchTerm, StringComparison.CurrentCultureIgnoreCase) >= 0
-                                || i.SubItems[1].Text.IndexOf(searchTerm, StringComparison.CurrentCultureIgnoreCase) >= 0)
-                        .ToList();
+                    if (token.IsCancellationRequested) return new List<ListViewItem>();
 
-                    gamesListView.BeginUpdate(); // Improve UI performance
-                    gamesListView.Items.Clear();
-                    foreach (var match in matches)
+                    var results = new HashSet<ListViewItem>(); // Avoid duplicates
+
+                    // Try exact match first using index
+                    if (_searchIndex != null && _searchIndex.TryGetValue(searchTerm, out var exactMatches))
                     {
-                        gamesListView.Items.Add(match);
+                        foreach (var match in exactMatches)
+                        {
+                            if (token.IsCancellationRequested) return new List<ListViewItem>();
+                            results.Add(match);
+                        }
                     }
 
-                    gamesListView.EndUpdate(); // End the update to refresh the UI
-                }
-                catch (OperationCanceledException)
+                    // Then do partial matches using index
+                    if (_searchIndex != null)
+                    {
+                        foreach (var kvp in _searchIndex)
+                        {
+                            if (token.IsCancellationRequested) return new List<ListViewItem>();
+
+                            if (kvp.Key.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                foreach (var item in kvp.Value)
+                                {
+                                    results.Add(item);
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Fallback to linear search if index not built yet
+                        foreach (var item in _allItems)
+                        {
+                            if (token.IsCancellationRequested) return new List<ListViewItem>();
+
+                            if (item.Text.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                (item.SubItems.Count > 1 && item.SubItems[1].Text.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0))
+                            {
+                                results.Add(item);
+                            }
+                        }
+                    }
+
+                    return results.ToList();
+                }, token);
+
+                // Check if cancelled before updating UI
+                if (token.IsCancellationRequested) return;
+
+                // Update UI on main thread
+                gamesListView.BeginUpdate();
+                try
                 {
-                    // A new search was initiated before the current search completed.
+                    gamesListView.Items.Clear();
+                    if (matches.Count > 0)
+                    {
+                        gamesListView.Items.AddRange(matches.ToArray());
+                    }
+                }
+                finally
+                {
+                    gamesListView.EndUpdate();
                 }
             }
-            else
+            catch (OperationCanceledException)
             {
-                initListView(false);
+                // Search was cancelled - this is expected behavior
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error during search: {ex.Message}", LogLevel.ERROR);
             }
         }
 
@@ -3953,8 +4035,24 @@ function onYouTubeIframeAPIReady() {
         {
             _ = Process.Start("https://github.com/VRPirates/rookie");
         }
+
+        private void searchTextBox_Enter(object sender, EventArgs e)
+        {
+            if (searchTextBox.Text == "Search" && searchTextBox.ForeColor == Color.Gray)
+            {
+                searchTextBox.Text = "";
+                searchTextBox.ForeColor = Color.White;
+            }
+        }
+
         private void searchTextBox_Leave(object sender, EventArgs e)
         {
+            if (string.IsNullOrWhiteSpace(searchTextBox.Text))
+            {
+                searchTextBox.Text = "Search";
+                searchTextBox.ForeColor = Color.Gray;
+            }
+
             if (searchTextBox.Visible)
             {
                 adbCmd_background.Visible = false;
