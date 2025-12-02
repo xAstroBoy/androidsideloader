@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -19,6 +20,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Runtime.InteropServices;
 
 namespace AndroidSideloader
 {
@@ -49,6 +51,14 @@ namespace AndroidSideloader
         public static string currremotesimple = "";
 
 #endif
+        private const int EM_SETMARGINS = 0xD3;
+        private const int EC_LEFTMARGIN = 0x0001;
+        private const int EC_RIGHTMARGIN = 0x0002;
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+        private string freeSpaceText = "";
+        private string freeSpaceTextDetailed = "";
+        private int _questStorageProgress = 0;
         private bool _trailerPlayerInitialized;          // player.html created and loaded
         private bool _trailerHtmlLoaded;                 // initial navigation completed
         private static readonly Dictionary<string, string> _videoIdCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // per game cache
@@ -78,24 +88,70 @@ namespace AndroidSideloader
             InitializeTimeReferences();
             CheckCommandLineArguments();
 
-            // Initialize debounce timer for search
-            _debounceTimer = new System.Windows.Forms.Timer
-            {
-                Interval = 100, // 100ms delay for fast response
-                Enabled = false
-            };
-            _debounceTimer.Tick += async (sender, e) => await RunSearch();
+            CreateSearchIcon();
+            searchTextBox.HandleCreated += (s, e) => ApplySearchTextMargins();
 
+            _debounceTimer = new System.Windows.Forms.Timer { Interval = 100, Enabled = false };
+            _debounceTimer.Tick += async (sender, e) => await RunSearch();
             gamesQueListBox.DataSource = gamesQueueList;
             SetCurrentLogPath();
             StartTimers();
-
             lvwColumnSorter = new ListViewColumnSorter();
             gamesListView.ListViewItemSorter = lvwColumnSorter;
 
-            if (searchTextBox.Visible)
+            if (searchTextBox.Visible) { _ = searchTextBox.Focus(); }
+
+            this.questInfoPanel.MouseEnter += this.QuestInfoHoverEnter;
+            this.questInfoPanel.MouseLeave += this.QuestInfoHoverLeave;
+        }
+
+        private void CreateSearchIcon()
+        {
+            if (this.searchIconPictureBox == null)
             {
-                _ = searchTextBox.Focus();
+                this.searchIconPictureBox = new PictureBox
+                {
+                    Name = "searchIconPictureBox",
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    Size = new Size(16, 16),
+                    BackColor = searchTextBox.BackColor,   // blend with textbox
+                    TabStop = false,
+                    Enabled = false                        // let clicks go to the textbox
+                };
+
+                this.searchIconPictureBox.Image = Properties.Resources.SearchGlass;
+            }
+
+            // Parent the icon to the same container as the textbox
+            var host = searchTextBox.Parent ?? this;
+            if (this.searchIconPictureBox.Parent != host)
+            {
+                host.Controls.Add(this.searchIconPictureBox);
+                this.searchIconPictureBox.BringToFront();
+            }
+
+            // 6px left padding inside the textbox area
+            int leftInset = 6;
+            var pt = new Point(
+                searchTextBox.Left + leftInset,
+                searchTextBox.Top + (searchTextBox.Height - searchIconPictureBox.Height) / 2
+            );
+            searchIconPictureBox.Location = pt;
+        }
+
+        private void ApplySearchTextMargins()
+        {
+            if (searchTextBox == null) return;
+
+            // icon width + left inset + small gap
+            int leftInset = 6;
+            int leftMarginPixels = (searchIconPictureBox?.Width ?? 16) + leftInset + 2;
+            int rightMarginPixels = 2;
+
+            if (searchTextBox.IsHandleCreated)
+            {
+                int lParam = (rightMarginPixels << 16) | (leftMarginPixels & 0xFFFF);
+                SendMessage(searchTextBox.Handle, EM_SETMARGINS, (IntPtr)(EC_LEFTMARGIN | EC_RIGHTMARGIN), (IntPtr)lParam);
             }
         }
 
@@ -215,9 +271,38 @@ namespace AndroidSideloader
         public static bool updatesNotified = false;
         public static string backupFolder;
 
+        private static void KillAdbProcesses()
+        {
+            try
+            {
+                foreach (var p in Process.GetProcessesByName("adb"))
+                {
+                    try
+                    {
+                        if (!p.HasExited)
+                        {
+                            p.Kill();
+                            p.WaitForExit(3000);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"Failed to kill adb process (PID {p.Id}): {ex.Message}", LogLevel.WARNING);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error enumerating adb processes: {ex.Message}", LogLevel.WARNING);
+            }
+        }
+
         private async void Form1_Load(object sender, EventArgs e)
         {
             _ = Logger.Log("Starting AndroidSideloader Application");
+
+            // Hard kill any lingering adb.exe instances to avoid port/handle conflicts
+            KillAdbProcesses();
 
             // Show the form immediately
             this.Show();
@@ -601,8 +686,10 @@ namespace AndroidSideloader
                 remotesList.Size = System.Drawing.Size.Empty;
                 _ = Logger.Log($"Using Offline Mode");
             }
-        }
 
+            changeTitlebarToDevice();
+            UpdateQuestInfoPanel();
+        }
 
         private void timer_Tick(object sender, EventArgs e)
         {
@@ -720,7 +807,6 @@ namespace AndroidSideloader
 
         public async Task<int> CheckForDevice()
         {
-
             Devices.Clear();
             string output = string.Empty;
             string error = string.Empty;
@@ -730,7 +816,6 @@ namespace AndroidSideloader
             {
                 output = ADB.RunAdbCommandToString("devices").Output;
             });
-
 
             t1.Start();
 
@@ -758,8 +843,6 @@ namespace AndroidSideloader
                 i++;
             }
 
-
-
             if (devicesComboBox.Items.Count > 0)
             {
                 devicesComboBox.SelectedIndex = 0;
@@ -770,6 +853,9 @@ namespace AndroidSideloader
             battery = Utilities.StringUtilities.RemoveEverythingAfterFirst(battery, "\n");
             battery = Utilities.StringUtilities.KeepOnlyNumbers(battery);
             batteryLabel.Text = battery + "%";
+
+            UpdateQuestInfoPanel();
+
             return devicesComboBox.SelectedIndex;
         }
 
@@ -778,7 +864,6 @@ namespace AndroidSideloader
             _ = await CheckForDevice();
 
             changeTitlebarToDevice();
-
             showAvailableSpace();
         }
 
@@ -894,6 +979,8 @@ namespace AndroidSideloader
                     }
 
                     diskLabel.Invoke(() => { diskLabel.Text = AvailableSpace; });
+
+                    UpdateQuestInfoPanel();
                 }
                 catch (Exception ex)
                 {
@@ -2543,26 +2630,66 @@ namespace AndroidSideloader
 
         private void deviceDropContainer_Click(object sender, EventArgs e)
         {
-            ShowSubMenu(deviceDropContainer);
-            deviceDrop.Text = (deviceDrop.Text == "▼ DEVICE ▼") ? "▶ DEVICE ◀" : "▼ DEVICE ▼";
+            ToggleContainer(deviceDropContainer, deviceDrop);
         }
 
         private void sideloadContainer_Click(object sender, EventArgs e)
         {
-            ShowSubMenu(sideloadContainer);
-            sideloadDrop.Text = (sideloadDrop.Text == "▼ SIDELOAD ▼") ? "▶ SIDELOAD ◀" : "▼ SIDELOAD ▼";
+            ToggleContainer(sideloadContainer, sideloadDrop);
         }
 
         private void installedAppsMenuContainer_Click(object sender, EventArgs e)
         {
-            ShowSubMenu(installedAppsMenuContainer);
-            installedAppsMenu.Text = (installedAppsMenu.Text == "▼ INSTALLED APPS ▼") ? "▶ INSTALLED APPS ◀" : "▼ INSTALLED APPS ▼";
+            ToggleContainer(installedAppsMenuContainer, installedAppsMenu);
         }
 
         private void backupDrop_Click(object sender, EventArgs e)
         {
-            ShowSubMenu(backupContainer);
-            backupDrop.Text = (backupDrop.Text == "▼ BACKUP / RESTORE ▼") ? "▶ BACKUP / RESTORE ◀" : "▼ BACKUP / RESTORE ▼";
+            ToggleContainer(backupContainer, backupDrop);
+        }
+
+        private void otherDrop_Click(object sender, EventArgs e)
+        {
+            ToggleContainer(otherContainer, otherDrop);
+        }
+
+        private void ToggleContainer(Panel containerToToggle, Button dropButton)
+        {
+            // Collapse all other containers
+            CollapseAllContainers(containerToToggle);
+
+            // Toggle the clicked container
+            bool isExpanding = !containerToToggle.Visible;
+            containerToToggle.Visible = isExpanding;
+        }
+
+        private void CollapseAllContainers(Panel exceptThis = null)
+        {
+            var containers = new[]
+            {
+                deviceDropContainer,
+                sideloadContainer,
+                installedAppsMenuContainer,
+                backupContainer,
+                otherContainer
+            };
+
+            var buttons = new[]
+            {
+                deviceDrop,
+                sideloadDrop,
+                installedAppsMenu,
+                backupDrop,
+                otherDrop
+            };
+
+            for (int i = 0; i < containers.Length; i++)
+            {
+                if (containers[i] != exceptThis && containers[i].Visible)
+                {
+                    containers[i].Visible = false;
+                }
+            }
         }
 
         private void settingsButton_Click(object sender, EventArgs e)
@@ -3594,12 +3721,6 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
             }
         }
 
-        private void otherDrop_Click(object sender, EventArgs e)
-        {
-            ShowSubMenu(otherContainer);
-            otherDrop.Text = (otherDrop.Text == "▼ OTHER ▼") ? "▶ OTHER ◀" : "▼ OTHER ▼";
-        }
-
         private void gamesQueListBox_MouseClick(object sender, MouseEventArgs e)
         {
             if (gamesQueListBox.SelectedIndex == 0 && gamesQueueList.Count == 1)
@@ -3839,7 +3960,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
             string searchTerm = searchTextBox.Text;
 
             // Ignore placeholder text
-            if (searchTerm == "Search" || string.IsNullOrWhiteSpace(searchTerm))
+            if (searchTerm == "Search..." || string.IsNullOrWhiteSpace(searchTerm))
             {
                 RestoreFullList();
                 return;
@@ -4232,7 +4353,7 @@ function onYouTubeIframeAPIReady() {
 
         private void searchTextBox_Enter(object sender, EventArgs e)
         {
-            if (searchTextBox.Text == "Search" && searchTextBox.ForeColor == Color.Gray)
+            if (searchTextBox.Text == "Search..." && searchTextBox.ForeColor == Color.LightGray)
             {
                 searchTextBox.Text = "";
                 searchTextBox.ForeColor = Color.White;
@@ -4243,8 +4364,8 @@ function onYouTubeIframeAPIReady() {
         {
             if (string.IsNullOrWhiteSpace(searchTextBox.Text))
             {
-                searchTextBox.Text = "Search";
-                searchTextBox.ForeColor = Color.Gray;
+                searchTextBox.Text = "Search...";
+                searchTextBox.ForeColor = Color.LightGray;
             }
 
             if (searchTextBox.Visible)
@@ -4757,6 +4878,238 @@ function onYouTubeIframeAPIReady() {
             {
                 favoriteSwitcher.Text = "Games List";
                 initListView(false); 
+            }
+        }
+
+        public async void UpdateQuestInfoPanel()
+        {
+            // Check if device is actually connected by checking Devices list
+            bool hasDevice = Devices != null && Devices.Count > 0 && !Devices.Contains("unauthorized");
+
+            if ((!settings.NodeviceMode && hasDevice) || DeviceConnected)
+            {
+                try
+                {
+                    ADB.DeviceID = GetDeviceID();
+
+                    // Get device model
+                    string deviceModel = ADB.RunAdbCommandToString("shell getprop ro.product.model").Output.Trim();
+                    if (string.IsNullOrEmpty(deviceModel))
+                    {
+                        deviceModel = "Device";
+                    }
+
+                    // Get storage info
+                    string storageOutput = ADB.RunAdbCommandToString("shell df /sdcard").Output;
+                    string[] lines = storageOutput.Split('\n');
+
+                    long totalSpace = 0;
+                    long usedSpace = 0;
+                    long freeSpace = 0;
+                    
+
+                    if (lines.Length > 1)
+                    {
+                        string[] parts = lines[1].Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length >= 4)
+                        {
+                            if (long.TryParse(parts[1], out totalSpace) &&
+                                long.TryParse(parts[2], out usedSpace) &&
+                                long.TryParse(parts[3], out freeSpace))
+                            {
+                                totalSpace = totalSpace / 1024; // Convert to MB
+                                usedSpace = usedSpace / 1024;
+                                freeSpace = freeSpace / 1024;
+
+                                // Format free space display
+                                if (freeSpace > 1024)
+                                {
+                                    freeSpaceText = $"{(freeSpace / 1024.0):F2} GB AVAILABLE";
+                                }
+                                else
+                                {
+                                    freeSpaceText = $"{freeSpace} MB AVAILABLE";
+                                }
+
+                                freeSpaceTextDetailed = $"{(usedSpace / 1024.0):F0} GB OF {(totalSpace / 1024.0):F0} GB USED";
+                            }
+                        }
+                    }
+
+                    // Calculate storage percentage used
+                    int storagePercentUsed = totalSpace > 0 ? (int)((usedSpace * 100) / totalSpace) : 0;
+
+                    // Update UI on main thread
+                    questInfoPanel.Invoke(() =>
+                    {
+                        questInfoLabel.Text = deviceModel;
+                        diskLabel.Text = freeSpaceText;
+
+                        // Update custom progress bar
+                        SetQuestStorageProgress(storagePercentUsed);
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Unable to update quest info panel: {ex.Message}", LogLevel.ERROR);
+                    questInfoPanel.Invoke(() =>
+                    {
+                        questInfoLabel.Text = "Device Info Unavailable";
+                        SetQuestStorageProgress(0);
+                    });
+                }
+            }
+            else
+            {
+                questInfoPanel.Invoke(() =>
+                {
+                    questInfoLabel.Text = "No Device Connected";
+                    SetQuestStorageProgress(0);
+                });
+            }
+
+            // Determine visibility based on device existence
+            bool showQuestInfo = ((!settings.NodeviceMode && hasDevice) || DeviceConnected);
+
+            // Toggle visibility atomically on UI thread
+            questInfoPanel.Invoke(() =>
+            {
+                questStorageProgressBar.Visible = showQuestInfo;
+                batteryLevImg.Visible = showQuestInfo;
+                batteryLabel.Visible = showQuestInfo;
+                questInfoLabel.Visible = showQuestInfo;
+                diskLabel.Visible = showQuestInfo;
+            });
+        }
+
+        private void QuestInfoHoverEnter(object sender, EventArgs e)
+        {
+            // Only react when device info is shown
+            if (!questStorageProgressBar.Visible) return;
+
+            diskLabel.Text = freeSpaceTextDetailed;
+        }
+
+        // Restore the original baseline text ("XX GB FREE")
+        private void QuestInfoHoverLeave(object sender, EventArgs e)
+        {
+            // Only react when device info is shown
+            if (!questStorageProgressBar.Visible) return;
+
+            // Ignore leave fired when moving between child controls inside the container
+            var panel = questInfoPanel;
+            var mouse = panel.PointToClient(MousePosition);
+            if (panel.ClientRectangle.Contains(mouse)) return;
+
+            diskLabel.Text = freeSpaceText;
+        }
+
+        private void questStorageProgressBar_Paint(object sender, PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.Clear(questStorageProgressBar.BackColor);
+
+            int w = questStorageProgressBar.ClientSize.Width;
+            int h = questStorageProgressBar.ClientSize.Height;
+            if (w <= 0 || h <= 0) return;
+
+            // Rounded rectangle parameters (outer + fill share the same geometry).
+            int radius = 10;
+            Color bgColor = Color.FromArgb(28, 32, 38);
+            Color borderColor = Color.FromArgb(60, 65, 75);
+
+            // Modern fill gradient (adjust as desired)
+            Color progressStart = Color.FromArgb(43, 160, 140);
+            Color progressEnd = Color.FromArgb(30, 110, 95);
+
+            // Build the rounded outer path (used for background and clipping).
+            var outer = new RoundedRectangleF(w, h, radius);
+
+            // Paint background
+            using (var bgBrush = new SolidBrush(bgColor))
+            using (var borderPen = new Pen(borderColor, 1f))
+            {
+                g.FillPath(bgBrush, outer.Path);
+                g.DrawPath(borderPen, outer.Path);
+            }
+
+            // Progress fraction and width
+            float p = Math.Max(0f, Math.Min(1f, _questStorageProgress / 100f));
+            int progressWidth = Math.Max(0, (int)(w * p));
+            if (progressWidth <= 0) return;
+
+            // Near-full rounding behavior:
+            // As progress approaches 100%, progressively include the outer right-rounded corners.
+            // Threshold start at 97%. At 97% -> straight cut; at 100% -> fully rounded outer corners.
+            float t = 0f;
+            if (p > 0.97f)
+            {
+                t = Math.Min(1f, (p - 0.97f) / 0.03f); // 0..1 over last 3%
+            }
+
+            // Build a clipping region for the fill: intersection of outer rounded rect with
+            // the left rectangular portion [0..progressWidth]
+            // plus a progressive right-cap region that extends into the rounded corners
+            // with width up to 2*radius, scaled by t.
+            Region fillClip = new Region(new Rectangle(0, 0, progressWidth, h));
+            if (t > 0f)
+            {
+                int capWidth = (int)(t * (2 * radius));
+                if (capWidth > 0)
+                {
+                    // This rectangle sits inside the area of the right rounded corners,
+                    // so union-ing it with the rectangular clip allows the fill to
+                    // progressively "wrap" into the curvature.
+                    var rightCapRect = new Rectangle(w - (2 * radius), 0, capWidth, h);
+                    fillClip.Union(rightCapRect);
+                }
+            }
+
+            Region prevClip = g.Clip;
+            try
+            {
+                // Final fill region = outer rounded path ∩ fillClip
+                using (var outerRegion = new Region(outer.Path))
+                {
+                    outerRegion.Intersect(fillClip);
+                    g.SetClip(outerRegion, CombineMode.Replace);
+
+                    using (var progressBrush = new LinearGradientBrush(
+                        new Rectangle(0, 0, Math.Max(1, progressWidth), h),
+                        progressStart,
+                        progressEnd,
+                        LinearGradientMode.Horizontal))
+                    {
+                        // Fill the outer path; clipping ensures the fill grows left to right,
+                        // stays fully flush to the outer geometry, and never exceeds it.
+                        g.FillPath(progressBrush, outer.Path);
+                    }
+                }
+            }
+            finally
+            {
+                // Restore clip and re-stroke border to keep outline crisp
+                g.Clip = prevClip;
+                using (var borderPen = new Pen(borderColor, 1f))
+                {
+                    g.DrawPath(borderPen, outer.Path);
+                }
+            }
+        }
+
+        private void SetQuestStorageProgress(int percentage)
+        {
+            _questStorageProgress = Math.Max(0, Math.Min(100, percentage));
+
+            if (questStorageProgressBar.InvokeRequired)
+            {
+                questStorageProgressBar.Invoke(new Action(() => questStorageProgressBar.Invalidate()));
+            }
+            else
+            {
+                questStorageProgressBar.Invalidate();
             }
         }
     }

@@ -181,6 +181,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ADB.cs" />
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
     <Compile Include="RoundButton.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -266,14 +271,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>PublicResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
       <SubType>Designer</SubType>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Resources.resx</DependentUpon>
-      <DesignTime>True</DesignTime>
-    </Compile>
     <EmbeddedResource Include="QuestForm.resx">
       <DependentUpon>QuestForm.cs</DependentUpon>
       <SubType>Designer</SubType>
@@ -317,8 +317,6 @@
     <Content Include="changelog.txt" />
     <Content Include="icon.ico" />
     <Content Include="ChangelogHistory.txt" />
-    <Content Include="Resources\pattern_cubes.png" />
-    <Content Include="Resources\pattern_herringbone.png" />
     <None Include="Resources\battery.png" />
     <None Include="Resources\ajax-loader.gif" />
     <None Include="Resources\SearchGlass.PNG" />

@@ -126,7 +126,6 @@ namespace AndroidSideloader
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = global::AndroidSideloader.Properties.Settings.Default.BackColor;
-            this.BackgroundImage = global::AndroidSideloader.Properties.Resources.pattern_cubes;
             this.ClientSize = new System.Drawing.Size(313, 248);
             this.ControlBox = false;
             this.Controls.Add(this.NewAppsButton);
