@@ -51,6 +51,8 @@ namespace AndroidSideloader
         public static string currremotesimple = "";
 
 #endif
+        private Panel _listViewUninstallButton;
+        private bool _listViewUninstallButtonHovered = false;
         private bool isGalleryView = false;
         private List<ListViewItem> _galleryDataSource;
         private FastGalleryPanel _fastGallery;
@@ -109,6 +111,89 @@ namespace AndroidSideloader
 
             this.questInfoPanel.MouseEnter += this.QuestInfoHoverEnter;
             this.questInfoPanel.MouseLeave += this.QuestInfoHoverLeave;
+
+            // Create an uninstall button overlay for list view
+            _listViewUninstallButton = new Panel
+            {
+                Size = new Size(22, 22),
+                BackColor = Color.Transparent,
+                Visible = false,
+                Cursor = Cursors.Hand
+            };
+            _listViewUninstallButton.Paint += ListViewUninstallButton_Paint;
+            _listViewUninstallButton.MouseEnter += (s, ev) => { _listViewUninstallButtonHovered = true; _listViewUninstallButton.Invalidate(); };
+            _listViewUninstallButton.MouseLeave += (s, ev) => { _listViewUninstallButtonHovered = false; _listViewUninstallButton.Invalidate(); };
+            _listViewUninstallButton.Click += ListViewUninstallButton_Click;
+            gamesListView.Controls.Add(_listViewUninstallButton);
+
+            // Timer to keep button position synced with the selected item
+            var uninstallButtonTimer = new System.Windows.Forms.Timer { Interval = 16 }; // ~60fps
+            uninstallButtonTimer.Tick += (s, ev) =>
+            {
+                if (_listViewUninstallButton == null)
+                    return;
+
+                // Check if we have a tagged item to track
+                if (!(_listViewUninstallButton.Tag is ListViewItem item))
+                    return;
+
+                // Verify item is still valid and selected
+                if (!gamesListView.Items.Contains(item) || !item.Selected)
+                {
+                    _listViewUninstallButton.Visible = false;
+                    return;
+                }
+
+                // Check if item is installed (blue or green color)
+                bool isInstalled = item.ForeColor.ToArgb() == ColorTranslator.FromHtml("#3c91e6").ToArgb() ||
+                                   item.ForeColor.ToArgb() == ColorTranslator.FromHtml("#4daa57").ToArgb();
+
+                if (!isInstalled)
+                {
+                    _listViewUninstallButton.Visible = false;
+                    return;
+                }
+
+                // Calculate header height (items start below the header)
+                int headerHeight = 0;
+                if (gamesListView.View == View.Details && gamesListView.HeaderStyle != ColumnHeaderStyle.None)
+                {
+                    headerHeight = gamesListView.Font.Height;
+                }
+
+                // Calculate button position based on item bounds
+                Rectangle itemBounds = item.Bounds;
+                int buttonX = gamesListView.ClientSize.Width - _listViewUninstallButton.Width - 5;
+                int buttonY = itemBounds.Top + (itemBounds.Height - _listViewUninstallButton.Height) / 2;
+
+                // Check if item is within visible bounds (below header and above bottom)
+                bool isVisible = itemBounds.Top >= headerHeight &&
+                                 buttonY >= headerHeight &&
+                                 buttonY + _listViewUninstallButton.Height <= gamesListView.ClientSize.Height;
+
+                if (isVisible)
+                {
+                    _listViewUninstallButton.Location = new Point(buttonX, buttonY);
+                    if (!_listViewUninstallButton.Visible)
+                    {
+                        _listViewUninstallButton.Visible = true;
+                    }
+                }
+                else
+                {
+                    _listViewUninstallButton.Visible = false;
+                }
+            };
+            uninstallButtonTimer.Start();
+
+            // Hide button when selection changes
+            gamesListView.ItemSelectionChanged += (s, ev) =>
+            {
+                if (!ev.IsSelected && _listViewUninstallButton != null)
+                {
+                    _listViewUninstallButton.Visible = false;
+                }
+            };
         }
 
         private void CheckCommandLineArguments()
@@ -1375,7 +1460,7 @@ namespace AndroidSideloader
             {
                 return;
             }
-            DialogResult dialogresult2 = FlexibleMessageBox.Show($"Do you want to attempt to automatically backup any saves to {backupFolder}\\(TodaysDate)", "Attempt Game Backup?", MessageBoxButtons.YesNo);
+            DialogResult dialogresult2 = FlexibleMessageBox.Show($"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\", "Attempt Game Backup?", MessageBoxButtons.YesNo);
             packagename = !GameName.Contains(".") ? Sideloader.gameNameToPackageName(GameName) : GameName;
             if (dialogresult2 == DialogResult.Yes)
             {
@@ -3383,9 +3468,14 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                 }
                 if (!obbsMismatch)
                 {
-                    changeTitle("Refreshing games list, please wait...         \n");
+                    changeTitle("Refreshing games list, please wait...\n");
                     showAvailableSpace();
                     listAppsBtn();
+
+                    // Reset the initialized flag so initListView rebuilds _allItems with fresh install status
+                    _allItemsInitialized = false;
+                    _galleryDataSource = null;
+
                     if (!updateAvailableClicked && !upToDate_Clicked && !NeedsDonation_Clicked && !settings.NodeviceMode && !gamesQueueList.Any())
                     {
                         initListView(false);
@@ -3401,7 +3491,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                     gamesAreDownloading = false;
                     isinstalling = false;
 
-                    changeTitle(" \n\n");
+                    changeTitle("\n\n");
                 }
             }
         }
@@ -4217,14 +4307,42 @@ function onYouTubeIframeAPIReady() {
         private static CancellationTokenSource VideoDownloadTokenSource { get; set; }
         public async void gamesListView_SelectedIndexChanged(object sender, EventArgs e)
         {
+            // Hide the uninstall button initially
+            if (_listViewUninstallButton != null)
+            {
+                _listViewUninstallButton.Visible = false;
+            }
+
             if (gamesListView.SelectedItems.Count < 1)
             {
                 return;
             }
-            string CurrentPackageName = gamesListView.SelectedItems[gamesListView.SelectedItems.Count - 1].SubItems[SideloaderRCLONE.PackageNameIndex].Text;
-            string CurrentReleaseName = gamesListView.SelectedItems[gamesListView.SelectedItems.Count - 1].SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
-            string CurrentGameName = gamesListView.SelectedItems[gamesListView.SelectedItems.Count - 1].SubItems[SideloaderRCLONE.GameNameIndex].Text;
+
+            var selectedItem = gamesListView.SelectedItems[gamesListView.SelectedItems.Count - 1];
+            string CurrentPackageName = selectedItem.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
+            string CurrentReleaseName = selectedItem.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
+            string CurrentGameName = selectedItem.SubItems[SideloaderRCLONE.GameNameIndex].Text;
             Console.WriteLine(CurrentGameName);
+
+            // Show uninstall button only for installed games (blue or green color)
+            bool isInstalled = selectedItem.ForeColor.ToArgb() == ColorTranslator.FromHtml("#3c91e6").ToArgb() ||
+                               selectedItem.ForeColor.ToArgb() == ColorTranslator.FromHtml("#4daa57").ToArgb();
+
+            if (isInstalled && _listViewUninstallButton != null)
+            {
+                // Position the button at the right side of the selected item
+                Rectangle itemBounds = selectedItem.Bounds;
+                int buttonX = gamesListView.ClientSize.Width - _listViewUninstallButton.Width - 5;
+                int buttonY = itemBounds.Top + (itemBounds.Height - _listViewUninstallButton.Height) / 2;
+
+                // Ensure the button stays within visible bounds
+                if (buttonY >= 0 && buttonY + _listViewUninstallButton.Height <= gamesListView.ClientSize.Height)
+                {
+                    _listViewUninstallButton.Location = new Point(buttonX, buttonY);
+                    _listViewUninstallButton.Tag = selectedItem; // Store reference to the item
+                    _listViewUninstallButton.Visible = true;
+                }
+            }
 
             // Thumbnail
             if (!keyheld)
@@ -4282,6 +4400,82 @@ function onYouTubeIframeAPIReady() {
 
             string NotePath = $"{SideloaderRCLONE.NotesFolder}\\{CurrentReleaseName}.txt";
             notesRichTextBox.Text = File.Exists(NotePath) ? File.ReadAllText(NotePath) : "";
+        }
+
+        private async void ListViewUninstallButton_Click(object sender, EventArgs e)
+        {
+            var item = _listViewUninstallButton.Tag as ListViewItem;
+            if (item == null)
+                return;
+
+            string packageName = item.SubItems.Count > 2 ? item.SubItems[2].Text : "";
+            string gameName = item.Text;
+
+            if (string.IsNullOrEmpty(packageName))
+                return;
+
+            // Hide the button immediately
+            _listViewUninstallButton.Visible = false;
+
+            // Confirm uninstall
+            DialogResult dialogresult = FlexibleMessageBox.Show($"Are you sure you want to uninstall {gameName}?", "Proceed with uninstall?", MessageBoxButtons.YesNo);
+            if (dialogresult == DialogResult.No)
+                return;
+
+            // Ask about backup
+            if (!settings.CustomBackupDir)
+            {
+                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
+            }
+            else
+            {
+                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
+            }
+
+            DialogResult dialogresult2 = FlexibleMessageBox.Show($"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\", "Attempt Game Backup?", MessageBoxButtons.YesNo);
+            if (dialogresult2 == DialogResult.Yes)
+            {
+                Sideloader.BackupGame(packageName);
+            }
+
+            // Perform uninstall
+            ProcessOutput output = new ProcessOutput("", "");
+            progressBar.Style = ProgressBarStyle.Marquee;
+
+            Thread t1 = new Thread(() =>
+            {
+                output += Sideloader.UninstallGame(packageName);
+            });
+            t1.Start();
+            t1.IsBackground = true;
+
+            while (t1.IsAlive)
+            {
+                await Task.Delay(100);
+            }
+
+            ShowPrcOutput(output);
+            showAvailableSpace();
+            progressBar.Style = ProgressBarStyle.Continuous;
+
+            // Remove from combo box if present
+            for (int i = 0; i < m_combo.Items.Count; i++)
+            {
+                string comboItem = m_combo.Items[i].ToString();
+                if (comboItem.Equals(gameName, StringComparison.OrdinalIgnoreCase) ||
+                    comboItem.Equals(packageName, StringComparison.OrdinalIgnoreCase))
+                {
+                    m_combo.Items.RemoveAt(i);
+                    break;
+                }
+            }
+
+            // Refresh the list to update installed status
+            _allItemsInitialized = false;
+            _galleryDataSource = null;
+
+            listAppsBtn();
+            initListView(false);
         }
 
         public void UpdateGamesButton_Click(object sender, EventArgs e)
@@ -5234,11 +5428,87 @@ function onYouTubeIframeAPIReady() {
             _fastGallery = new FastGalleryPanel(_galleryDataSource, TILE_WIDTH, TILE_HEIGHT, TILE_SPACING, targetWidth, targetHeight);
             _fastGallery.TileClicked += FastGallery_TileClicked;
             _fastGallery.TileDoubleClicked += FastGallery_TileDoubleClicked;
+            _fastGallery.TileDeleteClicked += FastGallery_TileDeleteClicked;
 
             gamesGalleryView.Controls.Add(_fastGallery);
             _fastGallery.Anchor = AnchorStyles.None;
 
             gamesGalleryView.Resize += GamesGalleryView_Resize;
+        }
+
+        private async void FastGallery_TileDeleteClicked(object sender, int index)
+        {
+            if (index < 0 || _galleryDataSource == null || index >= _galleryDataSource.Count)
+                return;
+
+            var item = _galleryDataSource[index];
+            string packageName = item.SubItems.Count > 2 ? item.SubItems[2].Text : "";
+            string gameName = item.Text; // Friendly game name
+
+            if (string.IsNullOrEmpty(packageName))
+                return;
+
+            // Confirm uninstall
+            DialogResult dialogresult = FlexibleMessageBox.Show($"Are you sure you want to uninstall {gameName}?", "Proceed with uninstall?", MessageBoxButtons.YesNo);
+            if (dialogresult == DialogResult.No)
+                return;
+
+            // Ask about backup
+            if (!settings.CustomBackupDir)
+            {
+                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
+            }
+            else
+            {
+                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
+            }
+
+            DialogResult dialogresult2 = FlexibleMessageBox.Show($"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\", "Attempt Game Backup?", MessageBoxButtons.YesNo);
+            if (dialogresult2 == DialogResult.Yes)
+            {
+                Sideloader.BackupGame(packageName);
+            }
+
+            // Perform uninstall
+            ProcessOutput output = new ProcessOutput("", "");
+            progressBar.Style = ProgressBarStyle.Marquee;
+
+            Thread t1 = new Thread(() =>
+            {
+                output += Sideloader.UninstallGame(packageName);
+            });
+            t1.Start();
+            t1.IsBackground = true;
+
+            while (t1.IsAlive)
+            {
+                await Task.Delay(100);
+            }
+
+            ShowPrcOutput(output);
+            showAvailableSpace();
+            progressBar.Style = ProgressBarStyle.Continuous;
+
+            // Remove from combo box if present
+            for (int i = 0; i < m_combo.Items.Count; i++)
+            {
+                string comboItem = m_combo.Items[i].ToString();
+                // Check if it matches either the game name or package name
+                if (comboItem.Equals(gameName, StringComparison.OrdinalIgnoreCase) ||
+                    comboItem.Equals(packageName, StringComparison.OrdinalIgnoreCase))
+                {
+                    m_combo.Items.RemoveAt(i);
+                    break;
+                }
+            }
+
+            // Refresh the list to update installed status
+            // Reset the initialized flag so initListView rebuilds _allItems with fresh install status
+            _allItemsInitialized = false;
+            _galleryDataSource = null;
+
+            listAppsBtn();
+            initListView(false);
         }
 
         private void GamesGalleryView_Resize(object sender, EventArgs e)
@@ -5297,6 +5567,70 @@ function onYouTubeIframeAPIReady() {
                     listItem.Selected = true;
                     downloadInstallGameButton_Click(downloadInstallGameButton, EventArgs.Empty);
                     break;
+                }
+            }
+        }
+
+        private void ListViewUninstallButton_Paint(object sender, PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            g.Clear(gamesListView.BackColor);
+
+            int w = _listViewUninstallButton.Width;
+            int h = _listViewUninstallButton.Height;
+            var btnRect = new Rectangle(0, 0, w, h);
+
+            // Colors matching GalleryPanel's uninstall button
+            Color bgColor = _listViewUninstallButtonHovered
+                ? Color.FromArgb(255, 220, 70, 70)   // DeleteButtonHoverBg
+                : Color.FromArgb(255, 180, 50, 50);  // DeleteButtonBg
+
+            // Draw rectangle background
+            using (var bgBrush = new SolidBrush(bgColor))
+            {
+                g.FillRectangle(bgBrush, btnRect);
+            }
+
+            // Draw trash icon
+            int iconPadding = 3;
+            int iconX = iconPadding;
+            int iconY = iconPadding - 1;
+            int iconSize = w - iconPadding * 2;
+
+            using (var pen = new Pen(Color.White, 1.5f))
+            {
+                // Trash can body
+                int bodyTop = iconY + 4;
+                int bodyBottom = iconY + iconSize;
+                int bodyLeft = iconX + 2;
+                int bodyRight = iconX + iconSize - 2;
+
+                // Draw body outline (trapezoid-ish shape)
+                g.DrawLine(pen, bodyLeft, bodyTop, bodyLeft + 1, bodyBottom);
+                g.DrawLine(pen, bodyLeft + 1, bodyBottom, bodyRight - 1, bodyBottom);
+                g.DrawLine(pen, bodyRight - 1, bodyBottom, bodyRight, bodyTop);
+
+                // Draw lid
+                g.DrawLine(pen, iconX, bodyTop, iconX + iconSize, bodyTop);
+
+                // Draw handle on lid
+                int handleLeft = iconX + iconSize / 2 - 3;
+                int handleRight = iconX + iconSize / 2 + 3;
+                int handleTop = iconY + 1;
+                g.DrawLine(pen, handleLeft, bodyTop, handleLeft, handleTop);
+                g.DrawLine(pen, handleLeft, handleTop, handleRight, handleTop);
+                g.DrawLine(pen, handleRight, handleTop, handleRight, bodyTop);
+
+                // Draw vertical lines inside trash
+                int lineY1 = bodyTop + 3;
+                int lineY2 = bodyBottom - 3;
+                g.DrawLine(pen, iconX + iconSize / 2, lineY1, iconX + iconSize / 2, lineY2);
+                if (iconSize > 10)
+                {
+                    g.DrawLine(pen, iconX + iconSize / 2 - 4, lineY1, iconX + iconSize / 2 - 4, lineY2);
+                    g.DrawLine(pen, iconX + iconSize / 2 + 4, lineY1, iconX + iconSize / 2 + 4, lineY2);
                 }
             }
         }
