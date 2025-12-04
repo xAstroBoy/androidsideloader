@@ -450,6 +450,13 @@ public class FastGalleryPanel : Control
         ApplySort();
     }
 
+    public ListViewItem GetItemAtIndex(int index)
+    {
+        if (index >= 0 && index < _items.Count)
+            return _items[index];
+        return null;
+    }
+
     private bool IsItemInstalled(ListViewItem item)
     {
         if (item == null) return false;

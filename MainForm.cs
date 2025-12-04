@@ -5438,12 +5438,14 @@ function onYouTubeIframeAPIReady() {
 
         private async void FastGallery_TileDeleteClicked(object sender, int index)
         {
-            if (index < 0 || _galleryDataSource == null || index >= _galleryDataSource.Count)
-                return;
+            if (index < 0 || _fastGallery == null) return;
 
-            var item = _galleryDataSource[index];
+            // Get the actual item from the gallery's current (sorted) list
+            var item = _fastGallery.GetItemAtIndex(index);
+            if (item == null) return;
+
             string packageName = item.SubItems.Count > 2 ? item.SubItems[2].Text : "";
-            string gameName = item.Text; // Friendly game name
+            string gameName = item.Text;
 
             if (string.IsNullOrEmpty(packageName))
                 return;
@@ -5493,7 +5495,6 @@ function onYouTubeIframeAPIReady() {
             for (int i = 0; i < m_combo.Items.Count; i++)
             {
                 string comboItem = m_combo.Items[i].ToString();
-                // Check if it matches either the game name or package name
                 if (comboItem.Equals(gameName, StringComparison.OrdinalIgnoreCase) ||
                     comboItem.Equals(packageName, StringComparison.OrdinalIgnoreCase))
                 {
@@ -5503,7 +5504,6 @@ function onYouTubeIframeAPIReady() {
             }
 
             // Refresh the list to update installed status
-            // Reset the initialized flag so initListView rebuilds _allItems with fresh install status
             _allItemsInitialized = false;
             _galleryDataSource = null;
 
@@ -5532,12 +5532,15 @@ function onYouTubeIframeAPIReady() {
 
         private void FastGallery_TileClicked(object sender, int itemIndex)
         {
-            if (itemIndex < 0 || _galleryDataSource == null || itemIndex >= _galleryDataSource.Count) return;
+            if (itemIndex < 0 || _fastGallery == null) return;
 
-            var item = _galleryDataSource[itemIndex];
-            if (item.SubItems.Count <= 2) return;
+            // Get the actual item from the gallery's current (sorted) list
+            var item = _fastGallery.GetItemAtIndex(itemIndex);
+            if (item == null || item.SubItems.Count <= 2) return;
+
             string packageName = item.SubItems[2].Text;
 
+            // Find and select the matching item in gamesListView
             foreach (ListViewItem listItem in gamesListView.Items)
             {
                 if (listItem.SubItems.Count > 2 && listItem.SubItems[2].Text == packageName)
@@ -5553,12 +5556,15 @@ function onYouTubeIframeAPIReady() {
 
         private void FastGallery_TileDoubleClicked(object sender, int itemIndex)
         {
-            if (itemIndex < 0 || _galleryDataSource == null || itemIndex >= _galleryDataSource.Count) return;
+            if (itemIndex < 0 || _fastGallery == null) return;
 
-            var item = _galleryDataSource[itemIndex];
-            if (item.SubItems.Count <= 2) return;
+            // Get the actual item from the gallery's current (sorted) list
+            var item = _fastGallery.GetItemAtIndex(itemIndex);
+            if (item == null || item.SubItems.Count <= 2) return;
+
             string packageName = item.SubItems[2].Text;
 
+            // Find and select the matching item in gamesListView, then trigger download
             foreach (ListViewItem listItem in gamesListView.Items)
             {
                 if (listItem.SubItems.Count > 2 && listItem.SubItems[2].Text == packageName)
@@ -5570,6 +5576,7 @@ function onYouTubeIframeAPIReady() {
                 }
             }
         }
+
 
         private void ListViewUninstallButton_Paint(object sender, PaintEventArgs e)
         {
