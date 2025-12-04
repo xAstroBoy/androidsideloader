@@ -134,6 +134,51 @@ namespace AndroidSideloader
             this.downloadInstallGameButton = new AndroidSideloader.RoundButton();
             this.MountButton = new AndroidSideloader.RoundButton();
             this.btnNoDevice = new AndroidSideloader.RoundButton();
+            this.gamesGalleryView = new System.Windows.Forms.FlowLayoutPanel();
+            this.btnViewToggle = new RoundButton();
+            this.btnViewToggle_Tooltip = new System.Windows.Forms.ToolTip(this.components);
+            // 
+            // gamesGalleryView
+            // 
+            this.gamesGalleryView.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+                | System.Windows.Forms.AnchorStyles.Left)
+                | System.Windows.Forms.AnchorStyles.Right)));
+            this.gamesGalleryView.AutoScroll = false;
+            this.gamesGalleryView.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(15)))), ((int)(((byte)(15)))), ((int)(((byte)(15)))));
+            this.gamesGalleryView.Location = new System.Drawing.Point(224, 98);
+            this.gamesGalleryView.Name = "gamesGalleryView";
+            this.gamesGalleryView.Padding = new System.Windows.Forms.Padding(0);
+            this.gamesGalleryView.Size = new System.Drawing.Size(1145, 350);
+            this.gamesGalleryView.TabIndex = 102;
+            this.gamesGalleryView.Visible = false;
+            // 
+            // btnViewToggle
+            // 
+            this.btnViewToggle.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
+            this.btnViewToggle.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
+            this.btnViewToggle.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(20)))), ((int)(((byte)(20)))));
+            this.btnViewToggle.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
+            this.btnViewToggle.Cursor = System.Windows.Forms.Cursors.Default;
+            this.btnViewToggle.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.btnViewToggle.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
+            this.btnViewToggle.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.btnViewToggle.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(20)))), ((int)(((byte)(20)))));
+            this.btnViewToggle.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(20)))), ((int)(((byte)(20)))));
+            this.btnViewToggle.Location = new System.Drawing.Point(960, 34);
+            this.btnViewToggle.Name = "btnViewToggle";
+            this.btnViewToggle.Radius = 5;
+            this.btnViewToggle.Size = new System.Drawing.Size(75, 28);
+            this.btnViewToggle.Stroke = true;
+            this.btnViewToggle.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
+            this.btnViewToggle.TabIndex = 103;
+            this.btnViewToggle.Text = "Gallery";
+            this.btnViewToggle.Transparency = false;
+            this.btnViewToggle.Click += new System.EventHandler(this.btnViewToggle_Click);
+
+            // Ensure proper z-order
+            this.gamesGalleryView.BringToFront();
+            this.btnViewToggle.BringToFront();
+
             ((System.ComponentModel.ISupportInitialize)(this.gamesPictureBox)).BeginInit();
             this.progressDLbtnContainer.SuspendLayout();
             this.deviceDropContainer.SuspendLayout();
@@ -1527,6 +1572,8 @@ namespace AndroidSideloader
             this.Controls.Add(this.notesRichTextBox);
             this.Controls.Add(this.adbCmd_background);
             this.Controls.Add(this.gamesListView);
+            this.Controls.Add(this.gamesGalleryView);
+            this.Controls.Add(this.btnViewToggle);
             this.Controls.Add(this.btnNoDevice);
             this.DoubleBuffered = true;
             this.ForeColor = System.Drawing.Color.White;
@@ -1576,6 +1623,7 @@ namespace AndroidSideloader
         private System.Windows.Forms.ComboBox devicesComboBox;
         private System.Windows.Forms.ListBox gamesQueListBox;
         private System.Windows.Forms.ListView gamesListView;
+        private System.Windows.Forms.FlowLayoutPanel gamesGalleryView;
         private System.Windows.Forms.TextBox searchTextBox;
         private System.Windows.Forms.PictureBox gamesPictureBox;
         private System.Windows.Forms.Label gamesQueueLabel;
@@ -1600,6 +1648,7 @@ namespace AndroidSideloader
         public System.Windows.Forms.ColumnHeader DownloadsIndex;
         private RoundButton downloadInstallGameButton;
         private RoundButton MountButton;
+        private RoundButton btnViewToggle;
         private ToolTip startsideloadbutton_Tooltip;
         private ToolTip devicesbutton_Tooltip;
         private ToolTip obbcopybutton_Tooltip;
@@ -1621,6 +1670,7 @@ namespace AndroidSideloader
         private ToolTip listApkButton_Tooltip;
         private ToolTip speedLabel_Tooltip;
         private ToolTip etaLabel_Tooltip;
+        private ToolTip btnViewToggle_Tooltip;
         private Panel progressDLbtnContainer;
         private Microsoft.Web.WebView2.WinForms.WebView2 webView21;
         private Panel bottomContainer;

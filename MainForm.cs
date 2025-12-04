@@ -51,6 +51,12 @@ namespace AndroidSideloader
         public static string currremotesimple = "";
 
 #endif
+        private bool isGalleryView = false;
+        private List<ListViewItem> _galleryDataSource;
+        private FastGalleryPanel _fastGallery;
+        private const int TILE_WIDTH = 180;
+        private const int TILE_HEIGHT = 125;
+        private const int TILE_SPACING = 10;
         private const int EM_SETMARGINS = 0xD3;
         private const int EC_LEFTMARGIN = 0x0001;
         private const int EC_RIGHTMARGIN = 0x0002;
@@ -103,56 +109,6 @@ namespace AndroidSideloader
 
             this.questInfoPanel.MouseEnter += this.QuestInfoHoverEnter;
             this.questInfoPanel.MouseLeave += this.QuestInfoHoverLeave;
-        }
-
-        private void CreateSearchIcon()
-        {
-            if (this.searchIconPictureBox == null)
-            {
-                this.searchIconPictureBox = new PictureBox
-                {
-                    Name = "searchIconPictureBox",
-                    SizeMode = PictureBoxSizeMode.Zoom,
-                    Size = new Size(16, 16),
-                    BackColor = searchTextBox.BackColor,   // blend with textbox
-                    TabStop = false,
-                    Enabled = false                        // let clicks go to the textbox
-                };
-
-                this.searchIconPictureBox.Image = Properties.Resources.SearchGlass;
-            }
-
-            // Parent the icon to the same container as the textbox
-            var host = searchTextBox.Parent ?? this;
-            if (this.searchIconPictureBox.Parent != host)
-            {
-                host.Controls.Add(this.searchIconPictureBox);
-                this.searchIconPictureBox.BringToFront();
-            }
-
-            // 6px left padding inside the textbox area
-            int leftInset = 6;
-            var pt = new Point(
-                searchTextBox.Left + leftInset,
-                searchTextBox.Top + (searchTextBox.Height - searchIconPictureBox.Height) / 2
-            );
-            searchIconPictureBox.Location = pt;
-        }
-
-        private void ApplySearchTextMargins()
-        {
-            if (searchTextBox == null) return;
-
-            // icon width + left inset + small gap
-            int leftInset = 6;
-            int leftMarginPixels = (searchIconPictureBox?.Width ?? 16) + leftInset + 2;
-            int rightMarginPixels = 2;
-
-            if (searchTextBox.IsHandleCreated)
-            {
-                int lParam = (rightMarginPixels << 16) | (leftMarginPixels & 0xFFFF);
-                SendMessage(searchTextBox.Handle, EM_SETMARGINS, (IntPtr)(EC_LEFTMARGIN | EC_RIGHTMARGIN), (IntPtr)lParam);
-            }
         }
 
         private void CheckCommandLineArguments()
@@ -651,8 +607,8 @@ namespace AndroidSideloader
 
             // Parallel execution
             await Task.WhenAll(
-                Task.Run(() => listAppsBtn()),
-                Task.Run(() => showAvailableSpace())
+                Task.Run(() => listAppsBtn())//,
+                //Task.Run(() => showAvailableSpace())
             );
 
             downloadInstallGameButton.Enabled = true;
@@ -688,7 +644,7 @@ namespace AndroidSideloader
             }
 
             changeTitlebarToDevice();
-            UpdateQuestInfoPanel();
+            //UpdateQuestInfoPanel();
         }
 
         private void timer_Tick(object sender, EventArgs e)
@@ -2193,7 +2149,7 @@ namespace AndroidSideloader
             this.Invoke(() =>
             {
                 changeTitle("Populating update list...\n\n");
-                lblUpToDate.Text = $"[{upToDateCount}] UP TO DATE";
+                lblUpToDate.Text = $"[{upToDateCount}] INSTALLED";
                 lblUpToDate.ForeColor = ColorTranslator.FromHtml("#3c91e6");
                 lblUpdateAvailable.Text = $"[{updateAvailableCount}] UPDATE AVAILABLE";
                 lblUpdateAvailable.ForeColor = ColorTranslator.FromHtml("#4daa57");
@@ -2241,6 +2197,13 @@ namespace AndroidSideloader
 
             loaded = true;
             Logger.Log($"initListView completed in {sw.ElapsedMilliseconds}ms");
+
+            // If gallery view is active, refresh it with the newly loaded data
+            if (isGalleryView && gamesGalleryView.Visible)
+            {
+                _galleryDataSource = null; // Reset so PopulateGalleryView uses fresh _allItems
+                PopulateGalleryView();
+            }
         }
 
         private async Task ProcessNewApps(List<string> newGamesList, List<string> blacklistItems)
@@ -4039,6 +4002,13 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                 {
                     gamesListView.EndUpdate();
                 }
+
+                // Refresh gallery view if active
+                if (isGalleryView && gamesGalleryView.Visible)
+                {
+                    _galleryDataSource = matches;
+                    PopulateGalleryView();
+                }
             }
             catch (OperationCanceledException)
             {
@@ -4414,6 +4384,12 @@ function onYouTubeIframeAPIReady() {
                 RestoreFullList();
             }
 
+            // Refresh gallery view if active
+            if (isGalleryView)
+            {
+                PopulateGalleryView();
+            }
+
             lblUpToDate.Click += lblUpToDate_Click;
             lblUpdateAvailable.Click += updateAvailable_Click;
             lblNeedsDonate.Click += lblNeedsDonate_Click;
@@ -4643,6 +4619,12 @@ function onYouTubeIframeAPIReady() {
                 RestoreFullList();
             }
 
+            // Refresh gallery view if active
+            if (isGalleryView)
+            {
+                PopulateGalleryView();
+            }
+
             lblUpToDate.Click += lblUpToDate_Click;
             lblUpdateAvailable.Click += updateAvailable_Click;
             lblNeedsDonate.Click += lblNeedsDonate_Click;
@@ -4673,6 +4655,12 @@ function onYouTubeIframeAPIReady() {
                 RestoreFullList();
             }
 
+            // Refresh gallery view if active
+            if (isGalleryView)
+            {
+                PopulateGalleryView();
+            }
+
             lblUpToDate.Click += lblUpToDate_Click;
             lblUpdateAvailable.Click += updateAvailable_Click;
             lblNeedsDonate.Click += lblNeedsDonate_Click;
@@ -4690,12 +4678,19 @@ function onYouTubeIframeAPIReady() {
 
             var filteredItems = _allItems
                 .Where(item => item.ForeColor.ToArgb() == targetColor.ToArgb())
-                .ToArray();
+                .ToList();
 
             gamesListView.BeginUpdate();
             gamesListView.Items.Clear();
-            gamesListView.Items.AddRange(filteredItems);
+            gamesListView.Items.AddRange(filteredItems.ToArray());
             gamesListView.EndUpdate();
+
+            // Refresh gallery view if active - set data source before calling PopulateGalleryView
+            if (isGalleryView)
+            {
+                _galleryDataSource = filteredItems;
+                PopulateGalleryView();
+            }
 
             changeTitle(" \n\n");
         }
@@ -4712,6 +4707,13 @@ function onYouTubeIframeAPIReady() {
             gamesListView.Items.Clear();
             gamesListView.Items.AddRange(_allItems.ToArray());
             gamesListView.EndUpdate();
+
+            // Refresh gallery view if active
+            if (isGalleryView && gamesGalleryView.Visible)
+            {
+                _galleryDataSource = _allItems;
+                PopulateGalleryView();
+            }
 
             changeTitle(" \n\n");
         }
@@ -5112,6 +5114,192 @@ function onYouTubeIframeAPIReady() {
                 questStorageProgressBar.Invalidate();
             }
         }
+
+        private void CreateSearchIcon()
+        {
+            if (this.searchIconPictureBox == null)
+            {
+                this.searchIconPictureBox = new PictureBox
+                {
+                    Name = "searchIconPictureBox",
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    Size = new Size(16, 16),
+                    BackColor = searchTextBox.BackColor,   // blend with textbox
+                    TabStop = false,
+                    Enabled = false                        // let clicks go to the textbox
+                };
+
+                this.searchIconPictureBox.Image = Properties.Resources.SearchGlass;
+            }
+
+            // Parent the icon to the same container as the textbox
+            var host = searchTextBox.Parent ?? this;
+            if (this.searchIconPictureBox.Parent != host)
+            {
+                host.Controls.Add(this.searchIconPictureBox);
+                this.searchIconPictureBox.BringToFront();
+            }
+
+            // 6px left padding inside the textbox area
+            int leftInset = 6;
+            var pt = new Point(
+                searchTextBox.Left + leftInset,
+                searchTextBox.Top + (searchTextBox.Height - searchIconPictureBox.Height) / 2
+            );
+            searchIconPictureBox.Location = pt;
+        }
+
+        private void ApplySearchTextMargins()
+        {
+            if (searchTextBox == null) return;
+
+            // icon width + left inset + small gap
+            int leftInset = 6;
+            int leftMarginPixels = (searchIconPictureBox?.Width ?? 16) + leftInset + 2;
+            int rightMarginPixels = 2;
+
+            if (searchTextBox.IsHandleCreated)
+            {
+                int lParam = (rightMarginPixels << 16) | (leftMarginPixels & 0xFFFF);
+                SendMessage(searchTextBox.Handle, EM_SETMARGINS, (IntPtr)(EC_LEFTMARGIN | EC_RIGHTMARGIN), (IntPtr)lParam);
+            }
+        }
+
+        private void btnViewToggle_Click(object sender, EventArgs e)
+        {
+            isGalleryView = !isGalleryView;
+
+            if (isGalleryView)
+            {
+                btnViewToggle.Text = "List";
+                gamesListView.Visible = false;
+                gamesGalleryView.Visible = true;
+
+                // Only populate if data is available, otherwise it will be populated when initListView completes
+                if (_allItems != null && _allItems.Count > 0)
+                {
+                    PopulateGalleryView();
+                }
+            }
+            else
+            {
+                btnViewToggle.Text = "Gallery";
+                gamesGalleryView.Visible = false;
+                gamesListView.Visible = true;
+                CleanupGalleryView();
+            }
+        }
+
+        private void PopulateGalleryView()
+        {
+            // If _galleryDataSource was already set (by search or filter), use it
+            // Otherwise, determine what to display based on current state
+            if (_galleryDataSource == null)
+            {
+                if (updateAvailableClicked || upToDate_Clicked || NeedsDonation_Clicked)
+                {
+                    _galleryDataSource = gamesListView.Items.Cast<ListViewItem>().ToList();
+                }
+                else
+                {
+                    _galleryDataSource = _allItems ?? gamesListView.Items.Cast<ListViewItem>().ToList();
+                }
+            }
+
+            if (_galleryDataSource == null)
+            {
+                _galleryDataSource = new List<ListViewItem>();
+            }
+
+            // If gallery already exists, just update the data source
+            if (_fastGallery != null && !_fastGallery.IsDisposed)
+            {
+                _fastGallery.UpdateItems(_galleryDataSource);
+                return;
+            }
+
+            // First time creation
+            CleanupGalleryView();
+
+            int targetWidth = gamesGalleryView.ClientSize.Width > 0 ? gamesGalleryView.ClientSize.Width : gamesGalleryView.Width;
+            int targetHeight = gamesGalleryView.ClientSize.Height > 0 ? gamesGalleryView.ClientSize.Height : gamesGalleryView.Height;
+
+            if (targetHeight <= 0) targetHeight = 350;
+            if (targetWidth <= 0) targetWidth = 1145;
+
+            gamesGalleryView.AutoScroll = false;
+            gamesGalleryView.Padding = Padding.Empty;
+            gamesGalleryView.Controls.Clear();
+
+            _fastGallery = new FastGalleryPanel(_galleryDataSource, TILE_WIDTH, TILE_HEIGHT, TILE_SPACING, targetWidth, targetHeight);
+            _fastGallery.TileClicked += FastGallery_TileClicked;
+            _fastGallery.TileDoubleClicked += FastGallery_TileDoubleClicked;
+
+            gamesGalleryView.Controls.Add(_fastGallery);
+            _fastGallery.Anchor = AnchorStyles.None;
+
+            gamesGalleryView.Resize += GamesGalleryView_Resize;
+        }
+
+        private void GamesGalleryView_Resize(object sender, EventArgs e)
+        {
+            if (_fastGallery != null && !_fastGallery.IsDisposed)
+            {
+                _fastGallery.Size = gamesGalleryView.ClientSize;
+            }
+        }
+
+        private void CleanupGalleryView()
+        {
+            gamesGalleryView.Resize -= GamesGalleryView_Resize;
+
+            if (_fastGallery != null)
+            {
+                _fastGallery.Dispose();
+                _fastGallery = null;
+            }
+        }
+
+        private void FastGallery_TileClicked(object sender, int itemIndex)
+        {
+            if (itemIndex < 0 || _galleryDataSource == null || itemIndex >= _galleryDataSource.Count) return;
+
+            var item = _galleryDataSource[itemIndex];
+            if (item.SubItems.Count <= 2) return;
+            string packageName = item.SubItems[2].Text;
+
+            foreach (ListViewItem listItem in gamesListView.Items)
+            {
+                if (listItem.SubItems.Count > 2 && listItem.SubItems[2].Text == packageName)
+                {
+                    gamesListView.SelectedItems.Clear();
+                    listItem.Selected = true;
+                    listItem.EnsureVisible();
+                    gamesListView_SelectedIndexChanged(gamesListView, EventArgs.Empty);
+                    break;
+                }
+            }
+        }
+
+        private void FastGallery_TileDoubleClicked(object sender, int itemIndex)
+        {
+            if (itemIndex < 0 || _galleryDataSource == null || itemIndex >= _galleryDataSource.Count) return;
+
+            var item = _galleryDataSource[itemIndex];
+            if (item.SubItems.Count <= 2) return;
+            string packageName = item.SubItems[2].Text;
+
+            foreach (ListViewItem listItem in gamesListView.Items)
+            {
+                if (listItem.SubItems.Count > 2 && listItem.SubItems[2].Text == packageName)
+                {
+                    gamesListView.SelectedItems.Clear();
+                    listItem.Selected = true;
+                    downloadInstallGameButton_Click(downloadInstallGameButton, EventArgs.Empty);
+                    break;
+                }
+            }
+        }
     }
 
     public static class ControlExtensions
@@ -5128,4 +5316,6 @@ function onYouTubeIframeAPIReady() {
             }
         }
     }
+
+    
 }
