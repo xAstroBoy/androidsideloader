@@ -4152,22 +4152,67 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
             // Fast path: already initialized
             if (webView21.CoreWebView2 != null) return;
 
-            // Create environment
-            var userDataFolder = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL");
-            var env = await CoreWebView2Environment.CreateAsync(userDataFolder: userDataFolder);
+            // Download WebView2 Runtime if not present
+            string runtimesPath = Path.Combine(Environment.CurrentDirectory, "runtimes");
+            if (!Directory.Exists(runtimesPath))
+            {
+                try
+                {
+                    changeTitle("Downloading Runtime...");
+                    string archivePath = Path.Combine(Environment.CurrentDirectory, "runtimes.7z");
 
-            await webView21.EnsureCoreWebView2Async(env);
+                    using (var client = new WebClient())
+                    {
+                        ServicePointManager.Expect100Continue = true;
+                        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                        await Task.Run(() => client.DownloadFile("https://vrpirates.wiki/downloads/runtimes.7z", archivePath));
+                    }
 
-            // Map local folder to a trusted origin (https://app.local)
-            var webroot = Path.Combine(Environment.CurrentDirectory, "webroot");
-            Directory.CreateDirectory(webroot);
-            webView21.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                "app.local", webroot, CoreWebView2HostResourceAccessKind.Allow);
+                    changeTitle("Extracting Runtime...");
+                    await Task.Run(() => Utilities.Zip.ExtractFile(archivePath, Environment.CurrentDirectory));
+                    File.Delete(archivePath);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Failed to download WebView2 runtime: {ex.Message}", LogLevel.ERROR);
+                    _ = FlexibleMessageBox.Show(Program.form,
+                        $"Unable to download WebView2 runtime: {ex.Message}\n\nTrailer playback will be disabled.",
+                        "WebView2 Download Failed");
+                    enviromentCreated = true;
+                    webView21.Hide();
+                    return;
+                }
+            }
 
-            // Minimal settings required for the player page
-            var s = webView21.CoreWebView2.Settings;
-            s.IsScriptEnabled = true;       // allow IFrame API
-            s.IsWebMessageEnabled = true;   // allow PostWebMessageAsString from host
+            try
+            {
+                var appDataFolder = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL");
+                var env = await CoreWebView2Environment.CreateAsync(userDataFolder: appDataFolder);
+
+                await webView21.EnsureCoreWebView2Async(env);
+
+                // Map local folder to a trusted origin (https://app.local)
+                var webroot = Path.Combine(Environment.CurrentDirectory, "webroot");
+                Directory.CreateDirectory(webroot);
+                webView21.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    "app.local", webroot, CoreWebView2HostResourceAccessKind.Allow);
+
+                // Minimal settings required for the player page
+                var s = webView21.CoreWebView2.Settings;
+                s.IsScriptEnabled = true;       // allow IFrame API
+                s.IsWebMessageEnabled = true;   // allow PostWebMessageAsString from host
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to initialize WebView2: {ex.Message}", LogLevel.ERROR);
+                _ = FlexibleMessageBox.Show(Program.form,
+                    $"WebView2 Runtime is not installed on this system.\n\n" +
+                    "Please download from: https://go.microsoft.com/fwlink/p/?LinkId=2124703\n\n" +
+                    "Trailer playback will be disabled.",
+                    "WebView2 Runtime Required");
+                enviromentCreated = true;
+                webView21.Hide();
+            }
         }
 
         private void InitializeTrailerPlayer()
