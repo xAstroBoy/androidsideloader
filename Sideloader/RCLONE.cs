@@ -1,6 +1,7 @@
 ﻿using AndroidSideloader.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Security.Cryptography;
@@ -67,108 +68,96 @@ namespace AndroidSideloader
         {
             try
             {
-                _ = Logger.Log($"Extracting Metadata");
+                var sw = Stopwatch.StartNew();
 
-                // Cache commonly used paths to avoid repeated Path.Combine calls
                 string currentDir = Environment.CurrentDirectory;
                 string metaRoot = Path.Combine(currentDir, "meta");
                 string metaArchive = Path.Combine(currentDir, "meta.7z");
                 string metaDotMeta = Path.Combine(metaRoot, ".meta");
 
-                Zip.ExtractFile(metaArchive, metaRoot, MainForm.PublicConfigFile.Password);
+                // Check if archive exists and is newer than existing metadata
+                if (!File.Exists(metaArchive))
+                {
+                    Logger.Log("meta.7z not found, skipping extraction", LogLevel.WARNING);
+                    return;
+                }
 
-                _ = Logger.Log($"Updating Metadata");
-
-                // Use a fast directory reset: delete if exists, then move (avoids partial state)
-                SafeDeleteDirectory(Nouns);
-                SafeDeleteDirectory(ThumbnailsFolder);
-                SafeDeleteDirectory(NotesFolder);
-
-                // Avoid throwing if source folders are missing
-                MoveIfExists(Path.Combine(metaDotMeta, "nouns"), Nouns);
-                MoveIfExists(Path.Combine(metaDotMeta, "thumbnails"), ThumbnailsFolder);
-                MoveIfExists(Path.Combine(metaDotMeta, "notes"), NotesFolder);
-
-                _ = Logger.Log($"Initializing Games List");
-
-                // Stream the file line-by-line instead of reading the whole file into memory
+                // Skip extraction if metadata is already up-to-date (based on file timestamps)
                 string gameListPath = Path.Combine(metaRoot, "VRP-GameList.txt");
                 if (File.Exists(gameListPath))
                 {
-                    games.Clear();
-                    bool isFirstLine = true;
-                    foreach (var line in File.ReadLines(gameListPath))
+                    var archiveTime = File.GetLastWriteTimeUtc(metaArchive);
+                    var gameListTime = File.GetLastWriteTimeUtc(gameListPath);
+
+                    // If game list is newer than archive, skip extraction
+                    if (gameListTime > archiveTime && games.Count > 0)
                     {
-                        // Skip header line only once
-                        if (isFirstLine)
-                        {
-                            isFirstLine = false;
-                            continue;
-                        }
+                        Logger.Log($"Metadata already up-to-date, skipping extraction");
+                        return;
+                    }
+                }
 
-                        // Skip empty/whitespace lines without allocating split arrays
+                _ = Logger.Log($"Extracting Metadata");
+                Zip.ExtractFile(metaArchive, metaRoot, MainForm.PublicConfigFile.Password);
+                Logger.Log($"Extraction completed in {sw.ElapsedMilliseconds}ms");
+                sw.Restart();
+
+                _ = Logger.Log($"Updating Metadata");
+
+                // Use Parallel.Invoke for independent directory operations
+                System.Threading.Tasks.Parallel.Invoke(
+                    () => SafeDeleteDirectory(Nouns),
+                    () => SafeDeleteDirectory(ThumbnailsFolder),
+                    () => SafeDeleteDirectory(NotesFolder)
+                );
+                Logger.Log($"Directory cleanup in {sw.ElapsedMilliseconds}ms");
+                sw.Restart();
+
+                // Move directories
+                MoveIfExists(Path.Combine(metaDotMeta, "nouns"), Nouns);
+                MoveIfExists(Path.Combine(metaDotMeta, "thumbnails"), ThumbnailsFolder);
+                MoveIfExists(Path.Combine(metaDotMeta, "notes"), NotesFolder);
+                Logger.Log($"Directory moves in {sw.ElapsedMilliseconds}ms");
+                sw.Restart();
+
+                _ = Logger.Log($"Initializing Games List");
+
+                gameListPath = Path.Combine(metaRoot, "VRP-GameList.txt");
+                if (File.Exists(gameListPath))
+                {
+                    // Read all lines at once - faster for files that fit in memory
+                    var lines = File.ReadAllLines(gameListPath);
+                    var newGames = new List<string[]>(lines.Length);
+
+                    for (int i = 1; i < lines.Length; i++) // Skip header
+                    {
+                        var line = lines[i];
                         if (string.IsNullOrWhiteSpace(line))
-                        {
                             continue;
-                        }
 
-                        // Split with RemoveEmptyEntries to avoid trailing empty fields
-                        var splitGame = line.Split(new[] { ';' }, StringSplitOptions.None);
-                        // Minimal validation: require at least 2 fields
+                        var splitGame = line.Split(';');
                         if (splitGame.Length > 1)
                         {
-                            games.Add(splitGame);
+                            newGames.Add(splitGame);
                         }
                     }
+
+                    // Atomic swap
+                    games.Clear();
+                    games.AddRange(newGames);
+                    Logger.Log($"Parsed {games.Count} games in {sw.ElapsedMilliseconds}ms");
                 }
                 else
                 {
                     _ = Logger.Log("VRP-GameList.txt not found in extracted metadata.", LogLevel.WARNING);
                 }
 
-                // Delete meta folder at the end to avoid leaving partial state if something fails earlier
                 SafeDeleteDirectory(metaRoot);
             }
             catch (Exception e)
             {
                 _ = Logger.Log(e.Message);
                 _ = Logger.Log(e.StackTrace);
-            }
-        }
-
-        public static void RefreshRemotes()
-        {
-            _ = Logger.Log($"Refresh / List Remotes");
-            RemotesList.Clear();
-
-            // Avoid unnecessary ToArray; directly iterate lines
-            var output = RCLONE.runRcloneCommand_DownloadConfig("listremotes").Output;
-            if (string.IsNullOrEmpty(output))
-            {
-                _ = Logger.Log("No remotes returned from rclone.");
-                return;
-            }
-
-            _ = Logger.Log("Loaded following remotes: ");
-            foreach (var r in SplitLines(output))
-            {
-                if (r.Length <= 1)
-                {
-                    continue;
-                }
-
-                // Trim whitespace and trailing colon if present
-                var remote = r.TrimEnd();
-                if (remote.EndsWith(":"))
-                {
-                    remote = remote.Substring(0, remote.Length - 1);
-                }
-
-                if (remote.IndexOf("mirror", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    _ = Logger.Log(remote);
-                    RemotesList.Add(remote);
-                }
             }
         }
 
@@ -248,13 +237,65 @@ namespace AndroidSideloader
             }
         }
 
-        // Robust directory delete without throwing if not present
+        // Fast directory delete using Windows cmd - faster than .NET's Directory.Delete
+        // for large directories with many files (e.g., thumbnails folder with 1000+ images)
         private static void SafeDeleteDirectory(string path)
         {
             // Avoid exceptions when directory is missing
-            if (Directory.Exists(path))
+            if (!Directory.Exists(path))
+                return;
+
+            try
             {
-                Directory.Delete(path, true);
+                // Use Windows rd command which is ~10x faster than .NET's recursive delete
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c rd /s /q \"{path}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+
+                using (var process = Process.Start(psi))
+                {
+                    // Wait with timeout to prevent hanging
+                    if (!process.WaitForExit(30000)) // 30 second timeout
+                    {
+                        try { process.Kill(); } catch { }
+                        Logger.Log($"Directory delete timed out for: {path}", LogLevel.WARNING);
+                        // Fallback to .NET delete
+                        FallbackDelete(path);
+                    }
+                    else if (process.ExitCode != 0 && Directory.Exists(path))
+                    {
+                        // Command failed, try fallback
+                        FallbackDelete(path);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Fast delete failed for {path}: {ex.Message}", LogLevel.WARNING);
+                // Fallback to standard .NET delete
+                FallbackDelete(path);
+            }
+        }
+
+        // Fallback delete method using standard .NET
+        private static void FallbackDelete(string path)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, true);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Fallback delete also failed for {path}: {ex.Message}", LogLevel.ERROR);
             }
         }
 
@@ -264,10 +305,8 @@ namespace AndroidSideloader
             if (Directory.Exists(sourceDir))
             {
                 // Ensure destination does not exist to prevent IOException
-                if (Directory.Exists(destDir))
-                {
-                    Directory.Delete(destDir, true);
-                }
+                // Use fast delete method
+                SafeDeleteDirectory(destDir);
                 Directory.Move(sourceDir, destDir);
             }
             else

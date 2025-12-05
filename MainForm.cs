@@ -36,8 +36,6 @@ namespace AndroidSideloader
         public static string CurrAPK;
         public static string CurrPCKG;
         List<UploadGame> gamesToUpload = new List<UploadGame>();
-
-
         public static string currremotesimple = String.Empty;
 #else
         public bool keyheld;
@@ -46,11 +44,13 @@ namespace AndroidSideloader
         private readonly List<UploadGame> gamesToUpload = new List<UploadGame>();
         public static bool debugMode = false;
         public bool DeviceConnected = false;
-
-
         public static string currremotesimple = "";
-
 #endif
+        private Task _adbInitTask;
+        private static readonly Color ColorInstalled = ColorTranslator.FromHtml("#3c91e6");
+        private static readonly Color ColorUpdateAvailable = ColorTranslator.FromHtml("#4daa57");
+        private static readonly Color ColorDonateGame = ColorTranslator.FromHtml("#cb9cf2");
+        private static readonly Color ColorError = ColorTranslator.FromHtml("#f52f57");
         private Panel _listViewUninstallButton;
         private bool _listViewUninstallButtonHovered = false;
         private bool isGalleryView = false;
@@ -345,9 +345,15 @@ namespace AndroidSideloader
             // Hard kill any lingering adb.exe instances to avoid port/handle conflicts
             KillAdbProcesses();
 
-            // Show the form immediately
-            this.Show();
-            Application.DoEvents();
+            // ADB initialization in background
+            _adbInitTask = Task.Run(() =>
+            {
+                _ = Logger.Log("Attempting to Initialize ADB Server");
+                if (File.Exists(Path.Combine(Environment.CurrentDirectory, "platform-tools", "adb.exe")))
+                {
+                    _ = ADB.RunAdbCommandToString("start-server");
+                }
+            });
 
             // Basic UI setup
             CenterToScreen();
@@ -453,17 +459,6 @@ namespace AndroidSideloader
                     File.Delete(Path.Combine(Environment.CurrentDirectory, "crashlog.txt"));
                 }
             }
-
-            // ADB initialization in background
-            _ = Task.Run(() =>
-            {
-                _ = Logger.Log("Attempting to Initialize ADB Server");
-                if (File.Exists(Path.Combine(Environment.CurrentDirectory, "platform-tools", "adb.exe")))
-                {
-                    _ = ADB.RunAdbCommandToString("kill-server");
-                    _ = ADB.RunAdbCommandToString("start-server");
-                }
-            });
 
             // Continue with Form1_Shown
             this.Form1_Shown(sender, e);
@@ -595,9 +590,14 @@ namespace AndroidSideloader
                 changeTitle("Offline mode enabled, no Rclone");
             }
 
-            changeTitle("Connecting to your Quest...");
-            await Task.Run(() =>
+            // Device connection and Metadata can run simultaneously
+            Task metadataTask = null;
+            Task deviceConnectionTask = null;
+
+            // Start device connection task
+            deviceConnectionTask = Task.Run(() =>
             {
+                changeTitle("Connecting to device...");
                 if (!string.IsNullOrEmpty(settings.IPAddress))
                 {
                     string path = Path.Combine(Environment.CurrentDirectory, "platform-tools", "adb.exe");
@@ -645,10 +645,10 @@ namespace AndroidSideloader
                 }
             });
 
-            // Metadata updates
+            // Start metadata task in parallel
             if (UsingPublicConfig)
             {
-                await Task.Run(() =>
+                metadataTask = Task.Run(() =>
                 {
                     changeTitle("Updating Metadata...");
                     SideloaderRCLONE.UpdateMetadataFromPublic();
@@ -659,7 +659,7 @@ namespace AndroidSideloader
             }
             else if (!isOffline)
             {
-                await Task.Run(() =>
+                metadataTask = Task.Run(() =>
                 {
                     changeTitle("Updating Game Notes...");
                     SideloaderRCLONE.UpdateGameNotes(currentRemote);
@@ -681,6 +681,16 @@ namespace AndroidSideloader
                 });
             }
 
+            // Wait for both tasks to complete
+            var tasksToWait = new List<Task>();
+            if (deviceConnectionTask != null) tasksToWait.Add(deviceConnectionTask);
+            if (metadataTask != null) tasksToWait.Add(metadataTask);
+
+            if (tasksToWait.Count > 0)
+            {
+                await Task.WhenAll(tasksToWait);
+            }
+
             progressBar.Style = ProgressBarStyle.Marquee;
             changeTitle("Populating Game List...");
 
@@ -692,8 +702,7 @@ namespace AndroidSideloader
 
             // Parallel execution
             await Task.WhenAll(
-                Task.Run(() => listAppsBtn())//,
-                //Task.Run(() => showAvailableSpace())
+                Task.Run(() => listAppsBtn())
             );
 
             downloadInstallGameButton.Enabled = true;
@@ -729,7 +738,6 @@ namespace AndroidSideloader
             }
 
             changeTitlebarToDevice();
-            //UpdateQuestInfoPanel();
         }
 
         private void timer_Tick(object sender, EventArgs e)
@@ -787,11 +795,6 @@ namespace AndroidSideloader
             {
 
             }
-        }
-
-        private void ShowSubMenu(Panel subMenu)
-        {
-            subMenu.Visible = subMenu.Visible == false;
         }
 
         private async void startsideloadbutton_Click(object sender, EventArgs e)
@@ -895,7 +898,7 @@ namespace AndroidSideloader
             battery = Utilities.StringUtilities.KeepOnlyNumbers(battery);
             batteryLabel.Text = battery + "%";
 
-            UpdateQuestInfoPanel();
+            //UpdateQuestInfoPanel();
 
             return devicesComboBox.SelectedIndex;
         }
@@ -1929,21 +1932,20 @@ namespace AndroidSideloader
 
         private async void initListView(bool favoriteView)
         {
-            // Stopwatch for perf logging
             var sw = Stopwatch.StartNew();
             Logger.Log("initListView started");
 
             int upToDateCount = 0;
             int updateAvailableCount = 0;
             int newerThanListCount = 0;
-            rookienamelist = string.Empty;
             loaded = false;
 
-            // Read installed packages prepared by listAppsBtn()
+            var rookienameSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var rookienameListBuilder = new StringBuilder();
+
             string installedApps = settings.InstalledApps;
             string[] packageList = installedApps.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
-            // Early return if no packages available
             if (packageList.Length == 0)
             {
                 Logger.Log("No installed packages found");
@@ -1963,7 +1965,6 @@ namespace AndroidSideloader
                         blacklist = File.ReadAllLines($"{settings.MainDir}\\nouns\\blacklist.txt");
                     }
 
-                    // Merge local blacklist.json if present
                     string localBlacklistPath = Path.Combine(settings.MainDir, "blacklist.json");
                     if (File.Exists(localBlacklistPath))
                     {
@@ -1996,40 +1997,41 @@ namespace AndroidSideloader
 
             Logger.Log($"Blacklist/Whitelist loaded in {sw.ElapsedMilliseconds}ms");
 
-            var GameList = new List<ListViewItem>();
-            var rookieList = new List<string>();
-            var installedGames = packageList.ToList();
-            var blacklistItems = blacklist.ToList();
-            var whitelistItems = whitelist.ToList();
+            int expectedGameCount = SideloaderRCLONE.games.Count > 0 ? SideloaderRCLONE.games.Count : 500;
+            var GameList = new List<ListViewItem>(expectedGameCount);
+            var rookieList = new List<string>(expectedGameCount);
 
-            newGamesToUploadList = whitelistItems.Intersect(installedGames, StringComparer.OrdinalIgnoreCase).ToList();
+            var installedGamesSet = new HashSet<string>(packageList, StringComparer.OrdinalIgnoreCase);
+            var blacklistSet = new HashSet<string>(blacklist, StringComparer.OrdinalIgnoreCase);
+            var whitelistSet = new HashSet<string>(whitelist, StringComparer.OrdinalIgnoreCase);
+
+            newGamesToUploadList = whitelistSet.Intersect(installedGamesSet, StringComparer.OrdinalIgnoreCase).ToList();
 
             if (SideloaderRCLONE.games.Count > 5)
             {
                 progressBar.Style = ProgressBarStyle.Marquee;
 
-                // Fast path: collect all installed version codes in one call
-                Dictionary<string, ulong> installedVersions = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase);
+                // Use full dumpsys to get all version codes at once
+                Dictionary<string, ulong> installedVersions = new Dictionary<string, ulong>(packageList.Length, StringComparer.OrdinalIgnoreCase);
 
                 await Task.Run(() =>
                 {
-                    Logger.Log("Fast path fetching version codes...");
+                    Logger.Log("Fetching version codes via full dumpsys...");
+                    var versionSw = Stopwatch.StartNew();
 
-                    // Single dumpsys parse
                     try
                     {
                         var dump = ADB.RunAdbCommandToString("shell dumpsys package").Output;
-                        var map = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase);
+                        Logger.Log($"Dumpsys returned {dump.Length} chars in {versionSw.ElapsedMilliseconds}ms");
+                        versionSw.Restart();
+
                         string currentPkg = null;
 
-                        // dumpsys package structure:
-                        // Package [com.example.app] (..)
-                        //   versionCode=12345 ...
                         foreach (var rawLine in dump.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
                         {
-                            var line = rawLine.Trim();
+                            var line = rawLine.TrimStart();
 
-                            if (line.StartsWith("Package [", StringComparison.OrdinalIgnoreCase))
+                            if (line.StartsWith("Package [", StringComparison.Ordinal))
                             {
                                 var start = line.IndexOf('[');
                                 var end = line.IndexOf(']');
@@ -2044,42 +2046,42 @@ namespace AndroidSideloader
                                 continue;
                             }
 
-                            if (currentPkg != null && line.StartsWith("versionCode=", StringComparison.OrdinalIgnoreCase))
+                            if (currentPkg != null && line.StartsWith("versionCode=", StringComparison.Ordinal))
                             {
-                                var after = line.Substring("versionCode=".Length).Trim();
-                                var digits = new string(after.TakeWhile(char.IsDigit).ToArray());
-                                if (!string.IsNullOrEmpty(digits) && ulong.TryParse(digits, out var v))
+                                var after = line.Substring(12);
+                                int spaceIdx = after.IndexOf(' ');
+                                var digits = spaceIdx > 0 ? after.Substring(0, spaceIdx) : after;
+                                if (ulong.TryParse(digits, out var v))
                                 {
-                                    map[currentPkg] = v;
+                                    // Only store if it's an installed package we care about
+                                    if (installedGamesSet.Contains(currentPkg))
+                                    {
+                                        installedVersions[currentPkg] = v;
+                                    }
                                 }
+                                currentPkg = null;
                                 continue;
                             }
                         }
 
-                        // Filter to the installed third-party packages
-                        var set = new HashSet<string>(packageList, StringComparer.OrdinalIgnoreCase);
-                        foreach (var kv in map)
-                        {
-                            if (set.Contains(kv.Key))
-                            {
-                                installedVersions[kv.Key] = kv.Value;
-                            }
-                        }
-
-                        Logger.Log($"Collected {installedVersions.Count} version codes in {sw.ElapsedMilliseconds}ms");
+                        Logger.Log($"Parsed {installedVersions.Count} version codes in {versionSw.ElapsedMilliseconds}ms");
                     }
                     catch (Exception ex)
                     {
                         Logger.Log($"'dumpsys package' failed: {ex.Message}", LogLevel.ERROR);
                     }
+
+                    Logger.Log($"Version fetch total: {versionSw.ElapsedMilliseconds}ms");
                 });
 
-                // Precompute cloud max version per package to avoid scanning inside the loop
-                var cloudMaxVersionByPackage = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase);
+                Logger.Log($"Version codes collected in {sw.ElapsedMilliseconds}ms");
+                sw.Restart();
+
+                // Precompute cloud max version per package
+                var cloudMaxVersionByPackage = new Dictionary<string, ulong>(SideloaderRCLONE.games.Count, StringComparer.OrdinalIgnoreCase);
                 foreach (var release in SideloaderRCLONE.games)
                 {
                     string pkg = release[SideloaderRCLONE.PackageNameIndex];
-                    // Parse cloud version once
                     ulong v = 0;
                     try
                     {
@@ -2100,37 +2102,32 @@ namespace AndroidSideloader
                     }
                 }
 
-                Logger.Log($"Precomputed cloud max versions in {sw.ElapsedMilliseconds}ms");
+                Logger.Log($"Cloud versions precomputed in {sw.ElapsedMilliseconds}ms");
+                sw.Restart();
 
-                // Process games and colorize based on version comparisons
+                // Process games on background thread
                 await Task.Run(() =>
                 {
-                    Color colorFont_installedGame = ColorTranslator.FromHtml("#3c91e6");
-                    Color colorFont_updateAvailable = ColorTranslator.FromHtml("#4daa57");
-                    Color colorFont_donateGame = ColorTranslator.FromHtml("#cb9cf2");
-                    Color colorFont_error = ColorTranslator.FromHtml("#f52f57");
-
                     foreach (string[] release in SideloaderRCLONE.games)
                     {
                         string packagename = release[SideloaderRCLONE.PackageNameIndex];
                         rookieList.Add(packagename);
 
-                        if (!rookienamelist.Contains(release[SideloaderRCLONE.GameNameIndex]))
+                        string gameName = release[SideloaderRCLONE.GameNameIndex];
+                        if (rookienameSet.Add(gameName))
                         {
-                            rookienamelist += release[SideloaderRCLONE.GameNameIndex] + "\n";
+                            rookienameListBuilder.Append(gameName).Append('\n');
                         }
 
                         var item = new ListViewItem(release);
 
-                        // Installed?
                         if (installedVersions.TryGetValue(packagename, out ulong installedVersionInt))
                         {
-                            item.ForeColor = colorFont_installedGame;
+                            item.ForeColor = ColorInstalled;
 
                             try
                             {
-                                ulong cloudVersionInt = 0;
-                                cloudMaxVersionByPackage.TryGetValue(packagename, out cloudVersionInt);
+                                cloudMaxVersionByPackage.TryGetValue(packagename, out ulong cloudVersionInt);
 
                                 if (installedVersionInt == cloudVersionInt)
                                 {
@@ -2138,17 +2135,17 @@ namespace AndroidSideloader
                                 }
                                 else if (installedVersionInt < cloudVersionInt)
                                 {
-                                    item.ForeColor = colorFont_updateAvailable;
+                                    item.ForeColor = ColorUpdateAvailable;
                                     updateAvailableCount++;
                                 }
                                 else if (installedVersionInt > cloudVersionInt)
                                 {
                                     newerThanListCount++;
-                                    bool dontget = blacklistItems.Contains(packagename, StringComparer.OrdinalIgnoreCase);
+                                    bool dontget = blacklistSet.Contains(packagename);
 
                                     if (!dontget)
                                     {
-                                        item.ForeColor = colorFont_donateGame;
+                                        item.ForeColor = ColorDonateGame;
 
                                         if (!updatesNotified && !isworking && updint < 6 && !settings.SubmittedUpdates.Contains(packagename))
                                         {
@@ -2163,12 +2160,10 @@ namespace AndroidSideloader
                                         }
                                     }
                                 }
-
-                                //Logger.Log($"Checked game {release[SideloaderRCLONE.GameNameIndex]}; cloudversion={cloudVersionInt} localversion={installedVersionInt}");
                             }
                             catch (Exception ex)
                             {
-                                item.ForeColor = colorFont_error;
+                                item.ForeColor = ColorError;
                                 Logger.Log($"An error occurred while rendering game {release[SideloaderRCLONE.GameNameIndex]} in ListView", LogLevel.ERROR);
                                 Logger.Log($"ExMsg: {ex.Message}", LogLevel.ERROR);
                             }
@@ -2176,7 +2171,6 @@ namespace AndroidSideloader
 
                         if (favoriteView)
                         {
-                            // Only add favorited games when favoriteView is true
                             if (settings.FavoritedGames.Contains(item.SubItems[1].Text))
                             {
                                 GameList.Add(item);
@@ -2189,11 +2183,13 @@ namespace AndroidSideloader
                     }
                 });
 
+                rookienamelist = rookienameListBuilder.ToString();
+
                 Logger.Log($"Game processing completed in {sw.ElapsedMilliseconds}ms");
+                sw.Restart();
             }
             else if (!isOffline)
             {
-                // If no games are loaded, try switching mirrors then rebuild
                 SwitchMirrors();
                 if (!isOffline)
                 {
@@ -2202,22 +2198,22 @@ namespace AndroidSideloader
                 return;
             }
 
-            if (blacklistItems.Count == 0 && GameList.Count == 0 && !settings.NodeviceMode && !isOffline)
+            if (blacklistSet.Count == 0 && GameList.Count == 0 && !settings.NodeviceMode && !isOffline)
             {
                 _ = FlexibleMessageBox.Show(Program.form,
                     "Rookie seems to have failed to load all resources. Please try restarting Rookie a few times.\nIf error still persists please disable any VPN or firewalls (rookie uses direct download so a VPN is not needed)\nIf this error still persists try a system reboot, reinstalling the program, and lastly posting the problem on telegram.",
                     "Error loading blacklist or game list!");
             }
 
-            // New apps detection
-            newGamesList = installedGames
-                .Except(rookieList, StringComparer.OrdinalIgnoreCase)
-                .Except(blacklistItems, StringComparer.OrdinalIgnoreCase)
+            var rookieSet = new HashSet<string>(rookieList, StringComparer.OrdinalIgnoreCase);
+            newGamesList = installedGamesSet
+                .Except(rookieSet, StringComparer.OrdinalIgnoreCase)
+                .Except(blacklistSet, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            if (blacklistItems.Count > 100 && rookieList.Count > 100)
+            if (blacklistSet.Count > 100 && rookieList.Count > 100)
             {
-                await ProcessNewApps(newGamesList, blacklistItems);
+                await ProcessNewApps(newGamesList, blacklistSet.ToList());
             }
 
             progressBar.Style = ProgressBarStyle.Continuous;
@@ -2235,11 +2231,11 @@ namespace AndroidSideloader
             {
                 changeTitle("Populating update list...\n\n");
                 lblUpToDate.Text = $"[{upToDateCount}] INSTALLED";
-                lblUpToDate.ForeColor = ColorTranslator.FromHtml("#3c91e6");
+                lblUpToDate.ForeColor = ColorInstalled;
                 lblUpdateAvailable.Text = $"[{updateAvailableCount}] UPDATE AVAILABLE";
-                lblUpdateAvailable.ForeColor = ColorTranslator.FromHtml("#4daa57");
+                lblUpdateAvailable.ForeColor = ColorUpdateAvailable;
                 lblNeedsDonate.Text = $"[{newerThanListCount}] NEWER THAN LIST";
-                lblNeedsDonate.ForeColor = ColorTranslator.FromHtml("#cb9cf2");
+                lblNeedsDonate.ForeColor = ColorDonateGame;
 
                 ListViewItem[] arr = GameList.ToArray();
                 gamesListView.BeginUpdate();
@@ -2248,32 +2244,36 @@ namespace AndroidSideloader
                 gamesListView.EndUpdate();
             });
 
+            Logger.Log($"UI updated in {sw.ElapsedMilliseconds}ms");
+            sw.Restart();
+
             changeTitle("\n\n");
 
-            // Build search index only once
             if (!_allItemsInitialized)
             {
                 _allItems = gamesListView.Items.Cast<ListViewItem>().ToList();
 
-                _searchIndex = new Dictionary<string, List<ListViewItem>>(StringComparer.OrdinalIgnoreCase);
+                _searchIndex = new Dictionary<string, List<ListViewItem>>(_allItems.Count * 2, StringComparer.OrdinalIgnoreCase);
 
                 foreach (var item in _allItems)
                 {
-                    string gameName = item.Text;
-                    if (!_searchIndex.ContainsKey(gameName))
+                    string gameNameKey = item.Text;
+                    if (!_searchIndex.TryGetValue(gameNameKey, out var list))
                     {
-                        _searchIndex[gameName] = new List<ListViewItem>();
+                        list = new List<ListViewItem>(1);
+                        _searchIndex[gameNameKey] = list;
                     }
-                    _searchIndex[gameName].Add(item);
+                    list.Add(item);
 
                     if (item.SubItems.Count > 1)
                     {
                         string releaseName = item.SubItems[1].Text;
-                        if (!_searchIndex.ContainsKey(releaseName))
+                        if (!_searchIndex.TryGetValue(releaseName, out var releaseList))
                         {
-                            _searchIndex[releaseName] = new List<ListViewItem>();
+                            releaseList = new List<ListViewItem>(1);
+                            _searchIndex[releaseName] = releaseList;
                         }
-                        _searchIndex[releaseName].Add(item);
+                        releaseList.Add(item);
                     }
                 }
 
@@ -2281,12 +2281,11 @@ namespace AndroidSideloader
             }
 
             loaded = true;
-            Logger.Log($"initListView completed in {sw.ElapsedMilliseconds}ms");
+            Logger.Log($"initListView total completed in {sw.ElapsedMilliseconds}ms");
 
-            // If gallery view is active, refresh it with the newly loaded data
             if (isGalleryView && gamesGalleryView.Visible)
             {
-                _galleryDataSource = null; // Reset so PopulateGalleryView uses fresh _allItems
+                _galleryDataSource = null;
                 PopulateGalleryView();
             }
         }
@@ -5148,7 +5147,6 @@ function onYouTubeIframeAPIReady() {
                     long usedSpace = 0;
                     long freeSpace = 0;
                     
-
                     if (lines.Length > 1)
                     {
                         string[] parts = lines[1].Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
