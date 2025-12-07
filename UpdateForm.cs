@@ -94,7 +94,7 @@ namespace AndroidSideloader
         private void Panel1_Paint(object sender, PaintEventArgs e)
         {
             var panel = sender as Panel;
-            e.Graphics.SmoothingMode = SmoothingMode.HighQuality;
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
             int radius = 12;
@@ -125,7 +125,7 @@ namespace AndroidSideloader
         private void Panel3_Paint(object sender, PaintEventArgs e)
         {
             var panel = sender as Panel;
-            e.Graphics.SmoothingMode = SmoothingMode.HighQuality;
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
             int radius = 10;
@@ -155,7 +155,7 @@ namespace AndroidSideloader
 
         private void UpdateForm_Paint(object sender, PaintEventArgs e)
         {
-            e.Graphics.SmoothingMode = SmoothingMode.HighQuality;
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
 
             int w = this.ClientSize.Width;
             int h = this.ClientSize.Height;

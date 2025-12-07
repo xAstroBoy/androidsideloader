@@ -109,7 +109,7 @@ namespace AndroidSideloader
             #endregion
 
             #region Drawing
-            e.Graphics.SmoothingMode = SmoothingMode.HighQuality;
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             roundedRect = new RoundedRectangleF(Width, Height, radius);
             e.Graphics.FillRectangle(Brushes.Transparent, ClientRectangle);
 

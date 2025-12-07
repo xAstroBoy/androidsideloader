@@ -88,7 +88,6 @@ namespace AndroidSideloader
         public static string PublicMirrorExtraArgs = " --tpslimit 1.0 --tpslimit-burst 3";
         public static string storedIpPath;
         public static string aaptPath;
-        private bool manualIP;
         private System.Windows.Forms.Timer _debounceTimer;
         private CancellationTokenSource _cts;
         private List<ListViewItem> _allItems;
@@ -3831,14 +3830,33 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
 
                 if (manual)
                 {
-                    adbCmd_CommandBox.Visible = true;
-                    adbCmd_CommandBox.Clear();
-                    adbCmd_Label.Visible = true;
-                    adbCmd_Label.Text = "Enter your Quest IP Address";
-                    adbCmd_background.Visible = true;
-                    manualIP = true;
-                    _ = adbCmd_CommandBox.Focus();
-                    Program.form.changeTitle("Attempting manual connection...", true);
+                    // Show a simple input dialog for IP address
+                    string ipAddress = ShowManualIPDialog();
+                    if (!string.IsNullOrEmpty(ipAddress))
+                    {
+                        string IPcmnd = "connect " + ipAddress + ":5555";
+                        await Task.Delay(1000);
+                        string errorChecker = ADB.RunAdbCommandToString(IPcmnd).Output;
+                        if (errorChecker.Contains("cannot resolve host") || errorChecker.Contains("cannot connect to"))
+                        {
+                            changeTitle("");
+                            _ = FlexibleMessageBox.Show(Program.form, "Manual ADB over WiFi Connection failed\nExiting...", "Manual IP Connection Failed!", MessageBoxButtons.OK);
+                        }
+                        else
+                        {
+                            _ = await CheckForDevice();
+                            showAvailableSpace();
+                            settings.IPAddress = IPcmnd;
+                            settings.Save();
+                            try { File.WriteAllText(storedIpPath, IPcmnd); }
+                            catch (Exception ex) { Logger.Log($"Unable to write to StoredIP.txt due to {ex.Message}", LogLevel.ERROR); }
+                            ADB.wirelessadbON = true;
+                            _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_available 1");
+                            _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_enabled 1");
+                            changeTitlebarToDevice();
+                        }
+                    }
+                    Program.form.changeTitle("", true);
                 }
                 else
                 {
@@ -3888,6 +3906,51 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
 
             // Update button text to reflect new state
             UpdateWirelessADBButtonText();
+        }
+
+        private string ShowManualIPDialog()
+        {
+            using (Form dialog = new Form())
+            {
+                dialog.Text = "Enter Quest IP Address";
+                dialog.Size = new Size(350, 150);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MaximizeBox = false;
+                dialog.MinimizeBox = false;
+                dialog.BackColor = Color.FromArgb(20, 24, 29);
+                dialog.ForeColor = Color.White;
+
+                var label = new Label
+                {
+                    Text = "Enter your Quest's IP Address:",
+                    ForeColor = Color.White,
+                    AutoSize = true,
+                    Location = new Point(15, 15)
+                };
+
+                var textBox = new TextBox
+                {
+                    Location = new Point(15, 40),
+                    Size = new Size(300, 24),
+                    BackColor = Color.FromArgb(40, 44, 52),
+                    ForeColor = Color.White,
+                    BorderStyle = BorderStyle.FixedSingle
+                };
+
+                var okButton = CreateStyledButton("OK", DialogResult.OK, new Point(155, 75));
+                var cancelButton = CreateStyledButton("Cancel", DialogResult.Cancel, new Point(240, 75), false);
+
+                dialog.Controls.AddRange(new Control[] { label, textBox, okButton, cancelButton });
+                dialog.AcceptButton = okButton;
+                dialog.CancelButton = cancelButton;
+
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    return textBox.Text.Trim();
+                }
+            }
+            return null;
         }
 
         private void UpdateWirelessADBButtonText()
@@ -3969,28 +4032,10 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                     }
                 }
                 searchTextBox.Visible = false;
-                adbCmd_background.Visible = false;
-
-                if (adbCmd_CommandBox.Visible)
-                {
-                    changeTitle($"Entered command: ADB {adbCmd_CommandBox.Text}");
-                    _ = ADB.RunAdbCommandToString(adbCmd_CommandBox.Text);
-                    changeTitle("");
-                }
-                adbCmd_CommandBox.Visible = false;
-                adbCmd_Label.Visible = false;
-                adbCmd_background.Visible = false;
-
             }
             if (e.KeyChar == (char)Keys.Escape)
             {
                 searchTextBox.Visible = false;
-                adbCmd_background.Visible = false;
-                adbCmd_CommandBox.Visible = false;
-                adbCmd_btnToggleUpdates.Visible = false;
-                adbCmd_btnSend.Visible = false;
-                adbCmd_Label.Visible = false;
-                adbCmd_background.Visible = false;
             }
         }
 
@@ -4001,7 +4046,6 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                 // Show search box.
                 searchTextBox.Clear();
                 searchTextBox.Visible = true;
-                adbCmd_background.Visible = true;
                 _ = searchTextBox.Focus();
             }
             if (keyData == (Keys.Control | Keys.L))
@@ -4052,13 +4096,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
             }
             if (keyData == (Keys.Control | Keys.R))
             {
-                adbCmd_CommandBox.Visible = true;
-                adbCmd_btnToggleUpdates.Visible = true;
-                adbCmd_btnSend.Visible = true;
-                adbCmd_CommandBox.Clear();
-                adbCmd_Label.Visible = true;
-                adbCmd_background.Visible = true;
-                _ = adbCmd_CommandBox.Focus();
+                btnRunAdbCmd_Click(this, EventArgs.Empty);
             }
             if (keyData == (Keys.Control | Keys.F4))
             {
@@ -4250,11 +4288,6 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
             {
                 Logger.Log($"Error during search: {ex.Message}", LogLevel.ERROR);
             }
-        }
-
-        private void ADBcommandbox_Enter(object sender, EventArgs e)
-        {
-            _ = adbCmd_CommandBox.Focus();
         }
 
         static string ExtractVideoId(string html)
@@ -4779,17 +4812,10 @@ function onYouTubeIframeAPIReady() {
                 searchTextBox.Text = "Search...";
                 searchTextBox.Font = new Font("Segoe UI", 9F, FontStyle.Italic);
             }
-            
+
             searchTextBox.ForeColor = Color.FromArgb(((int)(((byte)(180)))), ((int)(((byte)(180)))), ((int)(((byte)(180)))));
 
-            if (searchTextBox.Visible)
-            {
-                adbCmd_background.Visible = false;
-            }
-            else
-            {
-                _ = gamesListView.Focus();
-            }
+            _ = gamesListView.Focus();
         }
 
         private void gamesListView_KeyPress(object sender, KeyPressEventArgs e)
@@ -4841,91 +4867,7 @@ function onYouTubeIframeAPIReady() {
             btnUpdateAvailable.Click += btnUpdateAvailable_Click;
             btnNewerThanList.Click += btnNewerThanList_Click;
         }
-
-        private async void ADBcommandbox_KeyPress(object sender, KeyPressEventArgs e)
-        {
-            searchTextBox.KeyPress += new
-            System.Windows.Forms.KeyPressEventHandler(CheckEnter);
-            if (e.KeyChar == (char)Keys.Enter)
-            {
-                if (manualIP)
-                {
-                    string IPaddr;
-                    IPaddr = adbCmd_CommandBox.Text;
-                    string IPcmnd = "connect " + IPaddr + ":5555";
-                    await Task.Delay(1000);
-                    string errorChecker = ADB.RunAdbCommandToString(IPcmnd).Output;
-                    if (errorChecker.Contains("cannot resolve host") | errorChecker.Contains("cannot connect to"))
-                    {
-                        changeTitle("");
-                        _ = FlexibleMessageBox.Show(Program.form, "Manual ADB over WiFi Connection failed\nExiting...", "Manual IP Connection Failed!", MessageBoxButtons.OK);
-                        manualIP = false;
-                        adbCmd_CommandBox.Visible = false;
-                        adbCmd_btnToggleUpdates.Visible = false;
-                        adbCmd_btnSend.Visible = false;
-                        adbCmd_Label.Visible = false;
-                        adbCmd_background.Visible = false;
-                        adbCmd_Label.Text = "Type ADB Command";
-                        _ = gamesListView.Focus();
-                    }
-                    else
-                    {
-                        _ = await Program.form.CheckForDevice();
-                        Program.form.showAvailableSpace();
-                        settings.IPAddress = IPcmnd;
-                        settings.Save();
-                        try { File.WriteAllText(storedIpPath, IPcmnd); }
-                        catch (Exception ex) { Logger.Log($"Unable to write to StoredIP.txt due to {ex.Message}", LogLevel.ERROR); }
-                        ADB.wirelessadbON = true;
-                        _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_available 1");
-                        _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_enabled 1");
-                        manualIP = false;
-                        adbCmd_CommandBox.Visible = false;
-                        adbCmd_btnToggleUpdates.Visible = false;
-                        adbCmd_btnSend.Visible = false;
-                        adbCmd_Label.Visible = false;
-                        adbCmd_background.Visible = false;
-                        adbCmd_Label.Text = "Type ADB Command";
-                        changeTitle("");
-                        Program.form.changeTitlebarToDevice();
-                        _ = gamesListView.Focus();
-                    }
-                }
-                else
-                {
-                    string sentCommand = adbCmd_CommandBox.Text.Replace("adb", "");
-                    Program.form.changeTitle($"Running ADB command: ADB {sentCommand}");
-                    string output = ADB.RunAdbCommandToString(adbCmd_CommandBox.Text).Output;
-                    _ = FlexibleMessageBox.Show(Program.form, $"Ran ADB command: ADB {sentCommand}\r\nOutput:\r\n{output}");
-                    adbCmd_CommandBox.Visible = false;
-                    adbCmd_btnToggleUpdates.Visible = false;
-                    adbCmd_btnSend.Visible = false;
-                    adbCmd_Label.Visible = false;
-                    adbCmd_background.Visible = false;
-                    _ = gamesListView.Focus();
-                    changeTitle("");
-                }
-            }
-            if (e.KeyChar == (char)Keys.Escape)
-            {
-                adbCmd_CommandBox.Visible = false;
-                adbCmd_btnToggleUpdates.Visible = false;
-                adbCmd_btnSend.Visible = false;
-                adbCmd_Label.Visible = false;
-                adbCmd_background.Visible = false;
-                _ = gamesListView.Focus();
-            }
-        }
-
-        private void ADBcommandbox_Leave(object sender, EventArgs e)
-        {
-            adbCmd_background.Visible = false;
-            adbCmd_CommandBox.Visible = false;
-            adbCmd_btnToggleUpdates.Visible = false;
-            adbCmd_btnSend.Visible = false;
-            adbCmd_Label.Visible = false;
-        }
-
+        
         private void gamesQueListBox_MouseDown(object sender, MouseEventArgs e)
         {
             if (gamesQueListBox.SelectedItem == null)
@@ -5223,16 +5165,36 @@ function onYouTubeIframeAPIReady() {
             _ = searchTextBox.Focus();
         }
 
-        private async void btnRunAdbCmd_Click(object sender, EventArgs e)
+        private void btnRunAdbCmd_Click(object sender, EventArgs e)
         {
-            adbCmd_CommandBox.Visible = true;
-            adbCmd_btnToggleUpdates.Visible = true;
-            adbCmd_btnSend.Visible = true;
-            adbCmd_CommandBox.Clear();
-            adbCmd_Label.Text = "Type ADB Command";
-            adbCmd_Label.Visible = true;
-            adbCmd_background.Visible = true;
-            _ = adbCmd_CommandBox.Focus();
+            using (var adbForm = new AdbCommandForm())
+            {
+                if (adbForm.ShowDialog(this) == DialogResult.OK)
+                {
+                    string command = adbForm.Command;
+                    if (!string.IsNullOrWhiteSpace(command))
+                    {
+                        string sentCommand = command.Replace("adb", "").Trim();
+                        changeTitle($"Running ADB command: ADB {sentCommand}");
+                        string output = ADB.RunAdbCommandToString(command).Output;
+
+                        if (adbForm.ToggleUpdatesClicked)
+                        {
+                            bool isNowDisabled = output.Contains("disabled") || command.Contains("disable");
+                            string status = isNowDisabled ? "disabled" : "enabled";
+                            _ = JR.Utils.GUI.Forms.FlexibleMessageBox.Show(this,
+                                $"OS Updates have been {status}.\n\nOutput:\n{output}");
+                        }
+                        else
+                        {
+                            _ = JR.Utils.GUI.Forms.FlexibleMessageBox.Show(this,
+                                $"Ran ADB command: ADB {sentCommand}\r\nOutput:\r\n{output}");
+                        }
+
+                        changeTitle("");
+                    }
+                }
+            }
         }
 
         private void btnOpenDownloads_Click(object sender, EventArgs e)
@@ -5263,32 +5225,6 @@ function onYouTubeIframeAPIReady() {
             }
 
             settings.Save();
-        }
-
-        private void adbCmd_btnToggleUpdates_Click(object sender, EventArgs e)
-        {
-            string adbResult = ADB.RunAdbCommandToString("adb shell pm list packages -d").Output;
-            bool isUpdatesDisabled = adbResult.Contains("com.oculus.updater");
-
-            if (isUpdatesDisabled == true)
-            {
-                // Updates are already disabled. Enable them
-                adbCmd_CommandBox.Text = "adb shell pm enable com.oculus.updater";
-            }
-            else
-            {
-                adbCmd_CommandBox.Text = "shell pm disable-user --user 0 com.oculus.updater";
-            }
-
-            // adb shell pm enable com.oculus.updater
-            KeyPressEventArgs enterKeyPressArgs = new KeyPressEventArgs((char)Keys.Enter);
-            ADBcommandbox_KeyPress(adbCmd_CommandBox, enterKeyPressArgs);
-        }
-
-        private void adbCmd_btnSend_Click(object sender, EventArgs e)
-        {
-            KeyPressEventArgs enterKeyPressArgs = new KeyPressEventArgs((char)Keys.Enter);
-            ADBcommandbox_KeyPress(adbCmd_CommandBox, enterKeyPressArgs);
         }
 
         private ListViewItem _rightClickedItem;
