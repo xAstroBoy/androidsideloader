@@ -47,6 +47,17 @@ namespace AndroidSideloader
         public bool DeviceConnected = false;
         public static string currremotesimple = "";
 #endif
+        private const int BottomMargin = 8;
+        private const int RightMargin = 12;
+        private const int PanelSpacing = 10;
+        private const int BottomPanelHeight = 217;
+        private const int ChildTopMargin = 10;
+        private const int ChildHorizontalPadding = 12;   // default left/right
+        private const int NotesLeftMargin = 6;           // special left margin for notes
+        private const int ChildRightMargin = 12;
+        private const int LabelHeight = 20;
+        private const int LabelBottomOffset = 4;         // space from label bottom to panel bottom
+        private const int ReservedLabelHeight = 25;
         private Task _adbInitTask;
         public static readonly Color ColorInstalled = ColorTranslator.FromHtml("#3c91e6");
         public static readonly Color ColorUpdateAvailable = ColorTranslator.FromHtml("#4daa57");
@@ -116,6 +127,8 @@ namespace AndroidSideloader
             gamesListView.ListViewItemSorter = lvwColumnSorter;
 
             SubscribeToHoverEvents(questInfoPanel);
+
+            this.Resize += MainForm_Resize;
 
             // Create an uninstall button overlay for list view
             _listViewUninstallButton = new Panel
@@ -6545,67 +6558,24 @@ function onYouTubeIframeAPIReady() {
             // Bring labels to front so they appear above the panels
             gamesQueueLabel.BringToFront();
             lblNotes.BringToFront();
+
+            gamesQueueList.Add("Beat Saber v1.29.1");
+            gamesQueueList.Add("Superhot VR v1.0.22");
+            gamesQueueList.Add("Gorilla Tag v1.1.85");
+            gamesQueueList.Add("Blade & Sorcery: Nomad v1.2.0");
+            gamesQueueList.Add("The Walking Dead: Saints & Sinners");
+            gamesQueueList.Add("Beat Saber v1.29.1");
+            gamesQueueList.Add("Superhot VR v1.0.22");
+            gamesQueueList.Add("Gorilla Tag v1.1.85");
+            gamesQueueList.Add("Blade & Sorcery: Nomad v1.2.0");
+            gamesQueueList.Add("The Walking Dead: Saints & Sinners");
+            gamesQueueList.Add("Beat Saber v1.29.1");
+            gamesQueueList.Add("Superhot VR v1.0.22");
+            gamesQueueList.Add("Gorilla Tag v1.1.85");
+            gamesQueueList.Add("Blade & Sorcery: Nomad v1.2.0");
+            gamesQueueList.Add("The Walking Dead: Saints & Sinners");
         }
-
-        private Panel CreateRoundedPanel(Control childControl, Color panelColor, int radius, bool bNotes)
-        {
-            // Create wrapper panel
-            var panel = new Panel
-            {
-                Location = childControl.Location,
-                Size = new Size(childControl.Width + 24, childControl.Height + 25),
-                Anchor = childControl.Anchor,
-                BackColor = Color.Transparent,
-                Padding = new Padding(12, 10, 12, 10)
-            };
-
-            // Enable double buffering
-            typeof(Panel).InvokeMember("DoubleBuffered",
-                System.Reflection.BindingFlags.SetProperty | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
-                null, panel, new object[] { true });
-
-            // Add paint handler for rounded corners
-            panel.Paint += (sender, e) =>
-            {
-                var p = sender as Panel;
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-
-                var rect = new Rectangle(0, 0, p.Width - 1, p.Height - 1);
-
-                using (var path = CreateRoundedRectPath(rect, radius))
-                {
-                    // Fill background
-                    using (var brush = new SolidBrush(panelColor))
-                    {
-                        e.Graphics.FillPath(brush, path);
-                    }
-                }
-
-                // Apply rounded region
-                using (var regionPath = CreateRoundedRectPath(new Rectangle(0, 0, p.Width, p.Height), radius))
-                {
-                    p.Region = new Region(regionPath);
-                }
-            };
-
-            // Move child control into panel
-            var parent = childControl.Parent;
-            parent.Controls.Add(panel);
-            parent.Controls.Remove(childControl);
-
-            // Update child control properties
-            childControl.Location = new Point(bNotes ? 6 : 12, 10);
-            childControl.Size = new Size(bNotes ? panel.Width - 18 : panel.Width - 24, panel.Height - 49);
-            childControl.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            childControl.BackColor = panelColor;
-
-            panel.Controls.Add(childControl);
-            panel.BringToFront();
-
-            return panel;
-        }
-
+        
         private void notesRichTextBox_LinkClicked(object sender, LinkClickedEventArgs e)
         {
             try
@@ -6705,6 +6675,142 @@ function onYouTubeIframeAPIReady() {
             {
                 webView21.Region = new Region(path);
             }
+        }
+
+        private void MainForm_Resize(object sender, EventArgs e)
+        {
+            LayoutBottomPanels();
+        }
+
+        private void LayoutChildInPanel(Panel panel, Control child, bool isNotesPanel)
+        {
+            int leftMargin = isNotesPanel ? NotesLeftMargin : ChildHorizontalPadding;
+
+            child.Location = new Point(leftMargin, ChildTopMargin);
+
+            // Width: panel width minus left + right margins
+            int widthReduction = leftMargin + ChildRightMargin;
+            int childWidth = Math.Max(0, panel.Width - widthReduction);
+
+            // Height: panel height minus vertical padding and reserved label area
+            int childHeight = Math.Max(0,
+                panel.Height - (ChildHorizontalPadding * 2) - ReservedLabelHeight);
+
+            child.Size = new Size(childWidth, childHeight);
+        }
+
+        private Panel CreateRoundedPanel(Control childControl, Color panelColor, int radius, bool isNotesPanel)
+        {
+            // Create wrapper panel
+            var panel = new Panel
+            {
+                Location = childControl.Location,
+                Size = new Size(
+                    childControl.Width + ChildHorizontalPadding + ChildRightMargin,
+                    childControl.Height + ReservedLabelHeight
+                ),
+                Anchor = AnchorStyles.None,
+                BackColor = Color.Transparent,
+                Padding = new Padding(ChildHorizontalPadding, ChildTopMargin, ChildRightMargin, ChildTopMargin)
+            };
+
+            // Enable double buffering
+            typeof(Panel).InvokeMember(
+                "DoubleBuffered",
+                System.Reflection.BindingFlags.SetProperty |
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic,
+                null, panel, new object[] { true });
+
+            // Add paint handler for rounded corners
+            panel.Paint += (sender, e) =>
+            {
+                var p = (Panel)sender;
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+                var rect = new Rectangle(0, 0, p.Width - 1, p.Height - 1);
+
+                using (var path = CreateRoundedRectPath(rect, radius))
+                using (var brush = new SolidBrush(panelColor))
+                {
+                    e.Graphics.FillPath(brush, path);
+                }
+
+                // Apply rounded region
+                using (var regionPath = CreateRoundedRectPath(
+                           new Rectangle(0, 0, p.Width, p.Height),
+                           radius))
+                {
+                    p.Region = new Region(regionPath);
+                }
+            };
+
+            // Move child control into panel
+            var parent = childControl.Parent;
+            parent.Controls.Add(panel);
+            parent.Controls.Remove(childControl);
+
+            // Layout child inside panel using shared helper
+            childControl.Anchor = AnchorStyles.None;
+            childControl.BackColor = panelColor;
+            LayoutChildInPanel(panel, childControl, isNotesPanel);
+
+            panel.Controls.Add(childControl);
+            panel.BringToFront();
+
+            return panel;
+        }
+
+        private void LayoutBottomPanels()
+        {
+            // Skip if panels aren't initialized yet
+            if (notesPanel == null || queuePanel == null) return;
+            if (gamesQueListBox == null || notesRichTextBox == null) return;
+
+            // Panels start after webView21 (webView21 ends at 259 + 384 = 643, add spacing)
+            int panelsStartX = 654;
+            int availableWidth = this.ClientSize.Width - panelsStartX - RightMargin;
+
+            // Queue panel gets fixed width, notes panel fills remaining space
+            int desiredQueueWidth = 290;
+            int queueWidth = Math.Max(200, Math.Min(desiredQueueWidth, availableWidth / 2));
+            int notesWidth = availableWidth - queueWidth - PanelSpacing;
+            notesWidth = Math.Max(200, notesWidth);
+
+            int panelY = this.ClientSize.Height - BottomPanelHeight - BottomMargin;
+
+            // Queue panel
+            queuePanel.Location = new Point(panelsStartX, panelY);
+            queuePanel.Size = new Size(queueWidth, BottomPanelHeight);
+
+            // Notes panel
+            int notesX = panelsStartX + queueWidth + PanelSpacing;
+            notesPanel.Location = new Point(notesX, panelY);
+            notesPanel.Size = new Size(this.ClientSize.Width - notesX - RightMargin, BottomPanelHeight);
+
+            // Layout children using the same helper as CreateRoundedPanel
+            LayoutChildInPanel(queuePanel, gamesQueListBox, isNotesPanel: false);
+            LayoutChildInPanel(notesPanel, notesRichTextBox, isNotesPanel: true);
+
+            // Position labels at bottom of their panels
+            gamesQueueLabel.Location = new Point(
+                queuePanel.Location.X + ChildHorizontalPadding + 3,
+                queuePanel.Location.Y + queuePanel.Height - (LabelHeight + LabelBottomOffset)
+            );
+
+            lblNotes.Location = new Point(
+                notesPanel.Location.X + ChildHorizontalPadding,
+                notesPanel.Location.Y + notesPanel.Height - (LabelHeight + LabelBottomOffset)
+            );
+
+            // Ensure labels are visible
+            gamesQueueLabel.BringToFront();
+            lblNotes.BringToFront();
+
+            // Force repaint of panels to update rounded corners
+            queuePanel.Invalidate();
+            notesPanel.Invalidate();
         }
     }
 
