@@ -6558,22 +6558,6 @@ function onYouTubeIframeAPIReady() {
             // Bring labels to front so they appear above the panels
             gamesQueueLabel.BringToFront();
             lblNotes.BringToFront();
-
-            gamesQueueList.Add("Beat Saber v1.29.1");
-            gamesQueueList.Add("Superhot VR v1.0.22");
-            gamesQueueList.Add("Gorilla Tag v1.1.85");
-            gamesQueueList.Add("Blade & Sorcery: Nomad v1.2.0");
-            gamesQueueList.Add("The Walking Dead: Saints & Sinners");
-            gamesQueueList.Add("Beat Saber v1.29.1");
-            gamesQueueList.Add("Superhot VR v1.0.22");
-            gamesQueueList.Add("Gorilla Tag v1.1.85");
-            gamesQueueList.Add("Blade & Sorcery: Nomad v1.2.0");
-            gamesQueueList.Add("The Walking Dead: Saints & Sinners");
-            gamesQueueList.Add("Beat Saber v1.29.1");
-            gamesQueueList.Add("Superhot VR v1.0.22");
-            gamesQueueList.Add("Gorilla Tag v1.1.85");
-            gamesQueueList.Add("Blade & Sorcery: Nomad v1.2.0");
-            gamesQueueList.Add("The Walking Dead: Saints & Sinners");
         }
         
         private void notesRichTextBox_LinkClicked(object sender, LinkClickedEventArgs e)
