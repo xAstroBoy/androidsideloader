@@ -1,5 +1,4 @@
-﻿
-namespace AndroidSideloader
+﻿namespace AndroidSideloader
 {
     partial class SettingsForm
     {
@@ -30,155 +29,55 @@ namespace AndroidSideloader
         private void InitializeComponent()
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(SettingsForm));
-            this.checkForUpdatesCheckBox = new System.Windows.Forms.CheckBox();
-            this.enableMessageBoxesCheckBox = new System.Windows.Forms.CheckBox();
-            this.deleteAfterInstallCheckBox = new System.Windows.Forms.CheckBox();
-            this.updateConfigCheckBox = new System.Windows.Forms.CheckBox();
-            this.userJsonOnGameInstall = new System.Windows.Forms.CheckBox();
-            this.crashlogID = new System.Windows.Forms.Label();
-            this.nodevicemodeBox = new System.Windows.Forms.CheckBox();
-            this.bmbfBox = new System.Windows.Forms.CheckBox();
-            this.AutoReinstBox = new System.Windows.Forms.CheckBox();
             this.downloadDirectorySetter = new System.Windows.Forms.FolderBrowserDialog();
             this.backupDirectorySetter = new System.Windows.Forms.FolderBrowserDialog();
-            this.chkSingleThread = new System.Windows.Forms.CheckBox();
-            this.setBackupDirectory = new AndroidSideloader.RoundButton();
+            this.crashlogID = new System.Windows.Forms.Label();
+            this.lblGeneralSection = new System.Windows.Forms.Label();
+            this.lblDownloadSection = new System.Windows.Forms.Label();
+            this.lblAdvancedSection = new System.Windows.Forms.Label();
+            this.lblDirectoriesSection = new System.Windows.Forms.Label();
+            this.lblDebugSection = new System.Windows.Forms.Label();
+            this.toggleCheckForUpdates = new AndroidSideloader.ToggleSwitch();
+            this.toggleUpdateConfig = new AndroidSideloader.ToggleSwitch();
+            this.toggleNoDeviceMode = new AndroidSideloader.ToggleSwitch();
+            this.toggleDeleteAfterInstall = new AndroidSideloader.ToggleSwitch();
+            this.toggleSingleThread = new AndroidSideloader.ToggleSwitch();
+            this.toggleUseDownloadedFiles = new AndroidSideloader.ToggleSwitch();
+            this.toggleAutoReinstall = new AndroidSideloader.ToggleSwitch();
+            this.toggleMessageBoxes = new AndroidSideloader.ToggleSwitch();
+            this.toggleUserJson = new AndroidSideloader.ToggleSwitch();
+            this.toggleBMBF = new AndroidSideloader.ToggleSwitch();
+            this.toggleVirtualFilesystem = new AndroidSideloader.ToggleSwitch();
+            this.toggleTrailers = new AndroidSideloader.ToggleSwitch();
+            this.lblCheckForUpdates = new System.Windows.Forms.Label();
+            this.lblUpdateConfig = new System.Windows.Forms.Label();
+            this.lblNoDeviceMode = new System.Windows.Forms.Label();
+            this.lblDeleteAfterInstall = new System.Windows.Forms.Label();
+            this.lblSingleThread = new System.Windows.Forms.Label();
+            this.lblUseDownloadedFiles = new System.Windows.Forms.Label();
+            this.lblAutoReinstall = new System.Windows.Forms.Label();
+            this.lblMessageBoxes = new System.Windows.Forms.Label();
+            this.lblUserJson = new System.Windows.Forms.Label();
+            this.lblBMBF = new System.Windows.Forms.Label();
+            this.lblVirtualFilesystem = new System.Windows.Forms.Label();
+            this.lblTrailers = new System.Windows.Forms.Label();
+            this.bandwidthLabel = new System.Windows.Forms.Label();
+            this.bandwidthLimitTextBox = new System.Windows.Forms.TextBox();
+            this.lblBandwidthUnit = new System.Windows.Forms.Label();
             this.setDownloadDirectory = new AndroidSideloader.RoundButton();
+            this.setBackupDirectory = new AndroidSideloader.RoundButton();
+            this.openDownloadDirectory = new AndroidSideloader.RoundButton();
+            this.openBackupDirectory = new AndroidSideloader.RoundButton();
             this.btnOpenDebug = new AndroidSideloader.RoundButton();
             this.btnResetDebug = new AndroidSideloader.RoundButton();
             this.btnUploadDebug = new AndroidSideloader.RoundButton();
-            this.resetSettingsButton = new AndroidSideloader.RoundButton();
             this.applyButton = new AndroidSideloader.RoundButton();
-            this.virtualFilesystemCompatibilityCheckbox = new System.Windows.Forms.CheckBox();
-            this.openBackupDirectory = new AndroidSideloader.RoundButton();
-            this.openDownloadDirectory = new AndroidSideloader.RoundButton();
-            this.chkUseDownloadedFiles = new System.Windows.Forms.CheckBox();
-            this.bandwidthLabel = new System.Windows.Forms.Label();
-            this.bandwidthLimitTextBox = new System.Windows.Forms.TextBox();
-            this.label1 = new System.Windows.Forms.Label();
+            this.resetSettingsButton = new AndroidSideloader.RoundButton();
+            this.separator1 = new System.Windows.Forms.Panel();
+            this.separator2 = new System.Windows.Forms.Panel();
+            this.separator3 = new System.Windows.Forms.Panel();
+            this.separator4 = new System.Windows.Forms.Panel();
             this.SuspendLayout();
-            // 
-            // checkForUpdatesCheckBox
-            // 
-            this.checkForUpdatesCheckBox.AutoSize = true;
-            this.checkForUpdatesCheckBox.BackColor = System.Drawing.Color.Transparent;
-            this.checkForUpdatesCheckBox.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.checkForUpdatesCheckBox.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.checkForUpdatesCheckBox.Location = new System.Drawing.Point(13, 11);
-            this.checkForUpdatesCheckBox.Name = "checkForUpdatesCheckBox";
-            this.checkForUpdatesCheckBox.Size = new System.Drawing.Size(226, 22);
-            this.checkForUpdatesCheckBox.TabIndex = 0;
-            this.checkForUpdatesCheckBox.Text = "Check for Application Updates";
-            this.checkForUpdatesCheckBox.UseVisualStyleBackColor = false;
-            this.checkForUpdatesCheckBox.CheckedChanged += new System.EventHandler(this.checkForUpdatesCheckBox_CheckedChanged);
-            // 
-            // enableMessageBoxesCheckBox
-            // 
-            this.enableMessageBoxesCheckBox.AutoSize = true;
-            this.enableMessageBoxesCheckBox.BackColor = System.Drawing.Color.Transparent;
-            this.enableMessageBoxesCheckBox.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.enableMessageBoxesCheckBox.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.enableMessageBoxesCheckBox.Location = new System.Drawing.Point(13, 201);
-            this.enableMessageBoxesCheckBox.Name = "enableMessageBoxesCheckBox";
-            this.enableMessageBoxesCheckBox.Size = new System.Drawing.Size(309, 22);
-            this.enableMessageBoxesCheckBox.TabIndex = 1;
-            this.enableMessageBoxesCheckBox.Text = "Enable Message Boxes on task completed";
-            this.enableMessageBoxesCheckBox.UseVisualStyleBackColor = false;
-            this.enableMessageBoxesCheckBox.CheckedChanged += new System.EventHandler(this.enableMessageBoxesCheckBox_CheckedChanged);
-            // 
-            // deleteAfterInstallCheckBox
-            // 
-            this.deleteAfterInstallCheckBox.AutoSize = true;
-            this.deleteAfterInstallCheckBox.BackColor = System.Drawing.Color.Transparent;
-            this.deleteAfterInstallCheckBox.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.deleteAfterInstallCheckBox.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.deleteAfterInstallCheckBox.Location = new System.Drawing.Point(13, 92);
-            this.deleteAfterInstallCheckBox.Name = "deleteAfterInstallCheckBox";
-            this.deleteAfterInstallCheckBox.Size = new System.Drawing.Size(288, 22);
-            this.deleteAfterInstallCheckBox.TabIndex = 3;
-            this.deleteAfterInstallCheckBox.Text = "Delete games after download and install";
-            this.deleteAfterInstallCheckBox.UseVisualStyleBackColor = false;
-            this.deleteAfterInstallCheckBox.CheckedChanged += new System.EventHandler(this.deleteAfterInstallCheckBox_CheckedChanged);
-            // 
-            // updateConfigCheckBox
-            // 
-            this.updateConfigCheckBox.AutoSize = true;
-            this.updateConfigCheckBox.BackColor = System.Drawing.Color.Transparent;
-            this.updateConfigCheckBox.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.updateConfigCheckBox.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.updateConfigCheckBox.Location = new System.Drawing.Point(13, 38);
-            this.updateConfigCheckBox.Name = "updateConfigCheckBox";
-            this.updateConfigCheckBox.Size = new System.Drawing.Size(256, 22);
-            this.updateConfigCheckBox.TabIndex = 6;
-            this.updateConfigCheckBox.Text = "Update Public Config Automatically";
-            this.updateConfigCheckBox.UseVisualStyleBackColor = false;
-            this.updateConfigCheckBox.CheckedChanged += new System.EventHandler(this.updateConfigCheckBox_CheckedChanged);
-            // 
-            // userJsonOnGameInstall
-            // 
-            this.userJsonOnGameInstall.AutoSize = true;
-            this.userJsonOnGameInstall.BackColor = System.Drawing.Color.Transparent;
-            this.userJsonOnGameInstall.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.userJsonOnGameInstall.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.userJsonOnGameInstall.Location = new System.Drawing.Point(13, 228);
-            this.userJsonOnGameInstall.Name = "userJsonOnGameInstall";
-            this.userJsonOnGameInstall.Size = new System.Drawing.Size(243, 22);
-            this.userJsonOnGameInstall.TabIndex = 9;
-            this.userJsonOnGameInstall.Text = "Push random user.json on install";
-            this.userJsonOnGameInstall.UseVisualStyleBackColor = false;
-            this.userJsonOnGameInstall.CheckedChanged += new System.EventHandler(this.userJsonOnGameInstall_CheckedChanged);
-            // 
-            // crashlogID
-            // 
-            this.crashlogID.AutoSize = true;
-            this.crashlogID.Location = new System.Drawing.Point(13, 413);
-            this.crashlogID.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
-            this.crashlogID.Name = "crashlogID";
-            this.crashlogID.Size = new System.Drawing.Size(0, 13);
-            this.crashlogID.TabIndex = 15;
-            // 
-            // nodevicemodeBox
-            // 
-            this.nodevicemodeBox.AutoSize = true;
-            this.nodevicemodeBox.BackColor = System.Drawing.Color.Transparent;
-            this.nodevicemodeBox.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.nodevicemodeBox.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.nodevicemodeBox.Location = new System.Drawing.Point(13, 65);
-            this.nodevicemodeBox.Name = "nodevicemodeBox";
-            this.nodevicemodeBox.Size = new System.Drawing.Size(226, 22);
-            this.nodevicemodeBox.TabIndex = 9;
-            this.nodevicemodeBox.Text = "Disable Sideloading (Installing)";
-            this.nodevicemodeBox.UseVisualStyleBackColor = false;
-            this.nodevicemodeBox.CheckedChanged += new System.EventHandler(this.nodevicemodeBox_CheckedChanged);
-            // 
-            // bmbfBox
-            // 
-            this.bmbfBox.AutoSize = true;
-            this.bmbfBox.BackColor = System.Drawing.Color.Transparent;
-            this.bmbfBox.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.bmbfBox.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.bmbfBox.Location = new System.Drawing.Point(13, 255);
-            this.bmbfBox.Name = "bmbfBox";
-            this.bmbfBox.Size = new System.Drawing.Size(281, 22);
-            this.bmbfBox.TabIndex = 9;
-            this.bmbfBox.Text = "Enable BMBF song zips drag and drop";
-            this.bmbfBox.UseVisualStyleBackColor = false;
-            this.bmbfBox.CheckedChanged += new System.EventHandler(this.bmbfBox_CheckedChanged);
-            // 
-            // AutoReinstBox
-            // 
-            this.AutoReinstBox.AutoSize = true;
-            this.AutoReinstBox.BackColor = System.Drawing.Color.Transparent;
-            this.AutoReinstBox.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.AutoReinstBox.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.AutoReinstBox.Location = new System.Drawing.Point(13, 174);
-            this.AutoReinstBox.Name = "AutoReinstBox";
-            this.AutoReinstBox.Size = new System.Drawing.Size(280, 22);
-            this.AutoReinstBox.TabIndex = 9;
-            this.AutoReinstBox.Text = "Enable auto reinstall upon install failure";
-            this.AutoReinstBox.UseVisualStyleBackColor = false;
-            this.AutoReinstBox.CheckedChanged += new System.EventHandler(this.AutoReinstBox_CheckedChanged);
-            this.AutoReinstBox.Click += new System.EventHandler(this.AutoReinstBox_Click);
             // 
             // downloadDirectorySetter
             // 
@@ -188,315 +87,711 @@ namespace AndroidSideloader
             // 
             this.backupDirectorySetter.RootFolder = System.Environment.SpecialFolder.MyComputer;
             // 
-            // chkSingleThread
+            // crashlogID
             // 
-            this.chkSingleThread.AutoSize = true;
-            this.chkSingleThread.BackColor = System.Drawing.Color.Transparent;
-            this.chkSingleThread.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.chkSingleThread.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.chkSingleThread.Location = new System.Drawing.Point(13, 120);
-            this.chkSingleThread.Name = "chkSingleThread";
-            this.chkSingleThread.Size = new System.Drawing.Size(186, 22);
-            this.chkSingleThread.TabIndex = 25;
-            this.chkSingleThread.Text = "Enable Single-Threading";
-            this.chkSingleThread.UseVisualStyleBackColor = false;
-            this.chkSingleThread.CheckedChanged += new System.EventHandler(this.chkSingleThread_CheckedChanged);
+            this.crashlogID.AutoSize = true;
+            this.crashlogID.Location = new System.Drawing.Point(24, 725);
+            this.crashlogID.Name = "crashlogID";
+            this.crashlogID.Size = new System.Drawing.Size(0, 13);
+            this.crashlogID.TabIndex = 36;
+            this.crashlogID.Visible = false;
             // 
-            // setBackupDirectory
+            // lblGeneralSection
             // 
-            this.setBackupDirectory.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.setBackupDirectory.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.setBackupDirectory.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.setBackupDirectory.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.setBackupDirectory.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
-            this.setBackupDirectory.ForeColor = System.Drawing.Color.White;
-            this.setBackupDirectory.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.setBackupDirectory.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.setBackupDirectory.Location = new System.Drawing.Point(26, 572);
-            this.setBackupDirectory.Name = "setBackupDirectory";
-            this.setBackupDirectory.Radius = 5;
-            this.setBackupDirectory.Size = new System.Drawing.Size(285, 31);
-            this.setBackupDirectory.Stroke = true;
-            this.setBackupDirectory.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
-            this.setBackupDirectory.TabIndex = 24;
-            this.setBackupDirectory.Text = "Set Backup Directory";
-            this.setBackupDirectory.Transparency = false;
-            this.setBackupDirectory.Click += new System.EventHandler(this.setBackupDirectory_Click);
+            this.lblGeneralSection.AutoSize = true;
+            this.lblGeneralSection.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold);
+            this.lblGeneralSection.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.lblGeneralSection.Location = new System.Drawing.Point(20, 15);
+            this.lblGeneralSection.Name = "lblGeneralSection";
+            this.lblGeneralSection.Size = new System.Drawing.Size(63, 20);
+            this.lblGeneralSection.TabIndex = 0;
+            this.lblGeneralSection.Text = "General";
+            // 
+            // lblDownloadSection
+            // 
+            this.lblDownloadSection.AutoSize = true;
+            this.lblDownloadSection.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold);
+            this.lblDownloadSection.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.lblDownloadSection.Location = new System.Drawing.Point(20, 180);
+            this.lblDownloadSection.Name = "lblDownloadSection";
+            this.lblDownloadSection.Size = new System.Drawing.Size(144, 20);
+            this.lblDownloadSection.TabIndex = 10;
+            this.lblDownloadSection.Text = "Download && Install";
+            // 
+            // lblAdvancedSection
+            // 
+            this.lblAdvancedSection.AutoSize = true;
+            this.lblAdvancedSection.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold);
+            this.lblAdvancedSection.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.lblAdvancedSection.Location = new System.Drawing.Point(20, 380);
+            this.lblAdvancedSection.Name = "lblAdvancedSection";
+            this.lblAdvancedSection.Size = new System.Drawing.Size(78, 20);
+            this.lblAdvancedSection.TabIndex = 23;
+            this.lblAdvancedSection.Text = "Advanced";
+            // 
+            // lblDirectoriesSection
+            // 
+            this.lblDirectoriesSection.AutoSize = true;
+            this.lblDirectoriesSection.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold);
+            this.lblDirectoriesSection.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.lblDirectoriesSection.Location = new System.Drawing.Point(20, 547);
+            this.lblDirectoriesSection.Name = "lblDirectoriesSection";
+            this.lblDirectoriesSection.Size = new System.Drawing.Size(85, 20);
+            this.lblDirectoriesSection.TabIndex = 33;
+            this.lblDirectoriesSection.Text = "Directories";
+            // 
+            // lblDebugSection
+            // 
+            this.lblDebugSection.AutoSize = true;
+            this.lblDebugSection.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold);
+            this.lblDebugSection.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.lblDebugSection.Location = new System.Drawing.Point(20, 662);
+            this.lblDebugSection.Name = "lblDebugSection";
+            this.lblDebugSection.Size = new System.Drawing.Size(55, 20);
+            this.lblDebugSection.TabIndex = 35;
+            this.lblDebugSection.Text = "Debug";
+            // 
+            // toggleCheckForUpdates
+            // 
+            this.toggleCheckForUpdates.BackColor = System.Drawing.Color.Transparent;
+            this.toggleCheckForUpdates.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleCheckForUpdates.Location = new System.Drawing.Point(28, 48);
+            this.toggleCheckForUpdates.Name = "toggleCheckForUpdates";
+            this.toggleCheckForUpdates.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleCheckForUpdates.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleCheckForUpdates.Size = new System.Drawing.Size(36, 18);
+            this.toggleCheckForUpdates.TabIndex = 1;
+            this.toggleCheckForUpdates.ThumbColor = System.Drawing.Color.White;
+            this.toggleCheckForUpdates.CheckedChanged += new System.EventHandler(this.toggleCheckForUpdates_CheckedChanged);
+            // 
+            // toggleUpdateConfig
+            // 
+            this.toggleUpdateConfig.BackColor = System.Drawing.Color.Transparent;
+            this.toggleUpdateConfig.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleUpdateConfig.Location = new System.Drawing.Point(28, 78);
+            this.toggleUpdateConfig.Name = "toggleUpdateConfig";
+            this.toggleUpdateConfig.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleUpdateConfig.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleUpdateConfig.Size = new System.Drawing.Size(36, 18);
+            this.toggleUpdateConfig.TabIndex = 3;
+            this.toggleUpdateConfig.ThumbColor = System.Drawing.Color.White;
+            this.toggleUpdateConfig.CheckedChanged += new System.EventHandler(this.toggleUpdateConfig_CheckedChanged);
+            // 
+            // toggleNoDeviceMode
+            // 
+            this.toggleNoDeviceMode.BackColor = System.Drawing.Color.Transparent;
+            this.toggleNoDeviceMode.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleNoDeviceMode.Location = new System.Drawing.Point(28, 213);
+            this.toggleNoDeviceMode.Name = "toggleNoDeviceMode";
+            this.toggleNoDeviceMode.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleNoDeviceMode.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleNoDeviceMode.Size = new System.Drawing.Size(36, 18);
+            this.toggleNoDeviceMode.TabIndex = 11;
+            this.toggleNoDeviceMode.ThumbColor = System.Drawing.Color.White;
+            this.toggleNoDeviceMode.CheckedChanged += new System.EventHandler(this.toggleNoDeviceMode_CheckedChanged);
+            // 
+            // toggleDeleteAfterInstall
+            // 
+            this.toggleDeleteAfterInstall.BackColor = System.Drawing.Color.Transparent;
+            this.toggleDeleteAfterInstall.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleDeleteAfterInstall.Location = new System.Drawing.Point(28, 243);
+            this.toggleDeleteAfterInstall.Name = "toggleDeleteAfterInstall";
+            this.toggleDeleteAfterInstall.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleDeleteAfterInstall.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleDeleteAfterInstall.Size = new System.Drawing.Size(36, 18);
+            this.toggleDeleteAfterInstall.TabIndex = 13;
+            this.toggleDeleteAfterInstall.ThumbColor = System.Drawing.Color.White;
+            this.toggleDeleteAfterInstall.CheckedChanged += new System.EventHandler(this.toggleDeleteAfterInstall_CheckedChanged);
+            // 
+            // toggleSingleThread
+            // 
+            this.toggleSingleThread.BackColor = System.Drawing.Color.Transparent;
+            this.toggleSingleThread.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleSingleThread.Location = new System.Drawing.Point(28, 413);
+            this.toggleSingleThread.Name = "toggleSingleThread";
+            this.toggleSingleThread.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleSingleThread.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleSingleThread.Size = new System.Drawing.Size(36, 18);
+            this.toggleSingleThread.TabIndex = 24;
+            this.toggleSingleThread.ThumbColor = System.Drawing.Color.White;
+            this.toggleSingleThread.CheckedChanged += new System.EventHandler(this.toggleSingleThread_CheckedChanged);
+            // 
+            // toggleUseDownloadedFiles
+            // 
+            this.toggleUseDownloadedFiles.BackColor = System.Drawing.Color.Transparent;
+            this.toggleUseDownloadedFiles.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleUseDownloadedFiles.Location = new System.Drawing.Point(28, 273);
+            this.toggleUseDownloadedFiles.Name = "toggleUseDownloadedFiles";
+            this.toggleUseDownloadedFiles.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleUseDownloadedFiles.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleUseDownloadedFiles.Size = new System.Drawing.Size(36, 18);
+            this.toggleUseDownloadedFiles.TabIndex = 15;
+            this.toggleUseDownloadedFiles.ThumbColor = System.Drawing.Color.White;
+            this.toggleUseDownloadedFiles.CheckedChanged += new System.EventHandler(this.toggleUseDownloadedFiles_CheckedChanged);
+            // 
+            // toggleAutoReinstall
+            // 
+            this.toggleAutoReinstall.BackColor = System.Drawing.Color.Transparent;
+            this.toggleAutoReinstall.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleAutoReinstall.Location = new System.Drawing.Point(28, 303);
+            this.toggleAutoReinstall.Name = "toggleAutoReinstall";
+            this.toggleAutoReinstall.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleAutoReinstall.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleAutoReinstall.Size = new System.Drawing.Size(36, 18);
+            this.toggleAutoReinstall.TabIndex = 17;
+            this.toggleAutoReinstall.ThumbColor = System.Drawing.Color.White;
+            this.toggleAutoReinstall.CheckedChanged += new System.EventHandler(this.toggleAutoReinstall_CheckedChanged);
+            this.toggleAutoReinstall.Click += new System.EventHandler(this.toggleAutoReinstall_Click);
+            // 
+            // toggleMessageBoxes
+            // 
+            this.toggleMessageBoxes.BackColor = System.Drawing.Color.Transparent;
+            this.toggleMessageBoxes.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleMessageBoxes.Location = new System.Drawing.Point(28, 108);
+            this.toggleMessageBoxes.Name = "toggleMessageBoxes";
+            this.toggleMessageBoxes.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleMessageBoxes.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleMessageBoxes.Size = new System.Drawing.Size(36, 18);
+            this.toggleMessageBoxes.TabIndex = 5;
+            this.toggleMessageBoxes.ThumbColor = System.Drawing.Color.White;
+            this.toggleMessageBoxes.CheckedChanged += new System.EventHandler(this.toggleMessageBoxes_CheckedChanged);
+            // 
+            // toggleUserJson
+            // 
+            this.toggleUserJson.BackColor = System.Drawing.Color.Transparent;
+            this.toggleUserJson.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleUserJson.Location = new System.Drawing.Point(28, 443);
+            this.toggleUserJson.Name = "toggleUserJson";
+            this.toggleUserJson.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleUserJson.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleUserJson.Size = new System.Drawing.Size(36, 18);
+            this.toggleUserJson.TabIndex = 26;
+            this.toggleUserJson.ThumbColor = System.Drawing.Color.White;
+            this.toggleUserJson.CheckedChanged += new System.EventHandler(this.toggleUserJson_CheckedChanged);
+            // 
+            // toggleBMBF
+            // 
+            this.toggleBMBF.BackColor = System.Drawing.Color.Transparent;
+            this.toggleBMBF.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleBMBF.Location = new System.Drawing.Point(28, 473);
+            this.toggleBMBF.Name = "toggleBMBF";
+            this.toggleBMBF.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleBMBF.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleBMBF.Size = new System.Drawing.Size(36, 18);
+            this.toggleBMBF.TabIndex = 28;
+            this.toggleBMBF.ThumbColor = System.Drawing.Color.White;
+            this.toggleBMBF.CheckedChanged += new System.EventHandler(this.toggleBMBF_CheckedChanged);
+            // 
+            // toggleVirtualFilesystem
+            // 
+            this.toggleVirtualFilesystem.BackColor = System.Drawing.Color.Transparent;
+            this.toggleVirtualFilesystem.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleVirtualFilesystem.Location = new System.Drawing.Point(28, 503);
+            this.toggleVirtualFilesystem.Name = "toggleVirtualFilesystem";
+            this.toggleVirtualFilesystem.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleVirtualFilesystem.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleVirtualFilesystem.Size = new System.Drawing.Size(36, 18);
+            this.toggleVirtualFilesystem.TabIndex = 30;
+            this.toggleVirtualFilesystem.ThumbColor = System.Drawing.Color.White;
+            this.toggleVirtualFilesystem.CheckedChanged += new System.EventHandler(this.toggleVirtualFilesystem_CheckedChanged);
+            // 
+            // toggleTrailers
+            // 
+            this.toggleTrailers.BackColor = System.Drawing.Color.Transparent;
+            this.toggleTrailers.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleTrailers.Location = new System.Drawing.Point(28, 138);
+            this.toggleTrailers.Name = "toggleTrailers";
+            this.toggleTrailers.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleTrailers.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleTrailers.Size = new System.Drawing.Size(36, 18);
+            this.toggleTrailers.TabIndex = 7;
+            this.toggleTrailers.ThumbColor = System.Drawing.Color.White;
+            this.toggleTrailers.CheckedChanged += new System.EventHandler(this.toggleTrailers_CheckedChanged);
+            // 
+            // lblCheckForUpdates
+            // 
+            this.lblCheckForUpdates.AutoSize = true;
+            this.lblCheckForUpdates.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblCheckForUpdates.ForeColor = System.Drawing.Color.White;
+            this.lblCheckForUpdates.Location = new System.Drawing.Point(72, 47);
+            this.lblCheckForUpdates.Name = "lblCheckForUpdates";
+            this.lblCheckForUpdates.Size = new System.Drawing.Size(185, 17);
+            this.lblCheckForUpdates.TabIndex = 2;
+            this.lblCheckForUpdates.Text = "Check for Application Updates";
+            // 
+            // lblUpdateConfig
+            // 
+            this.lblUpdateConfig.AutoSize = true;
+            this.lblUpdateConfig.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblUpdateConfig.ForeColor = System.Drawing.Color.White;
+            this.lblUpdateConfig.Location = new System.Drawing.Point(72, 77);
+            this.lblUpdateConfig.Name = "lblUpdateConfig";
+            this.lblUpdateConfig.Size = new System.Drawing.Size(212, 17);
+            this.lblUpdateConfig.TabIndex = 4;
+            this.lblUpdateConfig.Text = "Update Public Config Automatically";
+            // 
+            // lblNoDeviceMode
+            // 
+            this.lblNoDeviceMode.AutoSize = true;
+            this.lblNoDeviceMode.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblNoDeviceMode.ForeColor = System.Drawing.Color.White;
+            this.lblNoDeviceMode.Location = new System.Drawing.Point(72, 212);
+            this.lblNoDeviceMode.Name = "lblNoDeviceMode";
+            this.lblNoDeviceMode.Size = new System.Drawing.Size(187, 17);
+            this.lblNoDeviceMode.TabIndex = 12;
+            this.lblNoDeviceMode.Text = "Disable Sideloading (Installing)";
+            // 
+            // lblDeleteAfterInstall
+            // 
+            this.lblDeleteAfterInstall.AutoSize = true;
+            this.lblDeleteAfterInstall.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblDeleteAfterInstall.ForeColor = System.Drawing.Color.White;
+            this.lblDeleteAfterInstall.Location = new System.Drawing.Point(72, 242);
+            this.lblDeleteAfterInstall.Name = "lblDeleteAfterInstall";
+            this.lblDeleteAfterInstall.Size = new System.Drawing.Size(222, 17);
+            this.lblDeleteAfterInstall.TabIndex = 14;
+            this.lblDeleteAfterInstall.Text = "Delete Games After Download/Install";
+            // 
+            // lblSingleThread
+            // 
+            this.lblSingleThread.AutoSize = true;
+            this.lblSingleThread.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblSingleThread.ForeColor = System.Drawing.Color.White;
+            this.lblSingleThread.Location = new System.Drawing.Point(72, 412);
+            this.lblSingleThread.Name = "lblSingleThread";
+            this.lblSingleThread.Size = new System.Drawing.Size(128, 17);
+            this.lblSingleThread.TabIndex = 25;
+            this.lblSingleThread.Text = "Single-Thread Mode";
+            // 
+            // lblUseDownloadedFiles
+            // 
+            this.lblUseDownloadedFiles.AutoSize = true;
+            this.lblUseDownloadedFiles.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblUseDownloadedFiles.ForeColor = System.Drawing.Color.White;
+            this.lblUseDownloadedFiles.Location = new System.Drawing.Point(72, 272);
+            this.lblUseDownloadedFiles.Name = "lblUseDownloadedFiles";
+            this.lblUseDownloadedFiles.Size = new System.Drawing.Size(185, 17);
+            this.lblUseDownloadedFiles.TabIndex = 16;
+            this.lblUseDownloadedFiles.Text = "Don\'t Prompt to Re-Download";
+            // 
+            // lblAutoReinstall
+            // 
+            this.lblAutoReinstall.AutoSize = true;
+            this.lblAutoReinstall.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblAutoReinstall.ForeColor = System.Drawing.Color.White;
+            this.lblAutoReinstall.Location = new System.Drawing.Point(72, 302);
+            this.lblAutoReinstall.Name = "lblAutoReinstall";
+            this.lblAutoReinstall.Size = new System.Drawing.Size(185, 17);
+            this.lblAutoReinstall.TabIndex = 18;
+            this.lblAutoReinstall.Text = "Auto Reinstall on Install Failure";
+            // 
+            // lblMessageBoxes
+            // 
+            this.lblMessageBoxes.AutoSize = true;
+            this.lblMessageBoxes.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblMessageBoxes.ForeColor = System.Drawing.Color.White;
+            this.lblMessageBoxes.Location = new System.Drawing.Point(72, 107);
+            this.lblMessageBoxes.Name = "lblMessageBoxes";
+            this.lblMessageBoxes.Size = new System.Drawing.Size(224, 17);
+            this.lblMessageBoxes.TabIndex = 6;
+            this.lblMessageBoxes.Text = "Show Message Boxes on Completion";
+            // 
+            // lblUserJson
+            // 
+            this.lblUserJson.AutoSize = true;
+            this.lblUserJson.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblUserJson.ForeColor = System.Drawing.Color.White;
+            this.lblUserJson.Location = new System.Drawing.Point(72, 442);
+            this.lblUserJson.Name = "lblUserJson";
+            this.lblUserJson.Size = new System.Drawing.Size(200, 17);
+            this.lblUserJson.TabIndex = 27;
+            this.lblUserJson.Text = "Push Random user.json on Install";
+            // 
+            // lblBMBF
+            // 
+            this.lblBMBF.AutoSize = true;
+            this.lblBMBF.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblBMBF.ForeColor = System.Drawing.Color.White;
+            this.lblBMBF.Location = new System.Drawing.Point(72, 472);
+            this.lblBMBF.Name = "lblBMBF";
+            this.lblBMBF.Size = new System.Drawing.Size(195, 17);
+            this.lblBMBF.TabIndex = 29;
+            this.lblBMBF.Text = "BMBF Song Zips Drag and Drop";
+            // 
+            // lblVirtualFilesystem
+            // 
+            this.lblVirtualFilesystem.AutoSize = true;
+            this.lblVirtualFilesystem.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblVirtualFilesystem.ForeColor = System.Drawing.Color.White;
+            this.lblVirtualFilesystem.Location = new System.Drawing.Point(72, 502);
+            this.lblVirtualFilesystem.Name = "lblVirtualFilesystem";
+            this.lblVirtualFilesystem.Size = new System.Drawing.Size(188, 17);
+            this.lblVirtualFilesystem.TabIndex = 31;
+            this.lblVirtualFilesystem.Text = "Virtual Filesystem Compatibility";
+            // 
+            // lblTrailers
+            // 
+            this.lblTrailers.AutoSize = true;
+            this.lblTrailers.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblTrailers.ForeColor = System.Drawing.Color.White;
+            this.lblTrailers.Location = new System.Drawing.Point(72, 137);
+            this.lblTrailers.Name = "lblTrailers";
+            this.lblTrailers.Size = new System.Drawing.Size(123, 17);
+            this.lblTrailers.TabIndex = 8;
+            this.lblTrailers.Text = "Show Game Trailers";
+            // 
+            // bandwidthLabel
+            // 
+            this.bandwidthLabel.AutoSize = true;
+            this.bandwidthLabel.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.bandwidthLabel.ForeColor = System.Drawing.Color.White;
+            this.bandwidthLabel.Location = new System.Drawing.Point(24, 335);
+            this.bandwidthLabel.Name = "bandwidthLabel";
+            this.bandwidthLabel.Size = new System.Drawing.Size(102, 17);
+            this.bandwidthLabel.TabIndex = 19;
+            this.bandwidthLabel.Text = "Bandwidth Limit:";
+            // 
+            // bandwidthLimitTextBox
+            // 
+            this.bandwidthLimitTextBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.bandwidthLimitTextBox.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.bandwidthLimitTextBox.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.bandwidthLimitTextBox.ForeColor = System.Drawing.Color.White;
+            this.bandwidthLimitTextBox.Location = new System.Drawing.Point(132, 333);
+            this.bandwidthLimitTextBox.Name = "bandwidthLimitTextBox";
+            this.bandwidthLimitTextBox.Size = new System.Drawing.Size(60, 23);
+            this.bandwidthLimitTextBox.TabIndex = 20;
+            this.bandwidthLimitTextBox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.bandwidthLimitTextBox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.bandwidthLimitTextBox_KeyPress);
+            // 
+            // lblBandwidthUnit
+            // 
+            this.lblBandwidthUnit.AutoSize = true;
+            this.lblBandwidthUnit.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblBandwidthUnit.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(150)))), ((int)(((byte)(150)))), ((int)(((byte)(150)))));
+            this.lblBandwidthUnit.Location = new System.Drawing.Point(198, 335);
+            this.lblBandwidthUnit.Name = "lblBandwidthUnit";
+            this.lblBandwidthUnit.Size = new System.Drawing.Size(38, 17);
+            this.lblBandwidthUnit.TabIndex = 21;
+            this.lblBandwidthUnit.Text = "MB/s";
             // 
             // setDownloadDirectory
             // 
-            this.setDownloadDirectory.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.setDownloadDirectory.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.setDownloadDirectory.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
+            this.setDownloadDirectory.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.setDownloadDirectory.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.setDownloadDirectory.BackColor = System.Drawing.Color.Transparent;
+            this.setDownloadDirectory.Cursor = System.Windows.Forms.Cursors.Hand;
             this.setDownloadDirectory.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.setDownloadDirectory.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
+            this.setDownloadDirectory.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.setDownloadDirectory.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.setDownloadDirectory.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.setDownloadDirectory.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.setDownloadDirectory.ForeColor = System.Drawing.Color.White;
-            this.setDownloadDirectory.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.setDownloadDirectory.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.setDownloadDirectory.Location = new System.Drawing.Point(26, 535);
+            this.setDownloadDirectory.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.setDownloadDirectory.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.setDownloadDirectory.Location = new System.Drawing.Point(24, 575);
             this.setDownloadDirectory.Name = "setDownloadDirectory";
             this.setDownloadDirectory.Radius = 5;
-            this.setDownloadDirectory.Size = new System.Drawing.Size(285, 31);
+            this.setDownloadDirectory.Size = new System.Drawing.Size(150, 28);
             this.setDownloadDirectory.Stroke = true;
-            this.setDownloadDirectory.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
+            this.setDownloadDirectory.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
             this.setDownloadDirectory.TabIndex = 23;
-            this.setDownloadDirectory.Text = "Set Download Directory";
+            this.setDownloadDirectory.Text = "Set Download Dir";
             this.setDownloadDirectory.Transparency = false;
             this.setDownloadDirectory.Click += new System.EventHandler(this.setDownloadDirectory_Click);
             // 
+            // setBackupDirectory
+            // 
+            this.setBackupDirectory.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.setBackupDirectory.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.setBackupDirectory.BackColor = System.Drawing.Color.Transparent;
+            this.setBackupDirectory.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.setBackupDirectory.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.setBackupDirectory.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.setBackupDirectory.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.setBackupDirectory.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.setBackupDirectory.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.setBackupDirectory.ForeColor = System.Drawing.Color.White;
+            this.setBackupDirectory.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.setBackupDirectory.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.setBackupDirectory.Location = new System.Drawing.Point(24, 610);
+            this.setBackupDirectory.Name = "setBackupDirectory";
+            this.setBackupDirectory.Radius = 5;
+            this.setBackupDirectory.Size = new System.Drawing.Size(150, 28);
+            this.setBackupDirectory.Stroke = true;
+            this.setBackupDirectory.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.setBackupDirectory.TabIndex = 24;
+            this.setBackupDirectory.Text = "Set Backup Dir";
+            this.setBackupDirectory.Transparency = false;
+            this.setBackupDirectory.Click += new System.EventHandler(this.setBackupDirectory_Click);
+            // 
+            // openDownloadDirectory
+            // 
+            this.openDownloadDirectory.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.openDownloadDirectory.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.openDownloadDirectory.BackColor = System.Drawing.Color.Transparent;
+            this.openDownloadDirectory.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.openDownloadDirectory.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.openDownloadDirectory.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.openDownloadDirectory.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.openDownloadDirectory.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.openDownloadDirectory.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.openDownloadDirectory.ForeColor = System.Drawing.Color.White;
+            this.openDownloadDirectory.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.openDownloadDirectory.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.openDownloadDirectory.Location = new System.Drawing.Point(184, 575);
+            this.openDownloadDirectory.Name = "openDownloadDirectory";
+            this.openDownloadDirectory.Radius = 5;
+            this.openDownloadDirectory.Size = new System.Drawing.Size(150, 28);
+            this.openDownloadDirectory.Stroke = true;
+            this.openDownloadDirectory.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.openDownloadDirectory.TabIndex = 27;
+            this.openDownloadDirectory.Text = "Open Download Dir";
+            this.openDownloadDirectory.Transparency = false;
+            this.openDownloadDirectory.Click += new System.EventHandler(this.openDownloadDirectory_Click);
+            // 
+            // openBackupDirectory
+            // 
+            this.openBackupDirectory.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.openBackupDirectory.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.openBackupDirectory.BackColor = System.Drawing.Color.Transparent;
+            this.openBackupDirectory.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.openBackupDirectory.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.openBackupDirectory.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.openBackupDirectory.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.openBackupDirectory.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.openBackupDirectory.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.openBackupDirectory.ForeColor = System.Drawing.Color.White;
+            this.openBackupDirectory.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.openBackupDirectory.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.openBackupDirectory.Location = new System.Drawing.Point(184, 610);
+            this.openBackupDirectory.Name = "openBackupDirectory";
+            this.openBackupDirectory.Radius = 5;
+            this.openBackupDirectory.Size = new System.Drawing.Size(150, 28);
+            this.openBackupDirectory.Stroke = true;
+            this.openBackupDirectory.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.openBackupDirectory.TabIndex = 28;
+            this.openBackupDirectory.Text = "Open Backup Dir";
+            this.openBackupDirectory.Transparency = false;
+            this.openBackupDirectory.Click += new System.EventHandler(this.openBackupDirectory_Click);
+            // 
             // btnOpenDebug
             // 
-            this.btnOpenDebug.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.btnOpenDebug.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.btnOpenDebug.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
+            this.btnOpenDebug.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnOpenDebug.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnOpenDebug.BackColor = System.Drawing.Color.Transparent;
+            this.btnOpenDebug.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnOpenDebug.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.btnOpenDebug.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
+            this.btnOpenDebug.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.btnOpenDebug.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.btnOpenDebug.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnOpenDebug.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.btnOpenDebug.ForeColor = System.Drawing.Color.White;
-            this.btnOpenDebug.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.btnOpenDebug.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.btnOpenDebug.Location = new System.Drawing.Point(25, 408);
+            this.btnOpenDebug.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.btnOpenDebug.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.btnOpenDebug.Location = new System.Drawing.Point(24, 690);
             this.btnOpenDebug.Name = "btnOpenDebug";
             this.btnOpenDebug.Radius = 5;
-            this.btnOpenDebug.Size = new System.Drawing.Size(285, 31);
+            this.btnOpenDebug.Size = new System.Drawing.Size(100, 28);
             this.btnOpenDebug.Stroke = true;
-            this.btnOpenDebug.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
+            this.btnOpenDebug.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
             this.btnOpenDebug.TabIndex = 21;
-            this.btnOpenDebug.Text = "Open Debug Log";
+            this.btnOpenDebug.Text = "Open Log";
             this.btnOpenDebug.Transparency = false;
             this.btnOpenDebug.Click += new System.EventHandler(this.btnOpenDebug_Click);
             // 
             // btnResetDebug
             // 
-            this.btnResetDebug.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.btnResetDebug.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.btnResetDebug.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
+            this.btnResetDebug.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnResetDebug.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnResetDebug.BackColor = System.Drawing.Color.Transparent;
+            this.btnResetDebug.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnResetDebug.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.btnResetDebug.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
+            this.btnResetDebug.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.btnResetDebug.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.btnResetDebug.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnResetDebug.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.btnResetDebug.ForeColor = System.Drawing.Color.White;
-            this.btnResetDebug.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.btnResetDebug.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.btnResetDebug.Location = new System.Drawing.Point(25, 445);
+            this.btnResetDebug.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.btnResetDebug.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.btnResetDebug.Location = new System.Drawing.Point(130, 690);
             this.btnResetDebug.Name = "btnResetDebug";
             this.btnResetDebug.Radius = 5;
-            this.btnResetDebug.Size = new System.Drawing.Size(285, 31);
+            this.btnResetDebug.Size = new System.Drawing.Size(100, 28);
             this.btnResetDebug.Stroke = true;
-            this.btnResetDebug.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
+            this.btnResetDebug.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
             this.btnResetDebug.TabIndex = 20;
-            this.btnResetDebug.Text = "Reset Debug Log";
+            this.btnResetDebug.Text = "Reset Log";
             this.btnResetDebug.Transparency = false;
             this.btnResetDebug.Click += new System.EventHandler(this.btnResetDebug_click);
             // 
             // btnUploadDebug
             // 
-            this.btnUploadDebug.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.btnUploadDebug.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.btnUploadDebug.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
+            this.btnUploadDebug.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnUploadDebug.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnUploadDebug.BackColor = System.Drawing.Color.Transparent;
+            this.btnUploadDebug.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnUploadDebug.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.btnUploadDebug.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
+            this.btnUploadDebug.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.btnUploadDebug.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.btnUploadDebug.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnUploadDebug.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.btnUploadDebug.ForeColor = System.Drawing.Color.White;
-            this.btnUploadDebug.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.btnUploadDebug.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.btnUploadDebug.Location = new System.Drawing.Point(25, 482);
+            this.btnUploadDebug.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.btnUploadDebug.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.btnUploadDebug.Location = new System.Drawing.Point(236, 690);
             this.btnUploadDebug.Name = "btnUploadDebug";
             this.btnUploadDebug.Radius = 5;
-            this.btnUploadDebug.Size = new System.Drawing.Size(285, 31);
+            this.btnUploadDebug.Size = new System.Drawing.Size(100, 28);
             this.btnUploadDebug.Stroke = true;
-            this.btnUploadDebug.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
+            this.btnUploadDebug.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
             this.btnUploadDebug.TabIndex = 19;
-            this.btnUploadDebug.Text = "Upload Debug Log";
+            this.btnUploadDebug.Text = "Upload Log";
             this.btnUploadDebug.Transparency = false;
             this.btnUploadDebug.Click += new System.EventHandler(this.btnUploadDebug_click);
             // 
-            // resetSettingsButton
-            // 
-            this.resetSettingsButton.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.resetSettingsButton.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.resetSettingsButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.resetSettingsButton.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.resetSettingsButton.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
-            this.resetSettingsButton.ForeColor = System.Drawing.Color.White;
-            this.resetSettingsButton.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.resetSettingsButton.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.resetSettingsButton.Location = new System.Drawing.Point(178, 355);
-            this.resetSettingsButton.Name = "resetSettingsButton";
-            this.resetSettingsButton.Radius = 5;
-            this.resetSettingsButton.Size = new System.Drawing.Size(133, 31);
-            this.resetSettingsButton.Stroke = true;
-            this.resetSettingsButton.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
-            this.resetSettingsButton.TabIndex = 18;
-            this.resetSettingsButton.Text = "Reset Settings";
-            this.resetSettingsButton.Transparency = false;
-            this.resetSettingsButton.Click += new System.EventHandler(this.resetSettingsButton_Click);
-            // 
             // applyButton
             // 
-            this.applyButton.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.applyButton.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.applyButton.BackColor = global::AndroidSideloader.Properties.Settings.Default.SubButtonColor;
-            this.applyButton.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.applyButton.DataBindings.Add(new System.Windows.Forms.Binding("ForeColor", global::AndroidSideloader.Properties.Settings.Default, "FontColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.applyButton.DataBindings.Add(new System.Windows.Forms.Binding("BackColor", global::AndroidSideloader.Properties.Settings.Default, "SubButtonColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
+            this.applyButton.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(113)))), ((int)(((byte)(223)))), ((int)(((byte)(193)))));
+            this.applyButton.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(113)))), ((int)(((byte)(223)))), ((int)(((byte)(193)))));
+            this.applyButton.BackColor = System.Drawing.Color.Transparent;
+            this.applyButton.Cursor = System.Windows.Forms.Cursors.Hand;
             this.applyButton.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.applyButton.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
-            this.applyButton.ForeColor = global::AndroidSideloader.Properties.Settings.Default.FontColor;
-            this.applyButton.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.applyButton.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.applyButton.Location = new System.Drawing.Point(26, 355);
+            this.applyButton.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.applyButton.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.applyButton.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.applyButton.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
+            this.applyButton.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(24)))), ((int)(((byte)(29)))));
+            this.applyButton.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.applyButton.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.applyButton.Location = new System.Drawing.Point(24, 740);
             this.applyButton.Name = "applyButton";
             this.applyButton.Radius = 5;
-            this.applyButton.Size = new System.Drawing.Size(133, 31);
-            this.applyButton.Stroke = true;
-            this.applyButton.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
+            this.applyButton.Size = new System.Drawing.Size(150, 36);
+            this.applyButton.Stroke = false;
+            this.applyButton.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
             this.applyButton.TabIndex = 17;
-            this.applyButton.Text = "Apply Settings";
+            this.applyButton.Text = "SAVE & CLOSE";
             this.applyButton.Transparency = false;
             this.applyButton.Click += new System.EventHandler(this.applyButton_Click);
             // 
-            // virtualFilesystemCompatibilityCheckbox
+            // resetSettingsButton
             // 
-            this.virtualFilesystemCompatibilityCheckbox.AutoSize = true;
-            this.virtualFilesystemCompatibilityCheckbox.BackColor = System.Drawing.Color.Transparent;
-            this.virtualFilesystemCompatibilityCheckbox.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.virtualFilesystemCompatibilityCheckbox.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.virtualFilesystemCompatibilityCheckbox.Location = new System.Drawing.Point(13, 282);
-            this.virtualFilesystemCompatibilityCheckbox.Name = "virtualFilesystemCompatibilityCheckbox";
-            this.virtualFilesystemCompatibilityCheckbox.Size = new System.Drawing.Size(279, 22);
-            this.virtualFilesystemCompatibilityCheckbox.TabIndex = 26;
-            this.virtualFilesystemCompatibilityCheckbox.Text = "Enable Virtual Filesystem Compatibility";
-            this.virtualFilesystemCompatibilityCheckbox.UseVisualStyleBackColor = true;
-            this.virtualFilesystemCompatibilityCheckbox.CheckedChanged += new System.EventHandler(this.virtualFilesystemCompatibilityCheckbox_CheckedChanged);
+            this.resetSettingsButton.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.resetSettingsButton.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.resetSettingsButton.BackColor = System.Drawing.Color.Transparent;
+            this.resetSettingsButton.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.resetSettingsButton.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.resetSettingsButton.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.resetSettingsButton.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.resetSettingsButton.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.resetSettingsButton.Font = new System.Drawing.Font("Segoe UI", 10F);
+            this.resetSettingsButton.ForeColor = System.Drawing.Color.White;
+            this.resetSettingsButton.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.resetSettingsButton.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.resetSettingsButton.Location = new System.Drawing.Point(184, 740);
+            this.resetSettingsButton.Name = "resetSettingsButton";
+            this.resetSettingsButton.Radius = 5;
+            this.resetSettingsButton.Size = new System.Drawing.Size(150, 36);
+            this.resetSettingsButton.Stroke = true;
+            this.resetSettingsButton.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
+            this.resetSettingsButton.TabIndex = 18;
+            this.resetSettingsButton.Text = "CANCEL";
+            this.resetSettingsButton.Transparency = false;
+            this.resetSettingsButton.Click += new System.EventHandler(this.resetSettingsButton_Click);
             // 
-            // openBackupDirectory
+            // separator1
             // 
-            this.openBackupDirectory.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.openBackupDirectory.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.openBackupDirectory.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.openBackupDirectory.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.openBackupDirectory.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
-            this.openBackupDirectory.ForeColor = System.Drawing.Color.White;
-            this.openBackupDirectory.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.openBackupDirectory.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.openBackupDirectory.Location = new System.Drawing.Point(26, 646);
-            this.openBackupDirectory.Name = "openBackupDirectory";
-            this.openBackupDirectory.Radius = 5;
-            this.openBackupDirectory.Size = new System.Drawing.Size(285, 31);
-            this.openBackupDirectory.Stroke = true;
-            this.openBackupDirectory.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
-            this.openBackupDirectory.TabIndex = 28;
-            this.openBackupDirectory.Text = "Open Backup Directory";
-            this.openBackupDirectory.Transparency = false;
-            this.openBackupDirectory.Click += new System.EventHandler(this.openBackupDirectory_Click);
+            this.separator1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.separator1.Location = new System.Drawing.Point(20, 168);
+            this.separator1.Name = "separator1";
+            this.separator1.Size = new System.Drawing.Size(320, 1);
+            this.separator1.TabIndex = 9;
             // 
-            // openDownloadDirectory
+            // separator2
             // 
-            this.openDownloadDirectory.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.openDownloadDirectory.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.openDownloadDirectory.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.openDownloadDirectory.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.openDownloadDirectory.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
-            this.openDownloadDirectory.ForeColor = System.Drawing.Color.White;
-            this.openDownloadDirectory.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.openDownloadDirectory.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.openDownloadDirectory.Location = new System.Drawing.Point(26, 609);
-            this.openDownloadDirectory.Name = "openDownloadDirectory";
-            this.openDownloadDirectory.Radius = 5;
-            this.openDownloadDirectory.Size = new System.Drawing.Size(285, 31);
-            this.openDownloadDirectory.Stroke = true;
-            this.openDownloadDirectory.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
-            this.openDownloadDirectory.TabIndex = 27;
-            this.openDownloadDirectory.Text = "Open Download Directory";
-            this.openDownloadDirectory.Transparency = false;
-            this.openDownloadDirectory.Click += new System.EventHandler(this.openDownloadDirectory_Click);
+            this.separator2.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.separator2.Location = new System.Drawing.Point(20, 368);
+            this.separator2.Name = "separator2";
+            this.separator2.Size = new System.Drawing.Size(320, 1);
+            this.separator2.TabIndex = 22;
             // 
-            // chkUseDownloadedFiles
+            // separator3
             // 
-            this.chkUseDownloadedFiles.AutoSize = true;
-            this.chkUseDownloadedFiles.BackColor = System.Drawing.Color.Transparent;
-            this.chkUseDownloadedFiles.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.chkUseDownloadedFiles.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.chkUseDownloadedFiles.Location = new System.Drawing.Point(13, 147);
-            this.chkUseDownloadedFiles.Name = "chkUseDownloadedFiles";
-            this.chkUseDownloadedFiles.Size = new System.Drawing.Size(227, 22);
-            this.chkUseDownloadedFiles.TabIndex = 29;
-            this.chkUseDownloadedFiles.Text = "Don\'t Prompt to Re-Download";
-            this.chkUseDownloadedFiles.UseVisualStyleBackColor = false;
-            this.chkUseDownloadedFiles.CheckedChanged += new System.EventHandler(this.chkUseDownloadedFiles_CheckedChanged);
+            this.separator3.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.separator3.Location = new System.Drawing.Point(20, 535);
+            this.separator3.Name = "separator3";
+            this.separator3.Size = new System.Drawing.Size(320, 1);
+            this.separator3.TabIndex = 32;
             // 
-            // bandwidthLabel
+            // separator4
             // 
-            this.bandwidthLabel.AutoSize = true;
-            this.bandwidthLabel.BackColor = System.Drawing.Color.Transparent;
-            this.bandwidthLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
-            this.bandwidthLabel.Location = new System.Drawing.Point(8, 314);
-            this.bandwidthLabel.Name = "bandwidthLabel";
-            this.bandwidthLabel.Size = new System.Drawing.Size(115, 18);
-            this.bandwidthLabel.TabIndex = 30;
-            this.bandwidthLabel.Text = "Bandwidth Limit:";
-            this.bandwidthLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            // 
-            // bandwidthLimitTextBox
-            // 
-            this.bandwidthLimitTextBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.bandwidthLimitTextBox.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.bandwidthLimitTextBox.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.bandwidthLimitTextBox.ForeColor = System.Drawing.Color.White;
-            this.bandwidthLimitTextBox.Location = new System.Drawing.Point(129, 312);
-            this.bandwidthLimitTextBox.Name = "bandwidthLimitTextBox";
-            this.bandwidthLimitTextBox.Size = new System.Drawing.Size(46, 21);
-            this.bandwidthLimitTextBox.TabIndex = 31;
-            this.bandwidthLimitTextBox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
-            this.bandwidthLimitTextBox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.bandwidthLimitTextBox_KeyPress);
-            // 
-            // label1
-            // 
-            this.label1.AutoSize = true;
-            this.label1.BackColor = System.Drawing.Color.Transparent;
-            this.label1.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
-            this.label1.Location = new System.Drawing.Point(181, 314);
-            this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(43, 18);
-            this.label1.TabIndex = 32;
-            this.label1.Text = "MB/s";
+            this.separator4.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.separator4.Location = new System.Drawing.Point(20, 650);
+            this.separator4.Name = "separator4";
+            this.separator4.Size = new System.Drawing.Size(320, 1);
+            this.separator4.TabIndex = 34;
             // 
             // SettingsForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.BackColor = global::AndroidSideloader.Properties.Settings.Default.BackColor;
-            this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
-            this.ClientSize = new System.Drawing.Size(339, 694);
-            this.Controls.Add(this.label1);
-            this.Controls.Add(this.bandwidthLimitTextBox);
+            this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(24)))), ((int)(((byte)(29)))));
+            this.ClientSize = new System.Drawing.Size(360, 795);
+            this.Controls.Add(this.lblGeneralSection);
+            this.Controls.Add(this.toggleCheckForUpdates);
+            this.Controls.Add(this.lblCheckForUpdates);
+            this.Controls.Add(this.toggleUpdateConfig);
+            this.Controls.Add(this.lblUpdateConfig);
+            this.Controls.Add(this.toggleMessageBoxes);
+            this.Controls.Add(this.lblMessageBoxes);
+            this.Controls.Add(this.toggleTrailers);
+            this.Controls.Add(this.lblTrailers);
+            this.Controls.Add(this.separator1);
+            this.Controls.Add(this.lblDownloadSection);
+            this.Controls.Add(this.toggleNoDeviceMode);
+            this.Controls.Add(this.lblNoDeviceMode);
+            this.Controls.Add(this.toggleDeleteAfterInstall);
+            this.Controls.Add(this.lblDeleteAfterInstall);
+            this.Controls.Add(this.toggleUseDownloadedFiles);
+            this.Controls.Add(this.lblUseDownloadedFiles);
+            this.Controls.Add(this.toggleAutoReinstall);
+            this.Controls.Add(this.lblAutoReinstall);
             this.Controls.Add(this.bandwidthLabel);
-            this.Controls.Add(this.chkUseDownloadedFiles);
-            this.Controls.Add(this.openBackupDirectory);
-            this.Controls.Add(this.openDownloadDirectory);
-            this.Controls.Add(this.virtualFilesystemCompatibilityCheckbox);
-            this.Controls.Add(this.chkSingleThread);
-            this.Controls.Add(this.setBackupDirectory);
+            this.Controls.Add(this.bandwidthLimitTextBox);
+            this.Controls.Add(this.lblBandwidthUnit);
+            this.Controls.Add(this.separator2);
+            this.Controls.Add(this.lblAdvancedSection);
+            this.Controls.Add(this.toggleSingleThread);
+            this.Controls.Add(this.lblSingleThread);
+            this.Controls.Add(this.toggleUserJson);
+            this.Controls.Add(this.lblUserJson);
+            this.Controls.Add(this.toggleBMBF);
+            this.Controls.Add(this.lblBMBF);
+            this.Controls.Add(this.toggleVirtualFilesystem);
+            this.Controls.Add(this.lblVirtualFilesystem);
+            this.Controls.Add(this.separator3);
+            this.Controls.Add(this.lblDirectoriesSection);
             this.Controls.Add(this.setDownloadDirectory);
+            this.Controls.Add(this.openDownloadDirectory);
+            this.Controls.Add(this.setBackupDirectory);
+            this.Controls.Add(this.openBackupDirectory);
+            this.Controls.Add(this.separator4);
+            this.Controls.Add(this.lblDebugSection);
             this.Controls.Add(this.btnOpenDebug);
             this.Controls.Add(this.btnResetDebug);
             this.Controls.Add(this.btnUploadDebug);
-            this.Controls.Add(this.resetSettingsButton);
-            this.Controls.Add(this.applyButton);
             this.Controls.Add(this.crashlogID);
-            this.Controls.Add(this.bmbfBox);
-            this.Controls.Add(this.AutoReinstBox);
-            this.Controls.Add(this.nodevicemodeBox);
-            this.Controls.Add(this.userJsonOnGameInstall);
-            this.Controls.Add(this.updateConfigCheckBox);
-            this.Controls.Add(this.deleteAfterInstallCheckBox);
-            this.Controls.Add(this.enableMessageBoxesCheckBox);
-            this.Controls.Add(this.checkForUpdatesCheckBox);
-            this.DataBindings.Add(new System.Windows.Forms.Binding("BackColor", global::AndroidSideloader.Properties.Settings.Default, "BackColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
+            this.Controls.Add(this.applyButton);
+            this.Controls.Add(this.resetSettingsButton);
             this.ForeColor = System.Drawing.Color.White;
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MaximizeBox = false;
+            this.MinimizeBox = false;
             this.Name = "SettingsForm";
             this.ShowIcon = false;
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Settings";
             this.Load += new System.EventHandler(this.SettingsForm_Load);
             this.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.SettingsForm_KeyPress);
@@ -508,31 +803,68 @@ namespace AndroidSideloader
 
         #endregion
 
-        private System.Windows.Forms.CheckBox checkForUpdatesCheckBox;
-        private System.Windows.Forms.CheckBox enableMessageBoxesCheckBox;
-        private System.Windows.Forms.CheckBox deleteAfterInstallCheckBox;
-        private System.Windows.Forms.CheckBox updateConfigCheckBox;
-        private System.Windows.Forms.CheckBox userJsonOnGameInstall;
-        private System.Windows.Forms.Label crashlogID;
-        private System.Windows.Forms.CheckBox nodevicemodeBox;
-        private System.Windows.Forms.CheckBox bmbfBox;
-        private System.Windows.Forms.CheckBox AutoReinstBox;
-        private RoundButton applyButton;
-        private RoundButton resetSettingsButton;
-        private RoundButton btnResetDebug;
-        private RoundButton btnUploadDebug;
-        private RoundButton btnOpenDebug;
-        private RoundButton setDownloadDirectory;
-        private System.Windows.Forms.FolderBrowserDialog downloadDirectorySetter;
-        private RoundButton setBackupDirectory;
-        private System.Windows.Forms.FolderBrowserDialog backupDirectorySetter;
-        private System.Windows.Forms.CheckBox chkSingleThread;
-        private System.Windows.Forms.CheckBox virtualFilesystemCompatibilityCheckbox;
-        private RoundButton openBackupDirectory;
-        private RoundButton openDownloadDirectory;
-        private System.Windows.Forms.CheckBox chkUseDownloadedFiles;
+        // Section Labels
+        private System.Windows.Forms.Label lblGeneralSection;
+        private System.Windows.Forms.Label lblDownloadSection;
+        private System.Windows.Forms.Label lblAdvancedSection;
+        private System.Windows.Forms.Label lblDirectoriesSection;
+        private System.Windows.Forms.Label lblDebugSection;
+
+        // Toggle Switches
+        private ToggleSwitch toggleCheckForUpdates;
+        private ToggleSwitch toggleUpdateConfig;
+        private ToggleSwitch toggleNoDeviceMode;
+        private ToggleSwitch toggleDeleteAfterInstall;
+        private ToggleSwitch toggleSingleThread;
+        private ToggleSwitch toggleUseDownloadedFiles;
+        private ToggleSwitch toggleAutoReinstall;
+        private ToggleSwitch toggleMessageBoxes;
+        private ToggleSwitch toggleUserJson;
+        private ToggleSwitch toggleBMBF;
+        private ToggleSwitch toggleVirtualFilesystem;
+        private ToggleSwitch toggleTrailers;
+
+        // Toggle Labels
+        private System.Windows.Forms.Label lblCheckForUpdates;
+        private System.Windows.Forms.Label lblUpdateConfig;
+        private System.Windows.Forms.Label lblNoDeviceMode;
+        private System.Windows.Forms.Label lblDeleteAfterInstall;
+        private System.Windows.Forms.Label lblSingleThread;
+        private System.Windows.Forms.Label lblUseDownloadedFiles;
+        private System.Windows.Forms.Label lblAutoReinstall;
+        private System.Windows.Forms.Label lblMessageBoxes;
+        private System.Windows.Forms.Label lblUserJson;
+        private System.Windows.Forms.Label lblBMBF;
+        private System.Windows.Forms.Label lblVirtualFilesystem;
+        private System.Windows.Forms.Label lblTrailers;
+
+        // Bandwidth
         private System.Windows.Forms.Label bandwidthLabel;
         private System.Windows.Forms.TextBox bandwidthLimitTextBox;
-        private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.Label lblBandwidthUnit;
+
+        // Buttons
+        private RoundButton setDownloadDirectory;
+        private RoundButton setBackupDirectory;
+        private RoundButton openDownloadDirectory;
+        private RoundButton openBackupDirectory;
+        private RoundButton btnOpenDebug;
+        private RoundButton btnResetDebug;
+        private RoundButton btnUploadDebug;
+        private RoundButton applyButton;
+        private RoundButton resetSettingsButton;
+
+        // Dialogs
+        private System.Windows.Forms.FolderBrowserDialog downloadDirectorySetter;
+        private System.Windows.Forms.FolderBrowserDialog backupDirectorySetter;
+
+        // Other
+        private System.Windows.Forms.Label crashlogID;
+
+        // Separators
+        private System.Windows.Forms.Panel separator1;
+        private System.Windows.Forms.Panel separator2;
+        private System.Windows.Forms.Panel separator3;
+        private System.Windows.Forms.Panel separator4;
     }
 }

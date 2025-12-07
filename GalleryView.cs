@@ -1,4 +1,5 @@
 ﻿using AndroidSideloader;
+using AndroidSideloader.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -53,6 +54,11 @@ public class FastGalleryPanel : Control
     private int _selectedIndex = -1;
     private bool _isHoveringDeleteButton = false;
 
+    // Context Menu & Favorites
+    private ContextMenuStrip _contextMenu;
+    private int _rightClickedIndex = -1;
+    private HashSet<string> _favoritesCache;
+
     // Rendering
     private Bitmap _backBuffer;
 
@@ -68,8 +74,9 @@ public class FastGalleryPanel : Control
     // Theme colors
     private static readonly Color TileBorderHover = Color.FromArgb(93, 203, 173);
     private static readonly Color TileBorderSelected = Color.FromArgb(200, 200, 200);
+    private static readonly Color TileBorderFavorite = Color.FromArgb(255, 215, 0);
+    private static readonly Color BadgeFavoriteBg = Color.FromArgb(200, 255, 180, 0);
     private static readonly Color TextColor = Color.FromArgb(245, 255, 255, 255);
-    private static readonly Color BadgeUpdateBg = Color.FromArgb(180, 76, 175, 80);
     private static readonly Color BadgeInstalledBg = Color.FromArgb(180, 60, 145, 230);
     private static readonly Color DeleteButtonBg = Color.FromArgb(200, 180, 50, 50);
     private static readonly Color DeleteButtonHoverBg = Color.FromArgb(255, 220, 70, 70);
@@ -80,6 +87,7 @@ public class FastGalleryPanel : Control
     public event EventHandler<int> TileClicked;
     public event EventHandler<int> TileDoubleClicked;
     public event EventHandler<int> TileDeleteClicked;
+    public event EventHandler<int> TileRightClicked;
     public event EventHandler<SortField> SortChanged;
 
     private class TileAnimationState
@@ -96,6 +104,8 @@ public class FastGalleryPanel : Control
         public float TargetTooltipOpacity = 0f;
         public float DeleteButtonOpacity = 0f;
         public float TargetDeleteButtonOpacity = 0f;
+        public float FavoriteOpacity = 0f;
+        public float TargetFavoriteOpacity = 0f;
     }
 
     public FastGalleryPanel(List<ListViewItem> items, int tileWidth, int tileHeight, int spacing, int initialWidth, int initialHeight)
@@ -109,6 +119,11 @@ public class FastGalleryPanel : Control
         _cacheOrder = new Queue<string>();
         _tileStates = new Dictionary<int, TileAnimationState>();
         _sortButtons = new List<Button>();
+        RefreshFavoritesCache();
+
+        // Avoid any implicit padding from the control container
+        Padding = Padding.Empty;
+        Margin = Padding.Empty;
 
         Size = new Size(initialWidth, initialHeight);
 
@@ -123,6 +138,9 @@ public class FastGalleryPanel : Control
         // Initialize animation states
         for (int i = 0; i < _items.Count; i++)
             _tileStates[i] = new TileAnimationState();
+
+        // Create context menu
+        CreateContextMenu();
 
         // Create sort panel
         _sortPanel = CreateSortPanel();
@@ -446,7 +464,8 @@ public class FastGalleryPanel : Control
         _targetScrollY = 0;
         _isScrolling = false;
 
-        // Re-apply current sort
+        // Refresh favorites cache and re-apply sort
+        RefreshFavoritesCache();
         ApplySort();
     }
 
@@ -460,10 +479,10 @@ public class FastGalleryPanel : Control
     private bool IsItemInstalled(ListViewItem item)
     {
         if (item == null) return false;
-        // Check if the item has the installed or update available color
-        bool hasUpdate = item.ForeColor.ToArgb() == ColorTranslator.FromHtml("#4daa57").ToArgb();
-        bool installed = item.ForeColor.ToArgb() == ColorTranslator.FromHtml("#3c91e6").ToArgb();
-        return installed || hasUpdate;
+
+        return item.ForeColor.ToArgb() == MainForm.ColorInstalled.ToArgb() ||
+               item.ForeColor.ToArgb() == MainForm.ColorUpdateAvailable.ToArgb() ||
+               item.ForeColor.ToArgb() == MainForm.ColorDonateGame.ToArgb();
     }
 
     private Rectangle GetDeleteButtonRect(int index, int row, int col, int scrollY)
@@ -535,6 +554,9 @@ public class FastGalleryPanel : Control
                 bool isHovered = index == _hoveredIndex;
                 bool isSelected = index == _selectedIndex;
                 bool isInstalled = IsItemInstalled(_items[index]);
+                string pkgName = _items[index].SubItems.Count > 2 ? _items[index].SubItems[1].Text : "";
+                bool isFavorite = _favoritesCache.Contains(pkgName);
+                state.TargetFavoriteOpacity = isFavorite ? 1.0f : 0f;
 
                 state.TargetScale = isHovered ? HOVER_SCALE : 1.0f;
                 state.TargetBorderOpacity = isHovered ? 1.0f : 0f;
@@ -584,6 +606,10 @@ public class FastGalleryPanel : Control
                     needsRedraw = true;
                 }
                 else state.DeleteButtonOpacity = state.TargetDeleteButtonOpacity;
+
+                if (Math.Abs(state.FavoriteOpacity - state.TargetFavoriteOpacity) > 0.01f)
+                { state.FavoriteOpacity += (state.TargetFavoriteOpacity - state.FavoriteOpacity) * 0.35f; needsRedraw = true; }
+                else state.FavoriteOpacity = state.TargetFavoriteOpacity;
             }
         }
 
@@ -756,6 +782,13 @@ public class FastGalleryPanel : Control
                 using (var borderPen = new Pen(Color.FromArgb((int)(200 * state.BorderOpacity), TileBorderHover), 2f))
                     g.DrawPath(borderPen, tilePath);
             }
+
+            // Favorite border (golden)
+            if (state.FavoriteOpacity > 0.5f)
+            {
+                using (var favPen = new Pen(Color.FromArgb((int)(180 * state.FavoriteOpacity), TileBorderFavorite), 1.0f))
+                    g.DrawPath(favPen, tilePath);
+            }
         }
 
         // Thumbnail
@@ -795,15 +828,31 @@ public class FastGalleryPanel : Control
 
         // Status badges (left side)
         int badgeY = y + thumbPadding + 4;
-        bool hasUpdate = item.ForeColor.ToArgb() == ColorTranslator.FromHtml("#4daa57").ToArgb();
-        bool installed = item.ForeColor.ToArgb() == ColorTranslator.FromHtml("#3c91e6").ToArgb();
+
+        // Favorite badge
+        if (state.FavoriteOpacity > 0.5f)
+        {
+            DrawBadge(g, "★", x + thumbPadding + 4, badgeY, BadgeFavoriteBg);
+            badgeY += 18;
+        }
+
+        bool hasUpdate = item.ForeColor.ToArgb() == MainForm.ColorUpdateAvailable.ToArgb();
+        bool installed = item.ForeColor.ToArgb() == MainForm.ColorInstalled.ToArgb();
+        bool canDonate = item.ForeColor.ToArgb() == MainForm.ColorDonateGame.ToArgb();
 
         if (hasUpdate)
         {
-            DrawBadge(g, "UPDATE AVAILABLE", x + thumbPadding + 4, badgeY, BadgeUpdateBg);
+            DrawBadge(g, "UPDATE AVAILABLE", x + thumbPadding + 4, badgeY, Color.FromArgb(180, MainForm.ColorUpdateAvailable.R, MainForm.ColorUpdateAvailable.G, MainForm.ColorUpdateAvailable.B));
             badgeY += 18;
         }
-        if (installed || hasUpdate)
+
+        if (canDonate)
+        {
+            DrawBadge(g, "NEWER THAN LIST", x + thumbPadding + 4, badgeY, Color.FromArgb(180, MainForm.ColorDonateGame.R, MainForm.ColorDonateGame.G, MainForm.ColorDonateGame.B));
+            badgeY += 18;
+        }
+
+        if (installed || hasUpdate || canDonate)
             DrawBadge(g, "INSTALLED", x + thumbPadding + 4, badgeY, BadgeInstalledBg);
 
         // Right-side badges (top-right of thumbnail)
@@ -1088,6 +1137,13 @@ public class FastGalleryPanel : Control
     protected override void OnMouseClick(MouseEventArgs e)
     {
         base.OnMouseClick(e);
+
+        // Take focus to unfocus any other control (like search text box)
+        if (!Focused)
+        {
+            Focus();
+        }
+
         if (e.Button == MouseButtons.Left)
         {
             int i = GetIndexAtPoint(e.X, e.Y);
@@ -1109,6 +1165,19 @@ public class FastGalleryPanel : Control
                 _selectedIndex = i;
                 Invalidate();
                 TileClicked?.Invoke(this, i);
+            }
+        }
+        else if (e.Button == MouseButtons.Right)
+        {
+            int i = GetIndexAtPoint(e.X, e.Y);
+            if (i >= 0)
+            {
+                _rightClickedIndex = i;
+                _selectedIndex = i;
+                Invalidate();
+                TileClicked?.Invoke(this, i);
+                TileRightClicked?.Invoke(this, i);
+                _contextMenu.Show(this, e.Location);
             }
         }
     }
@@ -1139,12 +1208,64 @@ public class FastGalleryPanel : Control
         _isScrolling = true;
     }
 
+    private void CreateContextMenu()
+    {
+        _contextMenu = new ContextMenuStrip();
+        _contextMenu.BackColor = Color.FromArgb(40, 42, 48);
+        _contextMenu.ForeColor = Color.White;
+        _contextMenu.ShowImageMargin = false;
+        _contextMenu.Renderer = new MainForm.CenteredMenuRenderer();
+
+        var favoriteItem = new ToolStripMenuItem("★ Add to Favorites");
+        favoriteItem.Click += ContextMenu_FavoriteClick;
+        _contextMenu.Items.Add(favoriteItem);
+        _contextMenu.Opening += ContextMenu_Opening;
+    }
+
+    private void ContextMenu_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_rightClickedIndex < 0 || _rightClickedIndex >= _items.Count) { e.Cancel = true; return; }
+        var item = _items[_rightClickedIndex];
+        string packageName = item.SubItems.Count > 2 ? item.SubItems[1].Text : "";
+        if (string.IsNullOrEmpty(packageName)) { e.Cancel = true; return; }
+
+        bool isFavorite = _favoritesCache.Contains(packageName);
+        ((ToolStripMenuItem)_contextMenu.Items[0]).Text = isFavorite ? "Remove from Favorites" : "★ Add to Favorites";
+    }
+
+    private void ContextMenu_FavoriteClick(object sender, EventArgs e)
+    {
+        if (_rightClickedIndex < 0 || _rightClickedIndex >= _items.Count) return;
+        var item = _items[_rightClickedIndex];
+        string packageName = item.SubItems.Count > 1 ? item.SubItems[1].Text : "";
+        if (string.IsNullOrEmpty(packageName)) return;
+
+        var settings = SettingsManager.Instance;
+        if (_favoritesCache.Contains(packageName))
+        {
+            settings.RemoveFavoriteGame(packageName);
+            _favoritesCache.Remove(packageName);
+        }
+        else
+        {
+            settings.AddFavoriteGame(packageName);
+            _favoritesCache.Add(packageName);
+        }
+        Invalidate();
+    }
+
+    public void RefreshFavoritesCache()
+    {
+        _favoritesCache = new HashSet<string>(SettingsManager.Instance.FavoritedGames, StringComparer.OrdinalIgnoreCase);
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
             _animationTimer?.Stop();
             _animationTimer?.Dispose();
+            _contextMenu?.Dispose();
 
             foreach (var img in _imageCache.Values) { try { img?.Dispose(); } catch { } }
             _imageCache.Clear();

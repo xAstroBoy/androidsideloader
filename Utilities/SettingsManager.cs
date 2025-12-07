@@ -132,7 +132,8 @@ namespace AndroidSideloader.Utilities
         public bool UseDownloadedFiles { get; set; } = false;
         public float BandwidthLimit { get; set; } = 0f;
         public string[] FavoritedGames { get; set; } = new string[0];
-
+        public bool TrailersEnabled { get; set; } = true;
+        public bool UseGalleryView { get; set; } = true;
         private SettingsManager()
         {
             Load();
@@ -252,8 +253,10 @@ namespace AndroidSideloader.Utilities
             UseDownloadedFiles = false;
             BandwidthLimit = 0f;
             FavoritedGames = new string[0];
+            TrailersEnabled = true;
+            UseGalleryView = true;
 
-        Save();
+            Save();
             Debug.WriteLine("Default settings created.");
         }
 

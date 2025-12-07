@@ -305,7 +305,7 @@ namespace AndroidSideloader
                     _ = ADB.RunAdbCommandToString($"pull \"/sdcard/Android/data/{MainForm.CurrPCKG}\" \"{Environment.CurrentDirectory}\"");
                     Program.form.changeTitle("Uninstalling game...");
                     _ = Sideloader.UninstallGame(MainForm.CurrPCKG);
-                    Program.form.changeTitle("Reinstalling Game");
+                    Program.form.changeTitle("Reinstalling game...");
                     ret += ADB.RunAdbCommandToString($"install -g \"{path}\"");
                     _ = ADB.RunAdbCommandToString($"push \"{Environment.CurrentDirectory}\\{MainForm.CurrPCKG}\" /sdcard/Android/data/");
                     string directoryToDelete = Path.Combine(Environment.CurrentDirectory, MainForm.CurrPCKG);
@@ -317,7 +317,7 @@ namespace AndroidSideloader
                         }
                     }
 
-                        Program.form.changeTitle(" \n\n");
+                    Program.form.changeTitle("");
                     return ret;
                 }
             }

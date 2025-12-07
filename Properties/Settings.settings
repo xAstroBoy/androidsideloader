@@ -24,7 +24,7 @@
       <Value Profile="(Default)">True</Value>
     </Setting>
     <Setting Name="FontStyle" Type="System.Drawing.Font" Scope="User">
-      <Value Profile="(Default)">Microsoft Sans Serif, 9pt</Value>
+      <Value Profile="(Default)">Microsoft Sans Serif, 10pt</Value>
     </Setting>
     <Setting Name="BackPicturePath" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
@@ -126,13 +126,13 @@
       <Value Profile="(Default)">False</Value>
     </Setting>
     <Setting Name="FontColor" Type="System.Drawing.Color" Scope="User">
-      <Value Profile="(Default)">DarkGray</Value>
+      <Value Profile="(Default)">White</Value>
     </Setting>
     <Setting Name="ComboBoxColor" Type="System.Drawing.Color" Scope="User">
       <Value Profile="(Default)">25, 25, 25</Value>
     </Setting>
     <Setting Name="SubButtonColor" Type="System.Drawing.Color" Scope="User">
-      <Value Profile="(Default)">25, 25, 25</Value>
+      <Value Profile="(Default)">42, 45, 58</Value>
     </Setting>
     <Setting Name="TextBoxColor" Type="System.Drawing.Color" Scope="User">
       <Value Profile="(Default)">25, 25, 25</Value>

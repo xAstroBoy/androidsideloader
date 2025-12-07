@@ -13,7 +13,7 @@ namespace AndroidSideloader
         private static readonly string RawGitHubUrl = "https://raw.githubusercontent.com/VRPirates/rookie";
         private static readonly string GitHubUrl = "https://github.com/VRPirates/rookie";
 
-        public static readonly string LocalVersion = "2.35.0";
+        public static readonly string LocalVersion = "3.0";
         public static string currentVersion = string.Empty;
         public static string changelog = string.Empty;
 
@@ -38,7 +38,7 @@ namespace AndroidSideloader
             return CompareVersions(currentVersion, LocalVersion.Trim()) > 0;
         }
 
-        // Compares two semantic version strings (e.g., "2.35.0")
+        // Compares two semantic version strings (e.g., "2.35")
         // returns: 1 if version1 > version2, -1 if version1 < version2, 0 if equal
         private static int CompareVersions(string version1, string version2)
         {

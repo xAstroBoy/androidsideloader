@@ -36,6 +36,39 @@ namespace AndroidSideloader
                 Invalidate();
             }
         }
+
+        private Color disabled1, disabled2;
+        private Color disabledStrokeColor;
+
+        public Color Disabled1
+        {
+            get => disabled1;
+            set
+            {
+                disabled1 = value;
+                Invalidate();
+            }
+        }
+
+        public Color Disabled2
+        {
+            get => disabled2;
+            set
+            {
+                disabled2 = value;
+                Invalidate();
+            }
+        }
+
+        public Color DisabledStrokeColor
+        {
+            get => disabledStrokeColor;
+            set
+            {
+                disabledStrokeColor = value;
+                Invalidate();
+            }
+        }
         #endregion
         #region RoundButton
         public RoundButton()
@@ -48,7 +81,9 @@ namespace AndroidSideloader
             inactive2 = Color.FromArgb(33, 167, 188);
             active1 = Color.FromArgb(64, 168, 183);
             active2 = Color.FromArgb(36, 164, 183);
-
+            disabled1 = Color.FromArgb(32, 35, 45);
+            disabled2 = Color.FromArgb(25, 28, 35);
+            disabledStrokeColor = Color.FromArgb(50, 55, 65);
 
             radius = 10;
             roundedRect = new RoundedRectangleF(Width, Height, radius);
@@ -123,12 +158,18 @@ namespace AndroidSideloader
             }
             else
             {
-                Color linear1 = Color.FromArgb(190, 190, 190);
-                Color linear2 = Color.FromArgb(210, 210, 210);
-                using (LinearGradientBrush inactiveGB = new LinearGradientBrush(rect, linear1, linear2, 90f))
+                using (LinearGradientBrush disabledGB = new LinearGradientBrush(rect, disabled1, disabled2, 90f))
                 {
-                    e.Graphics.FillPath(inactiveGB, roundedRect.Path);
-                    e.Graphics.DrawPath(new Pen(inactiveGB), roundedRect.Path);
+                    e.Graphics.FillPath(disabledGB, roundedRect.Path);
+                }
+
+                if (stroke)
+                {
+                    using (Pen pen = new Pen(disabledStrokeColor, 1))
+                    using (GraphicsPath path = new RoundedRectangleF(Width - (radius > 0 ? 0 : 1), Height - (radius > 0 ? 0 : 1), radius).Path)
+                    {
+                        e.Graphics.DrawPath(pen, path);
+                    }
                 }
             }
 

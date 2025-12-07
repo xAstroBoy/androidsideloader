@@ -1,11 +1,28 @@
-RSL 2.35
+RSL 3.0
 
-- Feature: Restructure and project file organization
-- Feature: Renamed 'ADB' to 'AdbManager'
-- Fix: Remove hideAdultContent toggle (no longer needed)
-- Fix: WebView2 "too many automatic redirections" error
-- Fix: Donor window only displays unique entries
-- Fix: Cleanup packages listing
-- Chore: Changed C:\RSL\platform-tools path to platform-tools in working dir
-- Chore: Minor Main file organization
-- Chore: Minor MainForm field cleanup
+Major Rookie overhaul with modernized UI, performance boosts and UX improvements
+
+- Gallery View:
+  - Introduced high-performance Gallery View
+  - Hover animations, smooth scrolling, dynamic scaling, status badges
+  - Toggle to switch seamlessly between List and Gallery view
+  - Optimized for smooth performance, even on very low-end hardware
+
+- Performance:
+  - Reduced game list initialization time by 95%
+  - Instant list filtering through caching + optimized filter logic
+  - Major startup improvements via asynchronous initialization
+  - Improved search bar responsiveness
+  - Reduced application size by removing splash screen & unused assets
+  - Faster trailer loading via per-game video ID caching + WebView2 performance tweaks
+
+- UI & UX:
+  - Complete UI redesign with new theme and accent color
+  - New UI components with animations for a cohesive, modern look
+  - Refined sizing, layout, and color consistency across the board
+  - Added uninstall buttons directly in list & gallery views
+
+- General:
+  - Fix: Resolved trailer playback issues
+  - Fix: Resolved several connection errors on startup
+  - Feature: Added local blacklist support. Users can permanently suppress donation prompts for selected apps

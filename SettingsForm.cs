@@ -11,6 +11,7 @@ namespace AndroidSideloader
     public partial class SettingsForm : Form
     {
         private static readonly SettingsManager _settings = SettingsManager.Instance;
+
         public SettingsForm()
         {
             InitializeComponent();
@@ -25,35 +26,79 @@ namespace AndroidSideloader
 
         private void initSettings()
         {
-            checkForUpdatesCheckBox.Checked = _settings.CheckForUpdates;
-            enableMessageBoxesCheckBox.Checked = _settings.EnableMessageBoxes;
-            deleteAfterInstallCheckBox.Checked = _settings.DeleteAllAfterInstall;
-            updateConfigCheckBox.Checked = _settings.AutoUpdateConfig;
-            userJsonOnGameInstall.Checked = _settings.UserJsonOnGameInstall;
-            nodevicemodeBox.Checked = _settings.NodeviceMode;
-            bmbfBox.Checked = _settings.BMBFChecked;
-            AutoReinstBox.Checked = _settings.AutoReinstall;
-            chkSingleThread.Checked = _settings.SingleThreadMode;
-            virtualFilesystemCompatibilityCheckbox.Checked = _settings.VirtualFilesystemCompatibility;
+            // Use SetCheckedSilent to avoid triggering events during initialization
+            toggleCheckForUpdates.SetCheckedSilent(_settings.CheckForUpdates);
+            toggleMessageBoxes.SetCheckedSilent(_settings.EnableMessageBoxes);
+            toggleDeleteAfterInstall.SetCheckedSilent(_settings.DeleteAllAfterInstall);
+            toggleUpdateConfig.SetCheckedSilent(_settings.AutoUpdateConfig);
+            toggleUserJson.SetCheckedSilent(_settings.UserJsonOnGameInstall);
+            toggleNoDeviceMode.SetCheckedSilent(_settings.NodeviceMode);
+            toggleBMBF.SetCheckedSilent(_settings.BMBFChecked);
+            toggleAutoReinstall.SetCheckedSilent(_settings.AutoReinstall);
+            toggleSingleThread.SetCheckedSilent(_settings.SingleThreadMode);
+            toggleVirtualFilesystem.SetCheckedSilent(_settings.VirtualFilesystemCompatibility);
+            toggleUseDownloadedFiles.SetCheckedSilent(_settings.UseDownloadedFiles);
+            toggleTrailers.SetCheckedSilent(_settings.TrailersEnabled);
             bandwidthLimitTextBox.Text = _settings.BandwidthLimit.ToString();
-            if (nodevicemodeBox.Checked)
+
+            // Handle no device mode disabling delete after install
+            if (toggleNoDeviceMode.Checked)
             {
-                deleteAfterInstallCheckBox.Checked = false;
-                deleteAfterInstallCheckBox.Enabled = false;
+                toggleDeleteAfterInstall.SetCheckedSilent(false);
+                toggleDeleteAfterInstall.Enabled = false;
+                lblDeleteAfterInstall.ForeColor = System.Drawing.Color.FromArgb(100, 100, 100);
             }
-            chkUseDownloadedFiles.Checked = _settings.UseDownloadedFiles;
         }
 
         private void initToolTips()
         {
-            ToolTip checkForUpdatesToolTip = new ToolTip();
-            checkForUpdatesToolTip.SetToolTip(checkForUpdatesCheckBox, "If this is checked, the software will check for available updates");
-            ToolTip enableMessageBoxesToolTip = new ToolTip();
-            enableMessageBoxesToolTip.SetToolTip(enableMessageBoxesCheckBox, "If this is checked, the software will display message boxes after every completed task");
-            ToolTip deleteAfterInstallToolTip = new ToolTip();
-            deleteAfterInstallToolTip.SetToolTip(deleteAfterInstallCheckBox, "If this is checked, the software will delete all game files after downloading and installing a game from a remote server");
-            ToolTip chkUseDownloadedFilesTooltip = new ToolTip();
-            chkUseDownloadedFilesTooltip.SetToolTip(chkUseDownloadedFiles, "If this is checked, Rookie will always install Downloaded files without Re-Downloading or Asking to Re-Download");
+            ToolTip toolTip = new ToolTip();
+            toolTip.SetToolTip(toggleCheckForUpdates, "Check for available application updates on startup");
+            toolTip.SetToolTip(lblCheckForUpdates, "Check for available application updates on startup");
+            toolTip.SetToolTip(toggleMessageBoxes, "Show message boxes after every completed task");
+            toolTip.SetToolTip(lblMessageBoxes, "Show message boxes after every completed task");
+            toolTip.SetToolTip(toggleDeleteAfterInstall, "Delete game files after downloading and installing");
+            toolTip.SetToolTip(lblDeleteAfterInstall, "Delete game files after downloading and installing");
+            toolTip.SetToolTip(toggleUseDownloadedFiles, "Always install downloaded files without prompting to re-download");
+            toolTip.SetToolTip(lblUseDownloadedFiles, "Always install downloaded files without prompting to re-download");
+            toolTip.SetToolTip(toggleTrailers, "Show game trailers in the sidebar when selecting a game");
+            toolTip.SetToolTip(lblTrailers, "Show game trailers in the sidebar when selecting a game");
+        }
+
+        private void SaveAllSettings()
+        {
+            string input = bandwidthLimitTextBox.Text;
+            Regex regex = new Regex(@"^\d+(\.\d+)?$");
+
+            if (regex.IsMatch(input) && float.TryParse(input, out float bandwidthLimit))
+            {
+                _settings.BandwidthLimit = bandwidthLimit;
+            }
+
+            _settings.CheckForUpdates = toggleCheckForUpdates.Checked;
+            _settings.EnableMessageBoxes = toggleMessageBoxes.Checked;
+            _settings.DeleteAllAfterInstall = toggleDeleteAfterInstall.Checked;
+            _settings.AutoUpdateConfig = toggleUpdateConfig.Checked;
+            _settings.UserJsonOnGameInstall = toggleUserJson.Checked;
+            _settings.NodeviceMode = toggleNoDeviceMode.Checked;
+            _settings.BMBFChecked = toggleBMBF.Checked;
+            _settings.AutoReinstall = toggleAutoReinstall.Checked;
+            _settings.SingleThreadMode = toggleSingleThread.Checked;
+            _settings.VirtualFilesystemCompatibility = toggleVirtualFilesystem.Checked;
+            _settings.UseDownloadedFiles = toggleUseDownloadedFiles.Checked;
+            _settings.TrailersEnabled = toggleTrailers.Checked;
+
+            if (Program.form != null)
+            {
+                Program.form.SetTrailerVisibility(toggleTrailers.Checked);
+            }
+
+            if (_settings.AutoUpdateConfig)
+            {
+                _settings.CreatePubMirrorFile = true;
+            }
+
+            _settings.Save();
         }
 
         public void btnUploadDebug_click(object sender, EventArgs e)
@@ -89,74 +134,54 @@ namespace AndroidSideloader
             string input = bandwidthLimitTextBox.Text;
             Regex regex = new Regex(@"^\d+(\.\d+)?$");
 
-            if (regex.IsMatch(input) && float.TryParse(input, out float bandwidthLimit))
-            {
-                _settings.BandwidthLimit = bandwidthLimit;
-                _settings.Save();
-                this.Close();
-            }
-            else
+            if (!regex.IsMatch(input) || !float.TryParse(input, out _))
             {
                 MessageBox.Show("Please enter a valid number for the bandwidth limit.");
+                return;
             }
+
+            SaveAllSettings();
+            this.Close();
         }
 
-        private void checkForUpdatesCheckBox_CheckedChanged(object sender, EventArgs e)
+        private void toggleCheckForUpdates_CheckedChanged(object sender, EventArgs e)
         {
-            _settings.CheckForUpdates = checkForUpdatesCheckBox.Checked;
-            _settings.Save();
+            // Settings saved on form close
         }
 
-        private void chkUseDownloadedFiles_CheckedChanged(object sender, EventArgs e)
+        private void toggleUseDownloadedFiles_CheckedChanged(object sender, EventArgs e)
         {
-            _settings.UseDownloadedFiles = chkUseDownloadedFiles.Checked;
-            _settings.Save();
+            // Settings saved on form close
         }
 
-        private void enableMessageBoxesCheckBox_CheckedChanged(object sender, EventArgs e)
+        private void toggleMessageBoxes_CheckedChanged(object sender, EventArgs e)
         {
-            _settings.EnableMessageBoxes = enableMessageBoxesCheckBox.Checked;
-            _settings.Save();
+            // Settings saved on form close
+        }
+
+        private void toggleTrailers_CheckedChanged(object sender, EventArgs e)
+        {
+            // Settings saved on form close
         }
 
         private void resetSettingsButton_Click(object sender, EventArgs e)
         {
-            // Reset the specific properties
-            _settings.CustomDownloadDir = false;
-            _settings.CustomBackupDir = false;
-
-            // Set backup folder and download directory
-            MainForm.backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Rookie Backups");
-            _settings.DownloadDir = Environment.CurrentDirectory;
-            _settings.CreatePubMirrorFile = true;
-
-            // Optionally, call initSettings if it needs to initialize anything based on these settings
-            initSettings();
-
-            // Save the updated settings
-            _settings.Save();
+            this.Close();
         }
 
-        private void deleteAfterInstallCheckBox_CheckedChanged(object sender, EventArgs e)
+        private void toggleDeleteAfterInstall_CheckedChanged(object sender, EventArgs e)
         {
-            _settings.DeleteAllAfterInstall = deleteAfterInstallCheckBox.Checked;
-            _settings.Save();
+            // Settings saved on form close
         }
 
-        private void updateConfigCheckBox_CheckedChanged(object sender, EventArgs e)
+        private void toggleUpdateConfig_CheckedChanged(object sender, EventArgs e)
         {
-            _settings.AutoUpdateConfig = updateConfigCheckBox.Checked;
-            if (_settings.AutoUpdateConfig)
-            {
-                _settings.CreatePubMirrorFile = true;
-            }
-            _settings.Save();
+            // Settings saved on form close
         }
 
-        private void userJsonOnGameInstall_CheckedChanged(object sender, EventArgs e)
+        private void toggleUserJson_CheckedChanged(object sender, EventArgs e)
         {
-            _settings.UserJsonOnGameInstall = userJsonOnGameInstall.Checked;
-            _settings.Save();
+            // Settings saved on form close
         }
 
         private void SettingsForm_KeyPress(object sender, KeyPressEventArgs e)
@@ -190,48 +215,50 @@ namespace AndroidSideloader
             return base.ProcessDialogKey(keyData);
         }
 
-        private void nodevicemodeBox_CheckedChanged(object sender, EventArgs e)
+        private void toggleNoDeviceMode_CheckedChanged(object sender, EventArgs e)
         {
-            _settings.NodeviceMode = nodevicemodeBox.Checked;
-            if (!nodevicemodeBox.Checked)
+            // Update UI state only - settings saved on form close
+            if (!toggleNoDeviceMode.Checked)
             {
-                deleteAfterInstallCheckBox.Checked = true;
-                _settings.DeleteAllAfterInstall = true;
-                deleteAfterInstallCheckBox.Enabled = true;
+                toggleDeleteAfterInstall.Checked = true;
+                toggleDeleteAfterInstall.Enabled = true;
+                lblDeleteAfterInstall.ForeColor = System.Drawing.Color.White;
             }
             else
             {
-                deleteAfterInstallCheckBox.Checked = false;
-                _settings.DeleteAllAfterInstall = false;
-                deleteAfterInstallCheckBox.Enabled = false;
+                toggleDeleteAfterInstall.SetCheckedSilent(false);
+                toggleDeleteAfterInstall.Enabled = false;
+                lblDeleteAfterInstall.ForeColor = System.Drawing.Color.FromArgb(100, 100, 100);
             }
-            _settings.Save();
         }
 
-        private void bmbfBox_CheckedChanged(object sender, EventArgs e)
+        private void toggleBMBF_CheckedChanged(object sender, EventArgs e)
         {
-            _settings.BMBFChecked = bmbfBox.Checked;
-            _settings.Save();
+            // Settings saved on form close
         }
 
-        private void AutoReinstBox_CheckedChanged(object sender, EventArgs e)
+        private void toggleAutoReinstall_CheckedChanged(object sender, EventArgs e)
         {
-            _settings.AutoReinstall = AutoReinstBox.Checked;
-            _settings.Save();
+            // Settings saved on form close
         }
 
-        private void AutoReinstBox_Click(object sender, EventArgs e)
+        private void toggleAutoReinstall_Click(object sender, EventArgs e)
         {
-            if (AutoReinstBox.Checked)
+            if (toggleAutoReinstall.Checked)
             {
-                DialogResult dialogResult = FlexibleMessageBox.Show(this, "WARNING: This box enables automatic reinstall when installs fail,\ndue to some games not allowing " +
-                    "access to their save data (less than 5%) this\noption can lead to losing your progress." +
-                    " However with this option\nchecked when installs fail you won't have to agree to a prompt to perform\nthe reinstall. " +
-                    "(ideal when installing from a queue).\n\nNOTE: If your usb/wireless adb connection is extremely slow this option can\ncause larger" +
-                    "apk file installations to fail. Enable anyway?", "WARNING", MessageBoxButtons.OKCancel);
+                DialogResult dialogResult = FlexibleMessageBox.Show(this,
+                    "WARNING: This enables automatic reinstall when installs fail.\n\n" +
+                    "Some games (less than 5%) don't allow access to their save data, " +
+                    "which can lead to losing your progress.\n\n" +
+                    "However, with this option enabled, you won't have to confirm reinstalls manually " +
+                    "(ideal for queue installations).\n\n" +
+                    "NOTE: If your USB/wireless ADB connection is slow, this may cause " +
+                    "larger APK installations to fail.\n\nEnable anyway?",
+                    "WARNING", MessageBoxButtons.OKCancel);
+
                 if (dialogResult == DialogResult.Cancel)
                 {
-                    AutoReinstBox.Checked = false;
+                    toggleAutoReinstall.SetCheckedSilent(false);
                 }
             }
         }
@@ -250,7 +277,6 @@ namespace AndroidSideloader
             {
                 _settings.CustomDownloadDir = true;
                 _settings.DownloadDir = downloadDirectorySetter.SelectedPath;
-                _settings.Save();
             }
         }
 
@@ -261,20 +287,17 @@ namespace AndroidSideloader
                 _settings.CustomBackupDir = true;
                 _settings.BackupDir = backupDirectorySetter.SelectedPath;
                 MainForm.backupFolder = _settings.BackupDir;
-                _settings.Save();
             }
         }
 
-        private void chkSingleThread_CheckedChanged(object sender, EventArgs e)
+        private void toggleSingleThread_CheckedChanged(object sender, EventArgs e)
         {
-            _settings.SingleThreadMode = chkSingleThread.Checked;
-            _settings.Save();
+            // Settings saved on form close
         }
 
-        private void virtualFilesystemCompatibilityCheckbox_CheckedChanged(object sender, EventArgs e)
+        private void toggleVirtualFilesystem_CheckedChanged(object sender, EventArgs e)
         {
-            _settings.VirtualFilesystemCompatibility = virtualFilesystemCompatibilityCheckbox.Checked;
-            _settings.Save();
+            // Settings saved on form close
         }
 
         private void openDownloadDirectory_Click(object sender, EventArgs e)
