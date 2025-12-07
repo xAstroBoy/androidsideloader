@@ -436,7 +436,7 @@ namespace AndroidSideloader
             // Dependencies and RCLONE in background
             if (!isOffline)
             {
-                _ = Task.Run(() =>
+                await Task.Run(() =>
                 {
                     changeTitle("Downloading Dependencies...");
                     GetDependencies.downloadFiles();
