@@ -6014,7 +6014,7 @@ function onYouTubeIframeAPIReady() {
                     DropDownStyle = ComboBoxStyle.DropDown,
                     BackColor = Color.FromArgb(42, 45, 58),
                     ForeColor = Color.White,
-                    FlatStyle = FlatStyle.Flat
+                    FlatStyle = FlatStyle.Standard
                 };
 
                 // Copy items from m_combo
@@ -6102,7 +6102,7 @@ function onYouTubeIframeAPIReady() {
                     DropDownStyle = ComboBoxStyle.DropDownList,
                     BackColor = Color.FromArgb(42, 45, 58),
                     ForeColor = Color.White,
-                    FlatStyle = FlatStyle.Flat
+                    FlatStyle = FlatStyle.Standard
                 };
 
                 // Add devices to combo
@@ -6213,7 +6213,7 @@ function onYouTubeIframeAPIReady() {
                     DropDownStyle = ComboBoxStyle.DropDownList,
                     BackColor = Color.FromArgb(42, 45, 58),
                     ForeColor = Color.White,
-                    FlatStyle = FlatStyle.Flat
+                    FlatStyle = FlatStyle.Standard
                 };
 
                 // Add mirrors to combo
