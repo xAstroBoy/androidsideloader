@@ -308,6 +308,14 @@ namespace AndroidSideloader
             };
             t2.Tick += new EventHandler(timer_Tick2);
             t2.Start();
+
+            // Device connection check timer, runs every second
+            System.Windows.Forms.Timer deviceCheckTimer = new System.Windows.Forms.Timer
+            {
+                Interval = 1000 // 1 second
+            };
+            deviceCheckTimer.Tick += new EventHandler(timer_DeviceCheck);
+            deviceCheckTimer.Start();
         }
 
         private async Task GetPublicConfigAsync()
@@ -2891,6 +2899,7 @@ Additional Thanks & Resources
             isLoading = false;
             await refreshCurrentMirror(titleMessage);
         }
+
         private async Task refreshCurrentMirror(string titleMessage)
         {
             changeTitle(titleMessage);
@@ -2914,6 +2923,10 @@ Additional Thanks & Resources
             {
                 await Task.Delay(100);
             }
+
+            // Reset the initialized flag so initListView rebuilds _allItems with current install status
+            _allItemsInitialized = false;
+            _galleryDataSource = null;
 
             initListView(false);
             isLoading = false;
@@ -3525,10 +3538,6 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                     changeTitle("Refreshing games list, please wait...\n");
                     showAvailableSpace();
                     listAppsBtn();
-
-                    // Reset the initialized flag so initListView rebuilds _allItems with fresh install status
-                    _allItemsInitialized = false;
-                    _galleryDataSource = null;
 
                     if (!updateAvailableClicked && !upToDate_Clicked && !NeedsDonation_Clicked && !settings.NodeviceMode && !gamesQueueList.Any())
                     {
@@ -4145,6 +4154,11 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                 }
 
                 changeTitle("Refreshing games list...");
+
+                // Reset the initialized flag so initListView rebuilds _allItems with current install status
+                _allItemsInitialized = false;
+                _galleryDataSource = null;
+
                 listAppsBtn();
                 initListView(false);
             }
@@ -4704,6 +4718,11 @@ function onYouTubeIframeAPIReady() {
             }
 
             changeTitle("Refreshing installed apps and checking for updates...");
+
+            // Reset the initialized flag so initListView rebuilds _allItems with current install status
+            _allItemsInitialized = false;
+            _galleryDataSource = null;
+
             listAppsBtn();
             initListView(false);
 
@@ -6703,6 +6722,51 @@ function onYouTubeIframeAPIReady() {
                 gamesListView.Visible = false;
                 gamesGalleryView.Visible = true;
                 PopulateGalleryView();
+            }
+        }
+
+        private async void timer_DeviceCheck(object sender, EventArgs e)
+        {
+            // Skip if a device is connected, we're in the middle of loading or other operations
+            if (DeviceConnected || isLoading || isinstalling || isuploading) return;
+
+            // Run a quick device check in background
+            try
+            {
+                string output = await Task.Run(() => ADB.RunAdbCommandToString("devices").Output);
+
+                string[] lines = output.Split('\n');
+                bool hasDeviceNow = false;
+
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    string line = lines[i].Trim();
+                    if (line.Length > 0 && !string.IsNullOrWhiteSpace(line) && !line.Contains("unauthorized"))
+                    {
+                        hasDeviceNow = true;
+                        break;
+                    }
+                }
+
+                // Device state changed
+                if (hasDeviceNow)
+                {
+                    // Device connected - do a full refresh
+                    await CheckForDevice();
+                    changeTitlebarToDevice();
+                    showAvailableSpace();
+
+                    // Reset the initialized flag so initListView rebuilds _allItems with current install status
+                    _allItemsInitialized = false;
+                    _galleryDataSource = null;
+
+                    listAppsBtn();
+                    initListView(false);
+                }
+            }
+            catch
+            {
+                // Silently catch errors
             }
         }
     }
