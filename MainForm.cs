@@ -1,30 +1,28 @@
 using AndroidSideloader.Models;
-using AndroidSideloader.Properties;
 using AndroidSideloader.Utilities;
 using JR.Utils.GUI.Forms;
 using Microsoft.Web.WebView2.Core;
-using Microsoft.Web.WebView2.WinForms;
 using Newtonsoft.Json;
 using SergeUtils;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Net.NetworkInformation;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 using System.Windows.Forms;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using System.Runtime.InteropServices;
+using System.Configuration;
+
 namespace AndroidSideloader
 {
     public partial class MainForm : Form
@@ -39,8 +37,6 @@ namespace AndroidSideloader
         public static string CurrAPK;
         public static string CurrPCKG;
         List<UploadGame> gamesToUpload = new List<UploadGame>();
-
-
         public static string currremotesimple = String.Empty;
 #else
         public bool keyheld;
@@ -49,12 +45,38 @@ namespace AndroidSideloader
         private readonly List<UploadGame> gamesToUpload = new List<UploadGame>();
         public static bool debugMode = false;
         public bool DeviceConnected = false;
-
-
         public static string currremotesimple = "";
-
 #endif
-
+        private const int BottomMargin = 8;
+        private const int RightMargin = 12;
+        private const int PanelSpacing = 10;
+        private const int BottomPanelHeight = 217;
+        private const int ChildTopMargin = 10;
+        private const int ChildHorizontalPadding = 12;   // default left/right
+        private const int NotesLeftMargin = 6;           // special left margin for notes
+        private const int ChildRightMargin = 12;
+        private const int LabelHeight = 20;
+        private const int LabelBottomOffset = 4;         // space from label bottom to panel bottom
+        private const int ReservedLabelHeight = 25;
+        private Task _adbInitTask;
+        public static readonly Color ColorInstalled = ColorTranslator.FromHtml("#3c91e6");
+        public static readonly Color ColorUpdateAvailable = ColorTranslator.FromHtml("#4daa57");
+        public static readonly Color ColorDonateGame = ColorTranslator.FromHtml("#cb9cf2");
+        private static readonly Color ColorError = ColorTranslator.FromHtml("#f52f57");
+        private Panel _listViewUninstallButton;
+        private bool _listViewUninstallButtonHovered = false;
+        private bool isGalleryView;  // Will be set from settings in constructor
+        private List<ListViewItem> _galleryDataSource;
+        private FastGalleryPanel _fastGallery;
+        private const int TILE_WIDTH = 180;
+        private const int TILE_HEIGHT = 125;
+        private const int TILE_SPACING = 10;
+        private string freeSpaceText = "";
+        private string freeSpaceTextDetailed = "";
+        private int _questStorageProgress = 0;
+        private bool _trailerPlayerInitialized;          // player.html created and loaded
+        private bool _trailerHtmlLoaded;                 // initial navigation completed
+        private static readonly Dictionary<string, string> _videoIdCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // per game cache
         private bool isLoading = true;
         public static bool isOffline = false;
         public static bool noRcloneUpdating;
@@ -64,52 +86,142 @@ namespace AndroidSideloader
         public static bool enviromentCreated = false;
         public static PublicConfig PublicConfigFile;
         public static string PublicMirrorExtraArgs = " --tpslimit 1.0 --tpslimit-burst 3";
-        public static Splash SplashScreen;
         public static string storedIpPath;
         public static string aaptPath;
-        private bool manualIP;
         private System.Windows.Forms.Timer _debounceTimer;
         private CancellationTokenSource _cts;
         private List<ListViewItem> _allItems;
+        private Dictionary<string, List<ListViewItem>> _searchIndex;
+
         public MainForm()
         {
             storedIpPath = Path.Combine(Environment.CurrentDirectory, "platform-tools", "StoredIP.txt");
             aaptPath = Path.Combine(Environment.CurrentDirectory, "platform-tools", "aapt.exe");
             InitializeComponent();
+            InitializeModernPanels(); // Initialize modern rounded panels for notes and queue
             Logger.Initialize();
             InitializeTimeReferences();
-
-            SplashScreen = new Splash();
-            SplashScreen.Show();
-
-            // Check for Offline Mode or No RCLONE Updating
             CheckCommandLineArguments();
 
-            // Initialize debounce timer for search
-            _debounceTimer = new System.Windows.Forms.Timer
-            {
-                Interval = 1000, // 1 second delay
-                Enabled = false
-            };
+            // Load user's preferred view from settings
+            isGalleryView = settings.UseGalleryView;
+
+            // Always start with ListView visible so selections work properly
+            // We'll switch to gallery view after initListView completes if needed
+            gamesListView.Visible = true;
+            gamesGalleryView.Visible = false;
+            btnViewToggle.Text = isGalleryView ? "LIST" : "GALLERY";
+
+            favoriteGame.Renderer = new CenteredMenuRenderer();
+
+            // Set initial wireless ADB button text based on current state
+            UpdateWirelessADBButtonText();
+
+            _debounceTimer = new System.Windows.Forms.Timer { Interval = 100, Enabled = false };
             _debounceTimer.Tick += async (sender, e) => await RunSearch();
-
-            // Set data source for games queue list
             gamesQueListBox.DataSource = gamesQueueList;
-
-            // Set current log path if not already set
             SetCurrentLogPath();
-
             StartTimers();
-
-            // Setup list view column sorting
             lvwColumnSorter = new ListViewColumnSorter();
             gamesListView.ListViewItemSorter = lvwColumnSorter;
 
-            // Focus on search text box if visible
-            if (searchTextBox.Visible)
+            SubscribeToHoverEvents(questInfoPanel);
+
+            this.Resize += MainForm_Resize;
+
+            // Create an uninstall button overlay for list view
+            _listViewUninstallButton = new Panel
             {
-                _ = searchTextBox.Focus();
-            }
+                Size = new Size(22, 22),
+                BackColor = Color.Transparent,
+                Visible = false,
+                Cursor = Cursors.Hand
+            };
+            _listViewUninstallButton.Paint += ListViewUninstallButton_Paint;
+            _listViewUninstallButton.MouseEnter += (s, ev) => { _listViewUninstallButtonHovered = true; _listViewUninstallButton.Invalidate(); };
+            _listViewUninstallButton.MouseLeave += (s, ev) => { _listViewUninstallButtonHovered = false; _listViewUninstallButton.Invalidate(); };
+            _listViewUninstallButton.Click += ListViewUninstallButton_Click;
+            gamesListView.Controls.Add(_listViewUninstallButton);
+
+            // Timer to keep button position synced with the selected item
+            var uninstallButtonTimer = new System.Windows.Forms.Timer { Interval = 16 }; // ~60fps
+            uninstallButtonTimer.Tick += (s, ev) =>
+            {
+                if (_listViewUninstallButton == null)
+                    return;
+
+                // Check if we have a tagged item to track
+                if (!(_listViewUninstallButton.Tag is ListViewItem item))
+                    return;
+
+                // Verify item is still valid and selected
+                if (!gamesListView.Items.Contains(item) || !item.Selected)
+                {
+                    _listViewUninstallButton.Visible = false;
+                    return;
+                }
+
+                // Check if item is installed
+                bool isInstalled = item.ForeColor.ToArgb() == ColorInstalled.ToArgb() ||
+                                   item.ForeColor.ToArgb() == ColorUpdateAvailable.ToArgb() ||
+                                   item.ForeColor.ToArgb() == ColorDonateGame.ToArgb();
+
+                if (!isInstalled)
+                {
+                    _listViewUninstallButton.Visible = false;
+                    return;
+                }
+
+                // Calculate header height (items start below the header)
+                int headerHeight = 0;
+                if (gamesListView.View == View.Details && gamesListView.HeaderStyle != ColumnHeaderStyle.None)
+                {
+                    headerHeight = gamesListView.Font.Height;
+                }
+
+                // Calculate button position based on item bounds
+                Rectangle itemBounds = item.Bounds;
+                int buttonX = gamesListView.ClientSize.Width - _listViewUninstallButton.Width - 5;
+                int buttonY = itemBounds.Top + (itemBounds.Height - _listViewUninstallButton.Height) / 2;
+
+                // Check if item is within visible bounds (below header and above bottom)
+                bool isVisible = itemBounds.Top >= headerHeight &&
+                                 buttonY >= headerHeight &&
+                                 buttonY + _listViewUninstallButton.Height <= gamesListView.ClientSize.Height;
+
+                if (isVisible)
+                {
+                    _listViewUninstallButton.Location = new Point(buttonX, buttonY);
+                    if (!_listViewUninstallButton.Visible)
+                    {
+                        _listViewUninstallButton.Visible = true;
+                    }
+                }
+                else
+                {
+                    _listViewUninstallButton.Visible = false;
+                }
+            };
+            uninstallButtonTimer.Start();
+
+            // Hide button when selection changes
+            gamesListView.ItemSelectionChanged += (s, ev) =>
+            {
+                if (!ev.IsSelected && _listViewUninstallButton != null)
+                {
+                    _listViewUninstallButton.Visible = false;
+                }
+            };
+
+            // Set data that apparently can't be set in designer
+            // We do it here so it doesn't get overwritten by designer
+            batteryLevImg.Parent = questStorageProgressBar;
+            batteryLabel.Parent = batteryLevImg;
+            diskLabel.Parent = questStorageProgressBar;
+            questInfoLabel.Parent = questStorageProgressBar;
+
+            // Subscribe to click events to unfocus search text box
+            this.Click += UnfocusSearchTextBox;
         }
 
         private void CheckCommandLineArguments()
@@ -192,10 +304,18 @@ namespace AndroidSideloader
 
             System.Windows.Forms.Timer t2 = new System.Windows.Forms.Timer
             {
-                Interval = 300 // 30ms
+                Interval = 300 // 300ms
             };
             t2.Tick += new EventHandler(timer_Tick2);
             t2.Start();
+
+            // Device connection check timer, runs every second
+            System.Windows.Forms.Timer deviceCheckTimer = new System.Windows.Forms.Timer
+            {
+                Interval = 1000 // 1 second
+            };
+            deviceCheckTimer.Tick += new EventHandler(timer_DeviceCheck);
+            deviceCheckTimer.Start();
         }
 
         private async Task GetPublicConfigAsync()
@@ -228,49 +348,50 @@ namespace AndroidSideloader
         public static bool updatesNotified = false;
         public static string backupFolder;
 
+        private static void KillAdbProcesses()
+        {
+            try
+            {
+                foreach (var p in Process.GetProcessesByName("adb"))
+                {
+                    try
+                    {
+                        if (!p.HasExited)
+                        {
+                            p.Kill();
+                            p.WaitForExit(3000);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"Failed to kill adb process (PID {p.Id}): {ex.Message}", LogLevel.WARNING);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error enumerating adb processes: {ex.Message}", LogLevel.WARNING);
+            }
+        }
+
         private async void Form1_Load(object sender, EventArgs e)
         {
             _ = Logger.Log("Starting AndroidSideloader Application");
 
-            if (isOffline)
-            {
-                SplashScreen.UpdateBackgroundImage(AndroidSideloader.Properties.Resources.splashimage_offline);
-                changeTitle("Starting in Offline Mode...");
-            }
-            else
-            {
-                // download dependencies
-                GetDependencies.downloadFiles();
-                SplashScreen.UpdateBackgroundImage(AndroidSideloader.Properties.Resources.splashimage);
-            }
+            // Hard kill any lingering adb.exe instances to avoid port/handle conflicts
+            KillAdbProcesses();
 
-            settings.MainDir = Environment.CurrentDirectory;
-            settings.Save();
-
-            if (Directory.Exists(Sideloader.TempFolder))
+            // ADB initialization in background
+            _adbInitTask = Task.Run(() =>
             {
-                Directory.Delete(Sideloader.TempFolder, true);
-                _ = Directory.CreateDirectory(Sideloader.TempFolder);
-            }
-
-            // Delete the Debug file if it is more than 5MB
-            string logFilePath = settings.CurrentLogPath;
-            if (File.Exists(logFilePath))
-            {
-                FileInfo fileInfo = new FileInfo(logFilePath);
-                long fileSizeInBytes = fileInfo.Length;
-                long maxSizeInBytes = 5 * 1024 * 1024; // 5MB in bytes
-
-                if (fileSizeInBytes > maxSizeInBytes)
+                _ = Logger.Log("Attempting to Initialize ADB Server");
+                if (File.Exists(Path.Combine(Environment.CurrentDirectory, "platform-tools", "adb.exe")))
                 {
-                    File.Delete(logFilePath);
+                    _ = ADB.RunAdbCommandToString("start-server");
                 }
-            }
-            if (!isOffline)
-            {
-                RCLONE.Init();
-            }
+            });
 
+            // Basic UI setup
             CenterToScreen();
             gamesListView.View = View.Details;
             gamesListView.FullRowSelect = true;
@@ -278,7 +399,60 @@ namespace AndroidSideloader
             etaLabel.Text = String.Empty;
             speedLabel.Text = String.Empty;
             diskLabel.Text = String.Empty;
-            verLabel.Text = Updater.LocalVersion;
+
+            settings.MainDir = Environment.CurrentDirectory;
+            settings.Save();
+
+            changeTitle(isOffline ? "Starting in Offline Mode..." : "Initializing...");
+
+            // Non-blocking background cleanup
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    if (Directory.Exists(Sideloader.TempFolder))
+                    {
+                        Directory.Delete(Sideloader.TempFolder, true);
+                        _ = Directory.CreateDirectory(Sideloader.TempFolder);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Error cleaning temp folder: {ex.Message}", LogLevel.WARNING);
+                }
+            });
+
+            // Non-blocking log file cleanup
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    string logFilePath = settings.CurrentLogPath;
+                    if (File.Exists(logFilePath))
+                    {
+                        FileInfo fileInfo = new FileInfo(logFilePath);
+                        if (fileInfo.Length > 5 * 1024 * 1024)
+                        {
+                            File.Delete(logFilePath);
+                        }
+                    }
+                }
+                catch { }
+            });
+
+            // Dependencies and RCLONE in background
+            if (!isOffline)
+            {
+                await Task.Run(() =>
+                {
+                    changeTitle("Downloading Dependencies...");
+                    GetDependencies.downloadFiles();
+                    changeTitle("Initializing RCLONE...");
+                    RCLONE.Init();
+                });
+            }
+
+            // Crashlog handling
             if (File.Exists("crashlog.txt"))
             {
                 if (File.Exists(settings.CurrentCrashPath))
@@ -286,7 +460,10 @@ namespace AndroidSideloader
                     File.Delete(settings.CurrentCrashPath);
                 }
 
-                DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, $"Sideloader crashed during your last use.\nPress OK if you'd like to send us your crash log.\n\n NOTE: THIS CAN TAKE UP TO 30 SECONDS.", "Crash Detected", MessageBoxButtons.OKCancel);
+                DialogResult dialogResult = FlexibleMessageBox.Show(Program.form,
+                    $"Sideloader crashed during your last use.\nPress OK if you'd like to send us your crash log.\n\nNOTE: THIS CAN TAKE UP TO 30 SECONDS.",
+                    "Crash Detected", MessageBoxButtons.OKCancel);
+
                 if (dialogResult == DialogResult.OK)
                 {
                     if (File.Exists(Path.Combine(Environment.CurrentDirectory, "crashlog.txt")))
@@ -298,9 +475,18 @@ namespace AndroidSideloader
                         settings.Save();
 
                         Clipboard.SetText(UUID);
-                        _ = RCLONE.runRcloneCommand_UploadConfig($"copy \"{settings.CurrentCrashPath}\" RSL-gameuploads:CrashLogs");
-                        _ = FlexibleMessageBox.Show(Program.form, $"Your CrashLog has been copied to the server.\nPlease mention your CrashLogID ({settings.CurrentCrashName}) to the Mods.\nIt has been automatically copied to your clipboard.");
-                        Clipboard.SetText(settings.CurrentCrashName);
+
+                        // Upload in background
+                        _ = Task.Run(() =>
+                        {
+                            _ = RCLONE.runRcloneCommand_UploadConfig($"copy \"{settings.CurrentCrashPath}\" RSL-gameuploads:CrashLogs");
+                            this.Invoke(() =>
+                            {
+                                _ = FlexibleMessageBox.Show(Program.form,
+                                    $"Your CrashLog has been copied to the server.\nPlease mention your CrashLogID ({settings.CurrentCrashName}) to the Mods.\nIt has been automatically copied to your clipboard.");
+                                Clipboard.SetText(settings.CurrentCrashName);
+                            });
+                        });
                     }
                 }
                 else
@@ -309,28 +495,23 @@ namespace AndroidSideloader
                 }
             }
 
-            _ = Logger.Log("Attempting to Initalize ADB Server");
-            if (File.Exists(Path.Combine(Environment.CurrentDirectory, "platform-tools", "adb.exe")))
-            {
-                _ = ADB.RunAdbCommandToString("kill-server");
-                _ = ADB.RunAdbCommandToString("start-server");
-            }
+            webView21.Visible = settings.TrailersEnabled;
 
+            // Continue with Form1_Shown
             this.Form1_Shown(sender, e);
         }
 
         private async void Form1_Shown(object sender, EventArgs e)
         {
-            searchTextBox.Enabled = false;
+            //searchTextBox.Enabled = false;
+
+            // Disclaimer thread
             new Thread(() =>
             {
-                Thread.Sleep(10000);
+                Thread.Sleep(5000);
                 freeDisclaimer.Invoke(() =>
                 {
                     freeDisclaimer.Dispose();
-                });
-                freeDisclaimer.Invoke(() =>
-                {
                     freeDisclaimer.Enabled = false;
                 });
             }).Start();
@@ -338,24 +519,33 @@ namespace AndroidSideloader
             if (!isOffline)
             {
                 string configFilePath = Path.Combine(Environment.CurrentDirectory, "vrp-public.json");
+
+                // Public config check
                 if (File.Exists(configFilePath))
                 {
                     await GetPublicConfigAsync();
                     if (!hasPublicConfig)
                     {
-                        _ = FlexibleMessageBox.Show(Program.form, "Failed to fetch public mirror config, and the current one is unreadable.\r\nPlease ensure you can access https://vrpirates.wiki/ in your browser.", "Config Update Failed", MessageBoxButtons.OK);
+                        _ = FlexibleMessageBox.Show(Program.form,
+                            "Failed to fetch public mirror config, and the current one is unreadable.\r\nPlease ensure you can access https://vrpirates.wiki/ in your browser.",
+                            "Config Update Failed", MessageBoxButtons.OK);
                     }
                 }
                 else if (settings.AutoUpdateConfig && settings.CreatePubMirrorFile)
                 {
-                    DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, "Rookie has detected that you are missing the public config file, would you like to create it?", "Public Config Missing", MessageBoxButtons.YesNo);
+                    DialogResult dialogResult = FlexibleMessageBox.Show(Program.form,
+                        "Rookie has detected that you are missing the public config file, would you like to create it?",
+                        "Public Config Missing", MessageBoxButtons.YesNo);
+
                     if (dialogResult == DialogResult.Yes)
                     {
-                        File.Create(configFilePath).Close(); // Ensure the file is closed after creation
+                        File.Create(configFilePath).Close();
                         await GetPublicConfigAsync();
                         if (!hasPublicConfig)
                         {
-                            _ = FlexibleMessageBox.Show(Program.form, "Failed to fetch public mirror config, and the current one is unreadable.\r\nPlease ensure you can access https://vrpirates.wiki/ in your browser.", "Config Update Failed", MessageBoxButtons.OK);
+                            _ = FlexibleMessageBox.Show(Program.form,
+                                "Failed to fetch public mirror config, and the current one is unreadable.\r\nPlease ensure you can access https://vrpirates.wiki/ in your browser.",
+                                "Config Update Failed", MessageBoxButtons.OK);
                         }
                     }
                     else
@@ -366,13 +556,29 @@ namespace AndroidSideloader
                     }
                 }
 
-                string webViewDirectoryPath = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL", "EBWebView");
-                if (Directory.Exists(webViewDirectoryPath))
+                // WebView cleanup in background
+                _ = Task.Run(() =>
                 {
-                    Directory.Delete(webViewDirectoryPath, true);
+                    try
+                    {
+                        string webViewDirectoryPath = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL", "EBWebView");
+                        if (Directory.Exists(webViewDirectoryPath))
+                        {
+                            Directory.Delete(webViewDirectoryPath, true);
+                        }
+                    }
+                    catch { }
+                });
+
+                // Pre-initialize trailer player in background
+                try
+                {
+                    await EnsureTrailerEnvironmentAsync();
                 }
+                catch { /* swallow – prewarm should never crash startup */ }
             }
 
+            // UI setup
             remotesList.Items.Clear();
             if (hasPublicConfig)
             {
@@ -381,19 +587,17 @@ namespace AndroidSideloader
             }
             if (isOffline)
             {
-                lblMirror.Text = " Offline Mode";
                 remotesList.Size = System.Drawing.Size.Empty;
                 _ = Logger.Log($"Using Offline Mode");
             }
             if (settings.NodeviceMode)
             {
-                btnNoDevice.Text = "Enable Sideloading";
+                btnNoDevice.Text = "ENABLE SIDELOADING";
             }
-
-            SplashScreen.Close();
 
             progressBar.Style = ProgressBarStyle.Marquee;
 
+            // Update check
             if (!debugMode && settings.CheckForUpdates && !isOffline)
             {
                 Updater.AppName = "AndroidSideloader";
@@ -404,18 +608,17 @@ namespace AndroidSideloader
             if (!isOffline)
             {
                 changeTitle("Getting Upload Config...");
-                SideloaderRCLONE.updateUploadConfig();
+                await Task.Run(() => SideloaderRCLONE.updateUploadConfig());
 
                 _ = Logger.Log("Initializing Servers");
                 changeTitle("Initializing Servers...");
 
-                // Wait for mirrors to initialize
                 await initMirrors();
 
                 if (!UsingPublicConfig)
                 {
                     changeTitle("Grabbing the Games List...");
-                    SideloaderRCLONE.initGames(currentRemote);
+                    await Task.Run(() => SideloaderRCLONE.initGames(currentRemote));
                 }
             }
             else
@@ -423,9 +626,14 @@ namespace AndroidSideloader
                 changeTitle("Offline mode enabled, no Rclone");
             }
 
-            changeTitle("Connecting to your Quest...");
-            await Task.Run(() =>
+            // Device connection and Metadata can run simultaneously
+            Task metadataTask = null;
+            Task deviceConnectionTask = null;
+
+            // Start device connection task
+            deviceConnectionTask = Task.Run(() =>
             {
+                changeTitle("Connecting to device...");
                 if (!string.IsNullOrEmpty(settings.IPAddress))
                 {
                     string path = Path.Combine(Environment.CurrentDirectory, "platform-tools", "adb.exe");
@@ -450,7 +658,11 @@ namespace AndroidSideloader
                     ProcessOutput IPoutput = ADB.RunAdbCommandToString(IPcmndfromtxt);
                     if (IPoutput.Output.Contains("attempt failed") || IPoutput.Output.Contains("refused"))
                     {
-                        _ = FlexibleMessageBox.Show(Program.form, "Attempt to connect to saved IP has failed. This is usually due to rebooting the device or not having a STATIC IP set in your router.\nYou must enable Wireless ADB again!");
+                        this.Invoke(() =>
+                        {
+                            _ = FlexibleMessageBox.Show(Program.form,
+                                "Attempt to connect to saved IP has failed. This is usually due to rebooting the device or not having a STATIC IP set in your router.\nYou must enable Wireless ADB again!");
+                        });
                         settings.IPAddress = "";
                         settings.Save();
                         try { File.Delete(storedIpPath); }
@@ -469,9 +681,10 @@ namespace AndroidSideloader
                 }
             });
 
+            // Start metadata task in parallel
             if (UsingPublicConfig)
             {
-                await Task.Run(() =>
+                metadataTask = Task.Run(() =>
                 {
                     changeTitle("Updating Metadata...");
                     SideloaderRCLONE.UpdateMetadataFromPublic();
@@ -482,26 +695,40 @@ namespace AndroidSideloader
             }
             else if (!isOffline)
             {
-                await Task.Run(() =>
+                metadataTask = Task.Run(() =>
                 {
                     changeTitle("Updating Game Notes...");
                     SideloaderRCLONE.UpdateGameNotes(currentRemote);
 
-                    changeTitle("Updating Game Thumbnails (This may take a minute or two)...");
+                    changeTitle("Updating Game Thumbnails...");
                     SideloaderRCLONE.UpdateGamePhotos(currentRemote);
 
                     SideloaderRCLONE.UpdateNouns(currentRemote);
+
                     if (!Directory.Exists(SideloaderRCLONE.ThumbnailsFolder) ||
                         !Directory.Exists(SideloaderRCLONE.NotesFolder))
                     {
-                        _ = FlexibleMessageBox.Show(Program.form,
-                            "It seems you are missing the thumbnails and/or notes database, the first start of the sideloader takes a bit more time, so dont worry if it looks stuck!");
+                        this.Invoke(() =>
+                        {
+                            _ = FlexibleMessageBox.Show(Program.form,
+                                "It seems you are missing the thumbnails and/or notes database, the first start of the sideloader takes a bit more time, so dont worry if it looks stuck!");
+                        });
                     }
                 });
             }
 
+            // Wait for both tasks to complete
+            var tasksToWait = new List<Task>();
+            if (deviceConnectionTask != null) tasksToWait.Add(deviceConnectionTask);
+            if (metadataTask != null) tasksToWait.Add(metadataTask);
+
+            if (tasksToWait.Count > 0)
+            {
+                await Task.WhenAll(tasksToWait);
+            }
+
             progressBar.Style = ProgressBarStyle.Marquee;
-            changeTitle("Populating Game Update List, Almost There!");
+            changeTitle("Populating Game List...");
 
             _ = await CheckForDevice();
             if (ADB.DeviceID.Length < 5)
@@ -509,37 +736,42 @@ namespace AndroidSideloader
                 nodeviceonstart = true;
             }
 
-            listAppsBtn();
-            showAvailableSpace();
-            downloadInstallGameButton.Enabled = true;
+            // Parallel execution
+            await Task.WhenAll(
+                Task.Run(() => listAppsBtn())
+            );
+
             isLoading = false;
+
+            // Initialize list view
             initListView(false);
 
-            string[] files = Directory.GetFiles(Environment.CurrentDirectory);
-            foreach (string file in files)
+            // Cleanup in background
+            _ = Task.Run(() =>
             {
-                string fileName = file;
-                while (fileName.Contains("\\"))
+                string[] files = Directory.GetFiles(Environment.CurrentDirectory);
+                foreach (string file in files)
                 {
-                    fileName = fileName.Substring(fileName.IndexOf("\\") + 1);
-                }
-                if (!fileName.Contains(settings.CurrentLogName) && !fileName.Contains(settings.CurrentCrashName))
-                {
-                    if (!fileName.Contains("debuglog") && fileName.EndsWith(".txt"))
+                    string fileName = Path.GetFileName(file);
+                    if (!fileName.Contains(settings.CurrentLogName) &&
+                        !fileName.Contains(settings.CurrentCrashName) &&
+                        !fileName.Contains("debuglog") &&
+                        fileName.EndsWith(".txt"))
                     {
-                        System.IO.File.Delete(fileName);
+                        try { System.IO.File.Delete(file); } catch { }
                     }
                 }
-            }
+            });
 
             searchTextBox.Enabled = true;
 
             if (isOffline)
             {
-                lblMirror.Text = " Offline Mode";
                 remotesList.Size = System.Drawing.Size.Empty;
                 _ = Logger.Log($"Using Offline Mode");
             }
+
+            changeTitlebarToDevice();
         }
 
         private void timer_Tick(object sender, EventArgs e)
@@ -552,56 +784,25 @@ namespace AndroidSideloader
             keyheld = false;
         }
 
-        public async void changeTitle(string txt, bool reset = true)
+        public async void changeTitle(string txt, bool reset = false)
         {
             try
             {
-                if (ProgressText.IsDisposed)
-                {
-                    return;
-                }
+                string titleSuffix = string.IsNullOrWhiteSpace(txt) ? "" : " | " + txt;
+                this.Invoke(() => { Text = "Rookie Sideloader " + Updater.LocalVersion + titleSuffix; });
 
-                this.Invoke(() => { oldTitle = txt; Text = "Rookie Sideloader v" + Updater.LocalVersion + " | " + txt; });
-                ProgressText.Invoke(() =>
-                {
-                    if (!ProgressText.IsDisposed)
-                    {
-                        var states = new[] { "Sideloading", "Installing", "Copying", "Comparing", "Deleting" };
-                        if (ProgressText.ForeColor == Color.LimeGreen)
-                        {
-                            ProgressText.ForeColor = Color.White;
-                        }
-                        if (states.Any(txt.Contains))
-                        {
-                            ProgressText.ForeColor = Color.LimeGreen;
-                        }
-                        ProgressText.Text = txt;
-                    }
-                });
                 if (!reset)
                 {
                     return;
                 }
 
                 await Task.Delay(TimeSpan.FromSeconds(5));
-                this.Invoke(() => { Text = "Rookie Sideloader v" + Updater.LocalVersion + " | " + oldTitle; });
-                ProgressText.Invoke(() =>
-                {
-                    if (!ProgressText.IsDisposed)
-                    {
-                        ProgressText.Text = oldTitle;
-                    }
-                });
+                // Reset to base title without any status message
+                this.Invoke(() => { Text = "Rookie Sideloader " + Updater.LocalVersion; });
             }
             catch
             {
-
             }
-        }
-
-        private void ShowSubMenu(Panel subMenu)
-        {
-            subMenu.Visible = subMenu.Visible == false;
         }
 
         private async void startsideloadbutton_Click(object sender, EventArgs e)
@@ -646,7 +847,7 @@ namespace AndroidSideloader
 
         public void ShowPrcOutput(ProcessOutput prcout)
         {
-            string message = $"Output: {prcout.Output}";
+            string message = $"{prcout.Output}";
             if (prcout.Error.Length != 0)
             {
                 message += $"\nError: {prcout.Error}";
@@ -658,7 +859,6 @@ namespace AndroidSideloader
 
         public async Task<int> CheckForDevice()
         {
-
             Devices.Clear();
             string output = string.Empty;
             string error = string.Empty;
@@ -668,7 +868,6 @@ namespace AndroidSideloader
             {
                 output = ADB.RunAdbCommandToString("devices").Output;
             });
-
 
             t1.Start();
 
@@ -696,8 +895,6 @@ namespace AndroidSideloader
                 i++;
             }
 
-
-
             if (devicesComboBox.Items.Count > 0)
             {
                 devicesComboBox.SelectedIndex = 0;
@@ -707,7 +904,10 @@ namespace AndroidSideloader
             battery = Utilities.StringUtilities.RemoveEverythingBeforeFirst(battery, "level:");
             battery = Utilities.StringUtilities.RemoveEverythingAfterFirst(battery, "\n");
             battery = Utilities.StringUtilities.KeepOnlyNumbers(battery);
-            batteryLabel.Text = battery + "%";
+            batteryLabel.Text = battery;
+
+            UpdateQuestInfoPanel();
+
             return devicesComboBox.SelectedIndex;
         }
 
@@ -716,7 +916,6 @@ namespace AndroidSideloader
             _ = await CheckForDevice();
 
             changeTitlebarToDevice();
-
             showAvailableSpace();
         }
 
@@ -744,7 +943,7 @@ namespace AndroidSideloader
             {
                 progressBar.Style = ProgressBarStyle.Marquee;
                 string path = dialog.FileName;
-                changeTitle($"Copying {path} obb to device...");
+                changeTitle($"Copying {path} OBB to device...");
                 Thread t1 = new Thread(() =>
                 {
                     output += output += ADB.CopyOBB(path);
@@ -762,7 +961,7 @@ namespace AndroidSideloader
                 showAvailableSpace();
 
                 ShowPrcOutput(output);
-                Program.form.changeTitle(String.Empty);
+                Program.form.changeTitle("");
             }
         }
 
@@ -773,22 +972,19 @@ namespace AndroidSideloader
                 DeviceConnected = false;
                 this.Invoke(() =>
                 {
-                    Text = "Device Not Authorized";
+                    Text = "Rookie Sideloader " + Updater.LocalVersion + " | Device Not Authorized";
                     DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, "Please check inside your headset for ADB DEBUGGING prompt/notification, check the box \"Always allow from this computer.\" and hit OK.", "Not Authorized", MessageBoxButtons.RetryCancel);
                     if (dialogResult == DialogResult.Retry)
                     {
                         devicesbutton.PerformClick();
                     }
-                    else
-                    {
-                        return;
-                    }
                 });
             }
             else if (Devices.Count > 0 && Devices[0].Length > 1) // Check if Devices list is not empty and the first device has a valid length
             {
-                this.Invoke(() => { Text = "Device Connected with ID | " + Devices[0].Replace("device", String.Empty); });
+                this.Invoke(() => { Text = "Rookie Sideloader " + Updater.LocalVersion + " | Device Connected: " + Devices[0].Replace("device", String.Empty).Trim(); });
                 DeviceConnected = true;
+                nodeviceonstart = false; // Device connected, clear the flag
             }
             else
             {
@@ -808,8 +1004,12 @@ namespace AndroidSideloader
                             return;
                         }
                     }
+                    nodeviceonstart = true;
+                    Text = "Rookie Sideloader " + Updater.LocalVersion + " | No Device (Download Only)";
                 });
             }
+
+            UpdateQuestInfoPanel();
         }
 
         public async void showAvailableSpace()
@@ -832,6 +1032,8 @@ namespace AndroidSideloader
                     }
 
                     diskLabel.Invoke(() => { diskLabel.Text = AvailableSpace; });
+
+                    UpdateQuestInfoPanel();
                 }
                 catch (Exception ex)
                 {
@@ -844,22 +1046,43 @@ namespace AndroidSideloader
         {
             string deviceId = string.Empty;
             int index = -1;
-            devicesComboBox.Invoke(() => { index = devicesComboBox.SelectedIndex; });
+            int itemCount = 0;
+
+            devicesComboBox.Invoke(() =>
+            {
+                index = devicesComboBox.SelectedIndex;
+                itemCount = devicesComboBox.Items.Count;
+            });
+
             if (index != -1)
             {
                 devicesComboBox.Invoke(() => { deviceId = devicesComboBox.SelectedItem.ToString(); });
             }
+            else if (itemCount > 1)
+            {
+                // Multiple devices but none selected - prompt user
+                deviceId = ShowDeviceSelector("Multiple devices detected - Select a device");
+            }
+            else if (itemCount == 1)
+            {
+                // Only one device, select it automatically
+                devicesComboBox.Invoke(() =>
+                {
+                    devicesComboBox.SelectedIndex = 0;
+                    deviceId = devicesComboBox.SelectedItem.ToString();
+                });
+            }
 
-            return deviceId;
+            return deviceId ?? string.Empty;
         }
 
         public static string taa = String.Empty;
 
         private async void backupadbbutton_Click(object sender, EventArgs e)
         {
-            if (m_combo.SelectedIndex == -1)
+            string selectedApp = ShowInstalledAppSelector("Select an app to backup with ADB");
+            if (selectedApp == null)
             {
-                notify("Please select an App from the Dropdown");
                 return;
             }
 
@@ -885,7 +1108,7 @@ namespace AndroidSideloader
             }));
             _ = Directory.CreateDirectory(CurrBackups);
 
-            string GameName = m_combo.SelectedItem.ToString();
+            string GameName = selectedApp;
             string packageName = Sideloader.gameNameToPackageName(GameName);
             string InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {packageName} | grep versionCode -F\"").Output;
 
@@ -893,7 +1116,7 @@ namespace AndroidSideloader
             _ = FlexibleMessageBox.Show(Program.form, "Click OK on this Message...\r\nThen on your Quest, Unlock your device and confirm the backup operation by clicking on 'Back Up My Data'");
             output = ADB.RunAdbCommandToString($"adb backup -f \"{CurrBackups}\\{packageName}.ab\" {packageName}").Output;
 
-            changeTitle("                         \n\n");
+            changeTitle("");
         }
 
         private async void backupbutton_Click(object sender, EventArgs e)
@@ -947,7 +1170,7 @@ namespace AndroidSideloader
                 changeTitle("Backing up Game Data in SD/Android/data...");
             }
             ShowPrcOutput(output);
-            changeTitle("                         \n\n");
+            changeTitle("");
         }
 
         private async void restorebutton_Click(object sender, EventArgs e)
@@ -1090,12 +1313,13 @@ namespace AndroidSideloader
                 return;
             }
 
-            if (m_combo.SelectedIndex == -1)
+            string selectedApp = ShowInstalledAppSelector("Select an app to share/upload");
+            if (selectedApp == null)
             {
-                notify("Please select an App from the Dropdown");
                 return;
             }
-            DialogResult dialogResult1 = FlexibleMessageBox.Show(Program.form, $"Do you want to upload {m_combo.SelectedItem} now?", "Upload app?", MessageBoxButtons.YesNo);
+
+            DialogResult dialogResult1 = FlexibleMessageBox.Show(Program.form, $"Do you want to upload {selectedApp} now?", "Upload app?", MessageBoxButtons.YesNo);
             if (dialogResult1 == DialogResult.No)
             {
                 return;
@@ -1124,7 +1348,7 @@ namespace AndroidSideloader
                     isworking = true;
                     progressBar.Style = ProgressBarStyle.Marquee;
                     string HWID = SideloaderUtilities.UUID();
-                    string GameName = m_combo.SelectedItem.ToString();
+                    string GameName = selectedApp;
                     string packageName = Sideloader.gameNameToPackageName(GameName);
                     string InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {packageName} | grep versionCode -F\"").Output;
                     InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
@@ -1164,7 +1388,7 @@ namespace AndroidSideloader
                         await Task.Delay(100);
                     }
 
-                    changeTitle("Extracting obb if it exists....");
+                    changeTitle("Extracting OBB if it exists....");
                     Thread t2 = new Thread(() =>
                     {
                         output += ADB.RunAdbCommandToString($"pull \"/sdcard/Android/obb/{packageName}\" \"{settings.MainDir}\\{packageName}\"");
@@ -1198,14 +1422,14 @@ namespace AndroidSideloader
                         await Task.Delay(100);
                     }
 
-                    changeTitle("Uploading to server, you can continue to use Rookie while it uploads in the background.");
+                    changeTitle("Uploading to server, you can continue to use Rookie while it uploads.");
                     ULLabel.Visible = true;
                     isworking = false;
                     isuploading = true;
                     Thread t3 = new Thread(() =>
                     {
                         string currentlyUploading = GameName;
-                        changeTitle("Uploading to server, you can continue to use Rookie while it uploads in the background.");
+                        changeTitle("Uploading to server, you can continue to use Rookie while it uploads.");
 
                         // Get size of pending zip upload and write to text file
                         long zipSize = new FileInfo($"{settings.MainDir}\\{gameZipName}").Length;
@@ -1233,7 +1457,7 @@ namespace AndroidSideloader
                         await Task.Delay(100);
                     }
 
-                    changeTitle("                         \n\n");
+                    changeTitle("");
                     isuploading = false;
                     ULLabel.Visible = false;
                 }
@@ -1250,6 +1474,12 @@ namespace AndroidSideloader
 
         private async void uninstallAppButton_Click(object sender, EventArgs e)
         {
+            string selectedApp = ShowInstalledAppSelector("Select an app to uninstall");
+            if (selectedApp == null)
+            {
+                return;
+            }
+
             if (!settings.CustomBackupDir)
             {
                 backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
@@ -1258,19 +1488,15 @@ namespace AndroidSideloader
             {
                 backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
             }
+
             string packagename;
-            if (m_combo.SelectedIndex == -1)
-            {
-                _ = FlexibleMessageBox.Show(Program.form, "Please select an app first");
-                return;
-            }
-            string GameName = m_combo.SelectedItem.ToString();
+            string GameName = selectedApp;
             DialogResult dialogresult = FlexibleMessageBox.Show($"Are you sure you want to uninstall {GameName}?", "Proceed with uninstall?", MessageBoxButtons.YesNo);
             if (dialogresult == DialogResult.No)
             {
                 return;
             }
-            DialogResult dialogresult2 = FlexibleMessageBox.Show($"Do you want to attempt to automatically backup any saves to {backupFolder}\\(TodaysDate)", "Attempt Game Backup?", MessageBoxButtons.YesNo);
+            DialogResult dialogresult2 = FlexibleMessageBox.Show($"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\", "Attempt Game Backup?", MessageBoxButtons.YesNo);
             packagename = !GameName.Contains(".") ? Sideloader.gameNameToPackageName(GameName) : GameName;
             if (dialogresult2 == DialogResult.Yes)
             {
@@ -1292,9 +1518,7 @@ namespace AndroidSideloader
             ShowPrcOutput(output);
             showAvailableSpace();
             progressBar.Style = ProgressBarStyle.Continuous;
-            m_combo.Items.RemoveAt(m_combo.SelectedIndex);
         }
-
 
         private async void copyBulkObbButton_Click(object sender, EventArgs e)
         {
@@ -1332,7 +1556,7 @@ namespace AndroidSideloader
                 _ = await CheckForDevice();
                 changeTitlebarToDevice();
                 showAvailableSpace();
-                changeTitle("Device now detected... refreshing update list.");
+                changeTitle("Device detected... refreshing update list.");
                 listAppsBtn();
                 initListView(false);
             }
@@ -1383,13 +1607,15 @@ namespace AndroidSideloader
                             await Task.Delay(100);
                         }
 
-                        Program.form.changeTitle(String.Empty);
+                        Program.form.changeTitle("");
                         settings.CurrPckg = dir;
                         settings.Save();
                     }
-                    Program.form.changeTitle(String.Empty);
+
+                    Program.form.changeTitle("");
                     string extension = Path.GetExtension(data);
                     string[] files = Directory.GetFiles(data);
+
                     foreach (string file2 in files)
                     {
                         if (File.Exists(file2))
@@ -1415,7 +1641,7 @@ namespace AndroidSideloader
                                 };
                                 t3.Tick += timer_Tick4;
                                 t3.Start();
-                                Program.form.changeTitle($"Sideloading apk ({filename})");
+                                Program.form.changeTitle($"Sideloading APK ({filename})");
 
                                 Thread t2 = new Thread(() =>
                                 {
@@ -1433,8 +1659,8 @@ namespace AndroidSideloader
                                 t3.Stop();
                                 if (Directory.Exists($"{pathname}\\{cmdout}"))
                                 {
-                                    _ = Logger.Log($"Copying obb folder to device- {cmdout}");
-                                    Program.form.changeTitle($"Copying obb folder to device...");
+                                    _ = Logger.Log($"Copying OBB folder to device- {cmdout}");
+                                    Program.form.changeTitle($"Copying OBB folder to device...");
                                     Thread t1 = new Thread(() =>
                                     {
                                         if (!string.IsNullOrEmpty(cmdout))
@@ -1543,8 +1769,7 @@ namespace AndroidSideloader
                                     await Task.Delay(100);
                                 }
 
-                                changeTitle(" \n\n");
-
+                                changeTitle("");
                             }
                         }
                         else
@@ -1586,8 +1811,8 @@ namespace AndroidSideloader
 
                             if (Directory.Exists($"{pathname}\\{cmdout}"))
                             {
-                                _ = Logger.Log($"Copying obb folder to device- {cmdout}");
-                                Program.form.changeTitle($"Copying obb folder to device...");
+                                _ = Logger.Log($"Copying OBB folder to device- {cmdout}");
+                                Program.form.changeTitle($"Copying OBB folder to device...");
                                 Thread t2 = new Thread(() =>
                                 {
                                     if (!string.IsNullOrEmpty(cmdout))
@@ -1605,7 +1830,7 @@ namespace AndroidSideloader
                                     await Task.Delay(100);
                                 }
 
-                                changeTitle(" \n\n");
+                                changeTitle("");
                             }
                         }
                     }
@@ -1628,8 +1853,8 @@ namespace AndroidSideloader
                         {
                             IsBackground = true
                         };
-                        _ = Logger.Log($"Copying obb folder to device- {path}");
-                        Program.form.changeTitle($"Copying obb folder to device ({filename})");
+                        _ = Logger.Log($"Copying OBB folder to device- {path}");
+                        Program.form.changeTitle($"Copying OBB folder to device ({filename})");
                         t1.Start();
 
                         while (t1.IsAlive)
@@ -1638,7 +1863,7 @@ namespace AndroidSideloader
                         }
 
                         Directory.Delete(foldername, true);
-                        changeTitle(" \n\n");
+                        changeTitle("");
                     }
                     // BMBF Zip extraction then push to BMBF song folder on Quest.
                     else if (extension == ".zip" && settings.BMBFChecked)
@@ -1688,7 +1913,7 @@ namespace AndroidSideloader
                             await Task.Delay(100);
                         }
 
-                        changeTitle(" \n\n");
+                        changeTitle("");
                     }
                 }
             }
@@ -1711,7 +1936,7 @@ namespace AndroidSideloader
             }
 
             DragDropLbl.Visible = true;
-            DragDropLbl.Text = "Drag apk or obb";
+            DragDropLbl.Text = "Drag APK or OBB";
             changeTitle(DragDropLbl.Text);
         }
 
@@ -1720,7 +1945,7 @@ namespace AndroidSideloader
             DragDropLbl.Visible = false;
             DragDropLbl.Text = String.Empty;
 
-            changeTitle(" \n\n");
+            changeTitle("");
         }
 
         private List<string> newGamesList = new List<string>();
@@ -1729,7 +1954,6 @@ namespace AndroidSideloader
         private readonly List<UpdateGameData> gamesToAskForUpdate = new List<UpdateGameData>();
         public static bool loaded = false;
         public static string rookienamelist;
-        private bool errorOnList;
         public static bool updates = false;
         public static bool newapps = false;
         public static int newint = 0;
@@ -1738,373 +1962,473 @@ namespace AndroidSideloader
         public static bool either = false;
         private bool _allItemsInitialized = false;
 
-
         private async void initListView(bool favoriteView)
         {
+            var sw = Stopwatch.StartNew();
+            Logger.Log("initListView started");
+
             int upToDateCount = 0;
             int updateAvailableCount = 0;
             int newerThanListCount = 0;
-            rookienamelist = String.Empty;
             loaded = false;
+
+            var rookienameSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var rookienameListBuilder = new StringBuilder();
+
             string installedApps = settings.InstalledApps;
             string[] packageList = installedApps.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+            if (packageList.Length == 0)
+            {
+                Logger.Log("No installed packages found, continuing in download-only mode");
+                nodeviceonstart = true;
+            }
+
             string[] blacklist = new string[] { };
             string[] whitelist = new string[] { };
-            if (File.Exists($"{settings.MainDir}\\nouns\\blacklist.txt"))
-            {
-                blacklist = File.ReadAllLines($"{settings.MainDir}\\nouns\\blacklist.txt");
-            }
-            if (File.Exists($"{settings.MainDir}\\nouns\\whitelist.txt"))
-            {
-                whitelist = File.ReadAllLines($"{settings.MainDir}\\nouns\\whitelist.txt");
-            }
 
-            List<ListViewItem> GameList = new List<ListViewItem>();
-            GameList.Clear();
+            // Load blacklists/whitelists concurrently
+            await Task.WhenAll(
+                Task.Run(() =>
+                {
+                    if (File.Exists($"{settings.MainDir}\\nouns\\blacklist.txt"))
+                    {
+                        blacklist = File.ReadAllLines($"{settings.MainDir}\\nouns\\blacklist.txt");
+                    }
 
-            List<string> rookieList = new List<string>();
-            List<string> installedGames = packageList.ToList();
-            List<string> blacklistItems = blacklist.ToList();
-            List<string> whitelistItems = whitelist.ToList();
-            errorOnList = false;
-            //This is for the black list, but temporarily will be the whitelist
-            //This list contains games that we are actually going to upload
-            newGamesToUploadList = whitelistItems.Intersect(installedGames, StringComparer.OrdinalIgnoreCase).ToList();
-            progressBar.Style = ProgressBarStyle.Marquee;
+                    string localBlacklistPath = Path.Combine(settings.MainDir, "blacklist.json");
+                    if (File.Exists(localBlacklistPath))
+                    {
+                        try
+                        {
+                            string jsonContent = File.ReadAllText(localBlacklistPath);
+                            string[] localBlacklist = JsonConvert.DeserializeObject<string[]>(jsonContent);
+                            if (localBlacklist != null && localBlacklist.Length > 0)
+                            {
+                                var combined = new List<string>(blacklist);
+                                combined.AddRange(localBlacklist);
+                                blacklist = combined.ToArray();
+                                Logger.Log($"Loaded {localBlacklist.Length} entries from local blacklist");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log($"Error loading local blacklist: {ex.Message}", LogLevel.WARNING);
+                        }
+                    }
+                }),
+                Task.Run(() =>
+                {
+                    if (File.Exists($"{settings.MainDir}\\nouns\\whitelist.txt"))
+                    {
+                        whitelist = File.ReadAllLines($"{settings.MainDir}\\nouns\\whitelist.txt");
+                    }
+                })
+            );
+
+            Logger.Log($"Blacklist/Whitelist loaded in {sw.ElapsedMilliseconds}ms");
+
+            int expectedGameCount = SideloaderRCLONE.games.Count > 0 ? SideloaderRCLONE.games.Count : 500;
+            var GameList = new List<ListViewItem>(expectedGameCount);
+            var rookieList = new List<string>(expectedGameCount);
+
+            var installedGamesSet = new HashSet<string>(packageList, StringComparer.OrdinalIgnoreCase);
+            var blacklistSet = new HashSet<string>(blacklist, StringComparer.OrdinalIgnoreCase);
+            var whitelistSet = new HashSet<string>(whitelist, StringComparer.OrdinalIgnoreCase);
+
+            newGamesToUploadList = whitelistSet.Intersect(installedGamesSet, StringComparer.OrdinalIgnoreCase).ToList();
+
             if (SideloaderRCLONE.games.Count > 5)
             {
-                Thread t1 = new Thread(() =>
+                progressBar.Style = ProgressBarStyle.Marquee;
+
+                // Use full dumpsys to get all version codes at once
+                Dictionary<string, ulong> installedVersions = new Dictionary<string, ulong>(packageList.Length, StringComparer.OrdinalIgnoreCase);
+
+                await Task.Run(() =>
+                {
+                    Logger.Log("Fetching version codes via full dumpsys...");
+                    var versionSw = Stopwatch.StartNew();
+
+                    try
+                    {
+                        var dump = ADB.RunAdbCommandToString("shell dumpsys package").Output;
+                        Logger.Log($"Dumpsys returned {dump.Length} chars in {versionSw.ElapsedMilliseconds}ms");
+                        versionSw.Restart();
+
+                        string currentPkg = null;
+
+                        foreach (var rawLine in dump.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            var line = rawLine.TrimStart();
+
+                            if (line.StartsWith("Package [", StringComparison.Ordinal))
+                            {
+                                var start = line.IndexOf('[');
+                                var end = line.IndexOf(']');
+                                if (start >= 0 && end > start)
+                                {
+                                    currentPkg = line.Substring(start + 1, end - start - 1);
+                                }
+                                else
+                                {
+                                    currentPkg = null;
+                                }
+                                continue;
+                            }
+
+                            if (currentPkg != null && line.StartsWith("versionCode=", StringComparison.Ordinal))
+                            {
+                                var after = line.Substring(12);
+                                int spaceIdx = after.IndexOf(' ');
+                                var digits = spaceIdx > 0 ? after.Substring(0, spaceIdx) : after;
+                                if (ulong.TryParse(digits, out var v))
+                                {
+                                    // Only store if it's an installed package we care about
+                                    if (installedGamesSet.Contains(currentPkg))
+                                    {
+                                        installedVersions[currentPkg] = v;
+                                    }
+                                }
+                                currentPkg = null;
+                                continue;
+                            }
+                        }
+
+                        Logger.Log($"Parsed {installedVersions.Count} version codes in {versionSw.ElapsedMilliseconds}ms");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"'dumpsys package' failed: {ex.Message}", LogLevel.ERROR);
+                    }
+
+                    Logger.Log($"Version fetch total: {versionSw.ElapsedMilliseconds}ms");
+                });
+
+                Logger.Log($"Version codes collected in {sw.ElapsedMilliseconds}ms");
+                sw.Restart();
+
+                // Precompute cloud max version per package
+                var cloudMaxVersionByPackage = new Dictionary<string, ulong>(SideloaderRCLONE.games.Count, StringComparer.OrdinalIgnoreCase);
+                foreach (var release in SideloaderRCLONE.games)
+                {
+                    string pkg = release[SideloaderRCLONE.PackageNameIndex];
+                    ulong v = 0;
+                    try
+                    {
+                        v = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(release[SideloaderRCLONE.VersionCodeIndex]));
+                    }
+                    catch
+                    {
+                        v = 0;
+                    }
+
+                    if (cloudMaxVersionByPackage.TryGetValue(pkg, out var existing))
+                    {
+                        if (v > existing) cloudMaxVersionByPackage[pkg] = v;
+                    }
+                    else
+                    {
+                        cloudMaxVersionByPackage[pkg] = v;
+                    }
+                }
+
+                Logger.Log($"Cloud versions precomputed in {sw.ElapsedMilliseconds}ms");
+                sw.Restart();
+
+                // Process games on background thread
+                await Task.Run(() =>
                 {
                     foreach (string[] release in SideloaderRCLONE.games)
                     {
-                        rookieList.Add(release[SideloaderRCLONE.PackageNameIndex].ToString());
-                        if (!rookienamelist.Contains(release[SideloaderRCLONE.GameNameIndex].ToString()))
+                        string packagename = release[SideloaderRCLONE.PackageNameIndex];
+                        rookieList.Add(packagename);
+
+                        string gameName = release[SideloaderRCLONE.GameNameIndex];
+                        if (rookienameSet.Add(gameName))
                         {
-                            rookienamelist += release[SideloaderRCLONE.GameNameIndex].ToString() + "\n";
+                            rookienameListBuilder.Append(gameName).Append('\n');
                         }
 
-                        ListViewItem Game = new ListViewItem(release);
+                        var item = new ListViewItem(release);
 
-                        Color colorFont_installedGame = ColorTranslator.FromHtml("#3c91e6");
-                        lblUpToDate.ForeColor = colorFont_installedGame;
-                        Color colorFont_updateAvailable = ColorTranslator.FromHtml("#4daa57");
-                        lblUpdateAvailable.ForeColor = colorFont_updateAvailable;
-                        Color colorFont_donateGame = ColorTranslator.FromHtml("#cb9cf2");
-                        lblNeedsDonate.ForeColor = colorFont_donateGame;
-                        Color colorFont_error = ColorTranslator.FromHtml("#f52f57");
-
-                        foreach (string packagename in packageList)
+                        if (installedVersions.TryGetValue(packagename, out ulong installedVersionInt))
                         {
-                            if (string.Equals(release[SideloaderRCLONE.PackageNameIndex], packagename))
+                            item.ForeColor = ColorInstalled;
+
+                            try
                             {
-                                Game.ForeColor = colorFont_installedGame;
-                                string InstalledVersionCode;
-                                InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {packagename} | grep versionCode -F\"").Output;
-                                InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
-                                InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingAfterFirst(InstalledVersionCode, " ");
-                                try
+                                cloudMaxVersionByPackage.TryGetValue(packagename, out ulong cloudVersionInt);
+
+                                if (installedVersionInt == cloudVersionInt)
                                 {
-                                    ulong installedVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
-                                    ulong cloudVersionInt = 0;
-                                    foreach (string[] releaseGame in SideloaderRCLONE.games)
+                                    upToDateCount++;
+                                }
+                                else if (installedVersionInt < cloudVersionInt)
+                                {
+                                    item.ForeColor = ColorUpdateAvailable;
+                                    updateAvailableCount++;
+                                }
+                                else if (installedVersionInt > cloudVersionInt)
+                                {
+                                    newerThanListCount++;
+                                    bool dontget = blacklistSet.Contains(packagename);
+
+                                    if (!dontget)
                                     {
-                                        if (string.Equals(releaseGame[SideloaderRCLONE.PackageNameIndex], packagename))
-                                        {
-                                            ulong releaseGameVersionCode = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(releaseGame[SideloaderRCLONE.VersionCodeIndex]));
-                                            if (releaseGameVersionCode > cloudVersionInt)
-                                            {
-                                                Logger.Log($"Updated cloudVersionInt for {packagename} from {cloudVersionInt} to {releaseGameVersionCode}");
-                                                cloudVersionInt = releaseGameVersionCode;
-                                            }
-                                        }
-                                    }
-                                    if (installedVersionInt == cloudVersionInt)
-                                    {
-                                        upToDateCount++;
-                                    }
-                                    //ulong cloudVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(release[SideloaderRCLONE.VersionCodeIndex]));
+                                        item.ForeColor = ColorDonateGame;
 
-                                    _ = Logger.Log($"Checked game {release[SideloaderRCLONE.GameNameIndex]}; cloudversion={cloudVersionInt} localversion={installedVersionInt}");
-                                    if (installedVersionInt < cloudVersionInt)
-                                    {
-                                        Game.ForeColor = colorFont_updateAvailable;
-                                        updateAvailableCount++;
-                                    }
-
-                                    if (installedVersionInt > cloudVersionInt)
-                                    {
-                                        newerThanListCount++;
-                                        bool dontget = false;
-                                        if (blacklist.Contains(packagename))
-                                        {
-                                            dontget = true;
-                                        }
-
-                                        if (!dontget)
-                                        {
-                                            Game.ForeColor = colorFont_donateGame;
-                                        }
-
-                                        string RlsName = Sideloader.PackageNametoGameName(packagename);
-                                        string GameName = Sideloader.gameNameToSimpleName(RlsName);
-
-                                        if (!dontget && !updatesNotified && !isworking && updint < 6 && !settings.SubmittedUpdates.Contains(packagename))
+                                        if (!updatesNotified && !isworking && updint < 6 && !settings.SubmittedUpdates.Contains(packagename))
                                         {
                                             either = true;
                                             updates = true;
                                             updint++;
-                                            UpdateGameData gameData = new UpdateGameData(GameName, packagename, installedVersionInt);
+
+                                            string RlsName = Sideloader.PackageNametoGameName(packagename);
+                                            string GameName = Sideloader.gameNameToSimpleName(RlsName);
+                                            var gameData = new UpdateGameData(GameName, packagename, installedVersionInt);
                                             gamesToAskForUpdate.Add(gameData);
                                         }
                                     }
                                 }
-                                catch (Exception ex)
-                                {
-                                    Game.ForeColor = colorFont_error;
-                                    _ = Logger.Log($"An error occured while rendering game {release[SideloaderRCLONE.GameNameIndex]} in ListView", LogLevel.ERROR);
-                                    _ = ADB.RunAdbCommandToString($"shell \"dumpsys package {packagename}\"");
-                                    _ = Logger.Log($"ExMsg: {ex.Message}Installed:\"{InstalledVersionCode}\" Cloud:\"{Utilities.StringUtilities.KeepOnlyNumbers(release[SideloaderRCLONE.VersionCodeIndex])}\"", LogLevel.ERROR);
-                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                item.ForeColor = ColorError;
+                                Logger.Log($"An error occurred while rendering game {release[SideloaderRCLONE.GameNameIndex]} in ListView", LogLevel.ERROR);
+                                Logger.Log($"ExMsg: {ex.Message}", LogLevel.ERROR);
                             }
                         }
+
                         if (favoriteView)
                         {
-                            if (settings.FavoritedGames.Contains(Game.SubItems[1].Text))
+                            if (settings.FavoritedGames.Contains(item.SubItems[1].Text))
                             {
-                                GameList.Add(Game);
+                                GameList.Add(item);
                             }
                         }
                         else
                         {
-                            GameList.Add(Game);
+                            GameList.Add(item);
                         }
                     }
-                })
-                {
-                    IsBackground = true
-                };
-                t1.Start();
-                while (t1.IsAlive)
-                {
-                    await Task.Delay(100);
-                }
+                });
+
+                rookienamelist = rookienameListBuilder.ToString();
+
+                Logger.Log($"Game processing completed in {sw.ElapsedMilliseconds}ms");
+                sw.Restart();
             }
             else if (!isOffline)
             {
                 SwitchMirrors();
-                if (!isOffline){
+                if (!isOffline)
+                {
                     initListView(false);
                 }
+                return;
             }
 
-
-            if (blacklistItems.Count == 0 && GameList.Count == 0 && !settings.NodeviceMode && !isOffline)
+            if (blacklistSet.Count == 0 && GameList.Count == 0 && !settings.NodeviceMode && !isOffline)
             {
-                //This means either the user does not have headset connected or the blacklist
-                //did not load, so we are just going to skip everything
-                errorOnList = true;
-                _ = FlexibleMessageBox.Show(Program.form, $"Rookie seems to have failed to load all resources. Please try restarting Rookie a few times.\nIf error still persists please disable any VPN or firewalls (rookie uses direct download so a VPN is not needed)\nIf this error still persists try a system reboot, reinstalling the program, and lastly posting the problem on telegram.", "Error loading blacklist or game list!");
-            }
-            newGamesList = installedGames.Except(rookieList, StringComparer.OrdinalIgnoreCase).Except(blacklistItems, StringComparer.OrdinalIgnoreCase).ToList();
-            int topItemIndex = 0;
-            try
-            {
-                if (gamesListView.Items.Count > 1)
-                {
-                    topItemIndex = gamesListView.TopItem.Index;
-                }
-            }
-            catch (Exception ex)
-            {
-                _ = FlexibleMessageBox.Show(Program.form, $"Error building game list: {ex.Message}");
+                _ = FlexibleMessageBox.Show(Program.form,
+                    "Rookie seems to have failed to load all resources. Please try restarting Rookie a few times.\nIf error still persists please disable any VPN or firewalls (rookie uses direct download so a VPN is not needed)\nIf this error still persists try a system reboot, reinstalling the program, and lastly posting the problem on telegram.",
+                    "Error loading blacklist or game list!");
             }
 
-            try
+            var rookieSet = new HashSet<string>(rookieList, StringComparer.OrdinalIgnoreCase);
+            newGamesList = installedGamesSet
+                .Except(rookieSet, StringComparer.OrdinalIgnoreCase)
+                .Except(blacklistSet, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (blacklistSet.Count > 100 && rookieList.Count > 100)
             {
-                if (topItemIndex != 0)
-                {
-                    gamesListView.TopItem = gamesListView.Items[topItemIndex];
-                }
+                await ProcessNewApps(newGamesList, blacklistSet.ToList());
             }
-            catch (Exception ex)
-            {
-                _ = FlexibleMessageBox.Show(Program.form, $"Error building game list: {ex.Message}");
-            }
-            Thread t2 = new Thread(() =>
-            {
-                if (!errorOnList)
-                {
 
-                    //This is for games that we already have on rookie and user has an update
-                    if (blacklistItems.Count > 100 && rookieList.Count > 100)
-                    {
-                        foreach (UpdateGameData gameData in gamesToAskForUpdate)
-                        {
-                            if (!updatesNotified && !settings.SubmittedUpdates.Contains(gameData.Packagename))
-                            {
-                                either = true;
-                                updates = true;
-                                donorApps += gameData.GameName + ";" + gameData.Packagename + ";" + gameData.InstalledVersionInt + ";" + "Update" + "\n";
-                            }
-
-                        }
-                    }
-
-                    //This is for WhiteListed Games, they will be asked for first, if we don't get many bogus prompts we can remove this entire duplicate section.
-                    /* foreach (string newGamesToUpload in newGamesToUploadList)
-                       {
-                           string RlsName = Sideloader.PackageNametoGameName(newGamesToUpload);
-
-                           //start of code to get official Release Name from APK by first extracting APK then running AAPT on it.
-                           string apppath = ADB.RunAdbCommandToString($"shell pm path {newGamesToUpload}").Output;
-                           apppath = Utilities.StringUtilities.RemoveEverythingBeforeFirst(apppath, "/");
-                           apppath = Utilities.StringUtilities.RemoveEverythingAfterFirst(apppath, "\r\n");
-                           if (File.Exists($"C:\\RSL\\platform-tools\\base.apk"))
-                               File.Delete($"C:\\RSL\\platform-tools\\base.apk");
-                           ADB.RunAdbCommandToString($"pull \"{apppath}\"");
-                           string cmd = $"\"C:\\RSL\\platform-tools\\aapt.exe\" dump badging \"C:\\RSL\\platform-tools\\base.apk\" | findstr -i \"application-label\"";
-                           string workingpath = "C:\\RSL\\platform-tools\\aapt.exe";
-                           string ReleaseName = ADB.RunCommandToString(cmd, workingpath).Output;
-                           ReleaseName = Utilities.StringUtilities.RemoveEverythingBeforeFirst(ReleaseName, "'");
-                           ReleaseName = Utilities.StringUtilities.RemoveEverythingAfterFirst(ReleaseName, "\r\n");
-                           ReleaseName = ReleaseName.Replace("'", "");
-                           File.Delete($"C:\\RSL\\platform-tools\\base.apk");
-                           //end
-
-                           string GameName = Sideloader.gameNameToSimpleName(RlsName);
-                           Logger.Log(newGamesToUpload);
-                           if (!updatesnotified)
-                           {
-                               DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, $"You have an in demand game:\n\n{ReleaseName}\n\nRSL can AUTOMATICALLY UPLOAD the clean files to a shared drive in the background,\nthis is the only way to keep the apps up to date for everyone.\n\nNOTE: Rookie will only extract the APK/OBB which contain NO personal information whatsoever.", "CONTRIBUTE CLEAN FILES?", MessageBoxButtons.YesNo);
-                               if (dialogResult == DialogResult.Yes)
-                               {
-                                   string InstalledVersionCode;
-                                   InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {newGamesToUpload} | grep versionCode -F\"").Output;
-                                   InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
-                                   InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingAfterFirst(InstalledVersionCode, " ");
-                                   ulong installedVersionInt = UInt64.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
-                               }
-                               else
-                               {
-                                   return;
-                               }
-                           }
-                       }*/
-                    //This is for games that are not blacklisted and we dont have on rookie
-                    string baseApkPath = Path.Combine(Environment.CurrentDirectory, "platform-tools", "base.apk");
-                    if (blacklistItems.Count > 100 && rookieList.Count > 100 && !noAppCheck)
-                    {
-                        foreach (string newGamesToUpload in newGamesList)
-                        {
-                            try
-                            {
-                                changeTitle("Unrecognized App Found. Downloading APK to take a closer look. (This may take a minute)");
-                                bool onapplist = false;
-                                string NewApp = settings.NonAppPackages + "\n" + settings.AppPackages;
-                                if (NewApp.Contains(newGamesToUpload))
-                                {
-                                    onapplist = true;
-                                    Logger.Log($"App '{newGamesToUpload}' found in app list.", LogLevel.INFO);
-                                }
-
-                                string RlsName = Sideloader.PackageNametoGameName(newGamesToUpload);
-                                Logger.Log($"Release name obtained: {RlsName}", LogLevel.INFO);
-                                if (!updatesNotified && !onapplist && newint < 6)
-                                {
-                                    either = true;
-                                    newapps = true;
-                                    Logger.Log($"New app detected: {newGamesToUpload}, starting APK extraction and AAPT process.", LogLevel.INFO);
-                                    //start of code to get official Release Name from APK by first extracting APK then running AAPT on it.
-                                    string apppath = ADB.RunAdbCommandToString($"shell pm path {newGamesToUpload}").Output;
-                                    Logger.Log($"ADB command 'pm path' executed. Path: {apppath}", LogLevel.INFO);
-                                    apppath = Utilities.StringUtilities.RemoveEverythingBeforeFirst(apppath, "/");
-                                    apppath = Utilities.StringUtilities.RemoveEverythingAfterFirst(apppath, "\r\n");
-                                    if (File.Exists(baseApkPath))
-                                    {
-                                        File.Delete(baseApkPath);
-                                        Logger.Log("Old base.apk file deleted.", LogLevel.INFO);
-                                    }
-
-                                    Logger.Log($"Pulling APK from path: {apppath}", LogLevel.INFO);
-                                    _ = ADB.RunAdbCommandToString($"pull \"{apppath}\"");
-                                    string cmd = $"\"{aaptPath}\" dump badging \"{baseApkPath}\" | findstr -i \"application-label\"";
-                                    Logger.Log($"Running AAPT command: {cmd}", LogLevel.INFO);
-                                    string ReleaseName = ADB.RunCommandToString(cmd, aaptPath).Output;
-                                    Logger.Log($"AAPT command output: {ReleaseName}", LogLevel.INFO);
-                                    ReleaseName = Utilities.StringUtilities.RemoveEverythingBeforeFirst(ReleaseName, "'");
-                                    ReleaseName = Utilities.StringUtilities.RemoveEverythingAfterFirst(ReleaseName, "\r\n");
-                                    ReleaseName = ReleaseName.Replace("'", "");
-                                    File.Delete(baseApkPath);
-                                    Logger.Log("Base.apk deleted after extracting release name.", LogLevel.INFO);
-                                    if (ReleaseName.Contains("Microsoft Windows"))
-                                    {
-                                        ReleaseName = RlsName;
-                                        Logger.Log("Release name fallback to RlsName due to Microsoft Windows detection.", LogLevel.INFO);
-                                    }
-                                    Logger.Log($"Final Release Name: {ReleaseName}", LogLevel.INFO);
-                                    //end
-                                    string GameName = Sideloader.gameNameToSimpleName(RlsName);
-                                    //Logger.Log(newGamesToUpload);
-                                    Logger.Log($"Fetching version code for app: {newGamesToUpload}", LogLevel.INFO);
-                                    string InstalledVersionCode;
-                                    InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {newGamesToUpload} | grep versionCode -F\"").Output;
-                                    Logger.Log($"Version code command output: {InstalledVersionCode}", LogLevel.INFO);
-                                    InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
-                                    InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingAfterFirst(InstalledVersionCode, " ");
-                                    ulong installedVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
-                                    Logger.Log($"Parsed installed version code: {installedVersionInt}", LogLevel.INFO);
-                                    donorApps += ReleaseName + ";" + newGamesToUpload + ";" + installedVersionInt + ";" + "New App" + "\n";
-                                    Logger.Log($"Donor app info updated: {ReleaseName}; {newGamesToUpload}; {installedVersionInt}", LogLevel.INFO);
-                                    newint++;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger.Log($"Exception occured in initListView (Unrecognized App Found): {ex.Message}", LogLevel.ERROR);
-                            }
-                        }
-                    }
-                }
-            })
-            {
-                IsBackground = true
-            };
-            t2.Start();
-            while (t2.IsAlive)
-            {
-                await Task.Delay(100);
-            }
             progressBar.Style = ProgressBarStyle.Continuous;
 
             if (either && !updatesNotified && !noAppCheck)
             {
-                changeTitle("                                                \n\n");
-                DonorsListViewForm DonorForm = new DonorsListViewForm();
-                _ = DonorForm.ShowDialog(this);
+                changeTitle("");
+                DonorsListViewForm donorForm = new DonorsListViewForm();
+                _ = donorForm.ShowDialog(this);
                 _ = Focus();
             }
-            changeTitle("Populating update list...                               \n\n");
-            lblUpToDate.Text = $"[{upToDateCount}] UP TO DATE";
-            lblUpdateAvailable.Text = $"[{updateAvailableCount}] UPDATE AVAILABLE";
-            lblNeedsDonate.Text = $"[{newerThanListCount}] NEWER THAN LIST";
-            ListViewItem[] arr = GameList.ToArray();
-            gamesListView.BeginUpdate();
-            gamesListView.Items.Clear();
-            gamesListView.Items.AddRange(arr);
-            gamesListView.EndUpdate();
-            changeTitle("                                                \n\n");
+
+            // Update UI with computed list
+            this.Invoke(() =>
+            {
+                changeTitle("Populating update list...\n\n");
+                int installedTotal = upToDateCount + updateAvailableCount;
+                btnInstalled.Text = $"{installedTotal} INSTALLED";
+                btnInstalled.ForeColor = ColorInstalled;
+                if (updateAvailableCount != 1) btnUpdateAvailable.Text = $"{updateAvailableCount} UPDATES AVAILABLE";
+                else btnUpdateAvailable.Text = $"{updateAvailableCount} UPDATE AVAILABLE";
+                btnUpdateAvailable.ForeColor = ColorUpdateAvailable;
+                btnNewerThanList.Text = $"{newerThanListCount} NEWER THAN LIST";
+                btnNewerThanList.ForeColor = ColorDonateGame;
+
+                ListViewItem[] arr = GameList.ToArray();
+                gamesListView.BeginUpdate();
+                gamesListView.Items.Clear();
+                gamesListView.Items.AddRange(arr);
+                gamesListView.EndUpdate();
+            });
+
+            Logger.Log($"UI updated in {sw.ElapsedMilliseconds}ms");
+            sw.Restart();
+
+            changeTitle("");
+
             if (!_allItemsInitialized)
             {
                 _allItems = gamesListView.Items.Cast<ListViewItem>().ToList();
-                _allItemsInitialized = true; // Set the flag to true after initialization
+
+                _searchIndex = new Dictionary<string, List<ListViewItem>>(_allItems.Count * 2, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var item in _allItems)
+                {
+                    string gameNameKey = item.Text;
+                    if (!_searchIndex.TryGetValue(gameNameKey, out var list))
+                    {
+                        list = new List<ListViewItem>(1);
+                        _searchIndex[gameNameKey] = list;
+                    }
+                    list.Add(item);
+
+                    if (item.SubItems.Count > 1)
+                    {
+                        string releaseName = item.SubItems[1].Text;
+                        if (!_searchIndex.TryGetValue(releaseName, out var releaseList))
+                        {
+                            releaseList = new List<ListViewItem>(1);
+                            _searchIndex[releaseName] = releaseList;
+                        }
+                        releaseList.Add(item);
+                    }
+                }
+
+                _allItemsInitialized = true;
             }
+
             loaded = true;
+            Logger.Log($"initListView total completed in {sw.ElapsedMilliseconds}ms");
+
+            // Now that ListView is fully populated and _allItems is initialized,
+            // switch to the user's preferred view
+            this.Invoke(() =>
+            {
+                if (isGalleryView)
+                {
+                    // Now it's safe to switch - ListView has been visible and populated
+                    gamesListView.Visible = false;
+                    gamesGalleryView.Visible = true;
+                    _galleryDataSource = null;
+                    PopulateGalleryView();
+                }
+            });
+        }
+
+        private async Task ProcessNewApps(List<string> newGamesList, List<string> blacklistItems)
+        {
+            foreach (UpdateGameData gameData in gamesToAskForUpdate)
+            {
+                if (!updatesNotified && !settings.SubmittedUpdates.Contains(gameData.Packagename))
+                {
+                    either = true;
+                    updates = true;
+                    donorApps += gameData.GameName + ";" + gameData.Packagename + ";" + gameData.InstalledVersionInt + ";" + "Update" + "\n";
+                }
+            }
+
+            string baseApkPath = Path.Combine(Environment.CurrentDirectory, "platform-tools", "base.apk");
+            if (blacklistItems.Count > 100 && !noAppCheck)
+            {
+                foreach (string newGamesToUpload in newGamesList)
+                {
+                    try
+                    {
+                        changeTitle("Unrecognized App found. Downloading APK to take a closer look. (This may take a minute)");
+                        bool onapplist = false;
+                        string NewApp = settings.NonAppPackages + "\n" + settings.AppPackages;
+                        if (NewApp.Contains(newGamesToUpload))
+                        {
+                            onapplist = true;
+                            Logger.Log($"App '{newGamesToUpload}' found in app list.", LogLevel.INFO);
+                        }
+
+                        string RlsName = Sideloader.PackageNametoGameName(newGamesToUpload);
+                        Logger.Log($"Release name obtained: {RlsName}", LogLevel.INFO);
+
+                        if (!updatesNotified && !onapplist && newint < 6)
+                        {
+                            either = true;
+                            newapps = true;
+                            Logger.Log($"New app detected: {newGamesToUpload}, starting APK extraction and AAPT process.", LogLevel.INFO);
+
+                            string apppath = ADB.RunAdbCommandToString($"shell pm path {newGamesToUpload}").Output;
+                            Logger.Log($"ADB command 'pm path' executed. Path: {apppath}", LogLevel.INFO);
+                            apppath = Utilities.StringUtilities.RemoveEverythingBeforeFirst(apppath, "/");
+                            apppath = Utilities.StringUtilities.RemoveEverythingAfterFirst(apppath, "\r\n");
+
+                            if (File.Exists(baseApkPath))
+                            {
+                                File.Delete(baseApkPath);
+                                Logger.Log("Old base.apk file deleted.", LogLevel.INFO);
+                            }
+
+                            Logger.Log($"Pulling APK from path: {apppath}", LogLevel.INFO);
+                            _ = ADB.RunAdbCommandToString($"pull \"{apppath}\"");
+
+                            string cmd = $"\"{aaptPath}\" dump badging \"{baseApkPath}\" | findstr -i \"application-label\"";
+                            Logger.Log($"Running AAPT command: {cmd}", LogLevel.INFO);
+                            string ReleaseName = ADB.RunCommandToString(cmd, aaptPath).Output;
+                            Logger.Log($"AAPT command output: {ReleaseName}", LogLevel.INFO);
+
+                            ReleaseName = Utilities.StringUtilities.RemoveEverythingBeforeFirst(ReleaseName, "'");
+                            ReleaseName = Utilities.StringUtilities.RemoveEverythingAfterFirst(ReleaseName, "\r\n");
+                            ReleaseName = ReleaseName.Replace("'", "");
+                            File.Delete(baseApkPath);
+                            Logger.Log("Base.apk deleted after extracting release name.", LogLevel.INFO);
+
+                            if (ReleaseName.Contains("Microsoft Windows"))
+                            {
+                                ReleaseName = RlsName;
+                                Logger.Log("Release name fallback to RlsName due to Microsoft Windows detection.", LogLevel.INFO);
+                            }
+
+                            Logger.Log($"Final Release Name: {ReleaseName}", LogLevel.INFO);
+
+                            string GameName = Sideloader.gameNameToSimpleName(RlsName);
+                            Logger.Log($"Fetching version code for app: {newGamesToUpload}", LogLevel.INFO);
+
+                            string InstalledVersionCode;
+                            InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {newGamesToUpload} | grep versionCode -F\"").Output;
+                            Logger.Log($"Version code command output: {InstalledVersionCode}", LogLevel.INFO);
+                            InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
+                            InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingAfterFirst(InstalledVersionCode, " ");
+                            ulong installedVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
+                            Logger.Log($"Parsed installed version code: {installedVersionInt}", LogLevel.INFO);
+
+                            donorApps += ReleaseName + ";" + newGamesToUpload + ";" + installedVersionInt + ";" + "New App" + "\n";
+                            Logger.Log($"Donor app info updated: {ReleaseName}; {newGamesToUpload}; {installedVersionInt}", LogLevel.INFO);
+                            newint++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"Exception occured in ProcessNewApps: {ex.Message}", LogLevel.ERROR);
+                    }
+                }
+            }
         }
 
         private static readonly HttpClient HttpClient = new HttpClient();
         public static async void doUpload()
         {
-            Program.form.changeTitle("Uploading to server, you can continue to use Rookie while it uploads in the background.");
+            Program.form.changeTitle("Uploading to server, you can continue to use Rookie while it uploads.");
             Program.form.ULLabel.Visible = true;
             isworking = true;
             string deviceCodeName = ADB.RunAdbCommandToString("shell getprop ro.product.device").Output.ToLower().Trim();
@@ -2150,7 +2474,7 @@ namespace AndroidSideloader
                         {
                             Directory.Delete($"{settings.MainDir}\\{game.Pckgcommand}", true);
                         }
-                        Program.form.changeTitle("Uploading to server, you may continue to use Rookie while it uploads.");
+                        Program.form.changeTitle("Uploading to server, you can continue to use Rookie while it uploads.");
 
                         // Get size of pending zip upload and write to text file
                         long zipSize = new FileInfo($"{settings.MainDir}\\{gameZipName}").Length;
@@ -2192,7 +2516,7 @@ namespace AndroidSideloader
                 isworking = false;
                 isuploading = false;
                 Program.form.ULLabel.Visible = false;
-                Program.form.changeTitle(" \n\n");
+                Program.form.changeTitle("");
             }
             else
             {
@@ -2249,7 +2573,7 @@ namespace AndroidSideloader
                 await Task.Delay(100);
             }
 
-            changeTitle("Extracting obb if it exists....");
+            changeTitle("Extracting OBB if it exists....");
             Thread t2 = new Thread(() =>
             {
                 _ = ADB.RunAdbCommandToString($"pull \"/sdcard/Android/obb/{packagename}\" \"{settings.MainDir}\\{packagename}\"");
@@ -2280,6 +2604,7 @@ namespace AndroidSideloader
         private async Task initMirrors()
         {
             _ = Logger.Log("Looking for Additional Mirrors...");
+
             int index = 0;
             await Task.Run(() => remotesList.Invoke(() =>
             {
@@ -2287,10 +2612,70 @@ namespace AndroidSideloader
                 remotesList.Items.Clear();
             }));
 
-            string[] mirrors = await Task.Run(() => RCLONE.runRcloneCommand_DownloadConfig("listremotes").Output.Split('\n'));
+            // Retry logic for RCLONE availability
+            string[] mirrors = null;
+            int maxRetries = 10;
+            int retryCount = 0;
+
+            while (retryCount < maxRetries)
+            {
+                try
+                {
+                    mirrors = await Task.Run(() => RCLONE.runRcloneCommand_DownloadConfig("listremotes").Output.Split('\n'));
+                    break; // Success, exit retry loop
+                }
+                catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 2) // File not found
+                {
+                    retryCount++;
+                    Logger.Log($"RCLONE not ready yet, attempt {retryCount}/{maxRetries}. Waiting...", LogLevel.WARNING);
+
+                    if (retryCount >= maxRetries)
+                    {
+                        Logger.Log("RCLONE failed to initialize after multiple attempts", LogLevel.ERROR);
+                        _ = FlexibleMessageBox.Show(Program.form,
+                            "RCLONE could not be initialized. Please check your internet connection and restart the application.\n\nIf the problem persists, try running as Administrator.",
+                            "RCLONE Initialization Failed",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+
+                        // Fallback: Add only public mirror if available
+                        if (hasPublicConfig)
+                        {
+                            await Task.Run(() => remotesList.Invoke(() =>
+                            {
+                                _ = remotesList.Items.Add("Public");
+                                remotesList.SelectedIndex = 0;
+                            }));
+                            currentRemote = "Public";
+                            UsingPublicConfig = true;
+                        }
+                        return;
+                    }
+
+                    // Wait before retry (exponential backoff: 500ms, 1s, 2s, 4s, ...)
+                    await Task.Delay(Math.Min(500 * (int)Math.Pow(2, retryCount - 1), 5000));
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Unexpected error initializing mirrors: {ex.Message}", LogLevel.ERROR);
+                    _ = FlexibleMessageBox.Show(Program.form,
+                        $"Error initializing mirrors: {ex.Message}",
+                        "Mirror Initialization Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    return;
+                }
+            }
+
+            if (mirrors == null)
+            {
+                Logger.Log("Failed to retrieve mirrors list", LogLevel.ERROR);
+                return;
+            }
 
             _ = Logger.Log("Loaded following mirrors: ");
             int itemsCount = 0;
+
             if (hasPublicConfig)
             {
                 _ = remotesList.Items.Add("Public");
@@ -2314,7 +2699,7 @@ namespace AndroidSideloader
             {
                 await Task.Run(() => remotesList.Invoke(() =>
                 {
-                    remotesList.SelectedIndex = 0; // Set mirror to first item in array.
+                    remotesList.SelectedIndex = 0;
                     string selectedRemote = remotesList.SelectedItem.ToString();
                     currentRemote = "";
 
@@ -2328,34 +2713,145 @@ namespace AndroidSideloader
         }
 
         public static string processError = string.Empty;
-
         public static string currentRemote = string.Empty;
-
         private readonly string wrDelimiter = "-------";
-
 
         private void deviceDropContainer_Click(object sender, EventArgs e)
         {
-            ShowSubMenu(deviceDropContainer);
-            deviceDrop.Text = (deviceDrop.Text == "▼ DEVICE ▼") ? "▶ DEVICE ◀" : "▼ DEVICE ▼";
+            ToggleContainer(deviceDropContainer, deviceDrop);
         }
 
         private void sideloadContainer_Click(object sender, EventArgs e)
         {
-            ShowSubMenu(sideloadContainer);
-            sideloadDrop.Text = (sideloadDrop.Text == "▼ SIDELOAD ▼") ? "▶ SIDELOAD ◀" : "▼ SIDELOAD ▼";
+            ToggleContainer(sideloadContainer, sideloadDrop);
         }
 
         private void installedAppsMenuContainer_Click(object sender, EventArgs e)
         {
-            ShowSubMenu(installedAppsMenuContainer);
-            installedAppsMenu.Text = (installedAppsMenu.Text == "▼ INSTALLED APPS ▼") ? "▶ INSTALLED APPS ◀" : "▼ INSTALLED APPS ▼";
+            ToggleContainer(installedAppsMenuContainer, installedAppsMenu);
         }
 
         private void backupDrop_Click(object sender, EventArgs e)
         {
-            ShowSubMenu(backupContainer);
-            backupDrop.Text = (backupDrop.Text == "▼ BACKUP / RESTORE ▼") ? "▶ BACKUP / RESTORE ◀" : "▼ BACKUP / RESTORE ▼";
+            ToggleContainer(backupContainer, backupDrop);
+        }
+
+        private void otherDrop_Click(object sender, EventArgs e)
+        {
+            ToggleContainer(otherContainer, otherDrop);
+        }
+
+        private async void AnimateContainerHeight(Panel container, bool expand)
+        {
+            // Disable AutoSize during animation
+            container.AutoSize = false;
+
+            // Store the target height before any changes
+            int targetHeight = expand ? container.PreferredSize.Height : 0;
+            int startHeight = expand ? 0 : container.Height;
+
+            // For collapsing: hide immediately if already at 0
+            if (!expand && container.Height == 0)
+            {
+                container.Visible = false;
+                container.AutoSize = true;
+                return;
+            }
+
+            // Set height before making visible to prevent flicker on expand
+            container.Height = startHeight;
+
+            // Only show if expanding (collapsing container is already visible)
+            if (expand)
+            {
+                container.Visible = true;
+            }
+
+            // Suspend layout to prevent child controls from flickering
+            container.SuspendLayout();
+
+            // Stopwatch for consistent timing, 1.5ms per pixel height
+            int durationMs = (int)Math.Round(container.PreferredSize.Height * 1.5);
+            var stopwatch = Stopwatch.StartNew();
+
+            while (stopwatch.ElapsedMilliseconds < durationMs)
+            {
+                float progress = (float)stopwatch.ElapsedMilliseconds / durationMs;
+                progress = Math.Min(1f, progress);
+
+                // Ease-out curve
+                float easedProgress = 1f - (1f - progress) * (1f - progress);
+
+                int newHeight = (int)(startHeight + (targetHeight - startHeight) * easedProgress);
+                container.Height = Math.Max(0, newHeight);
+
+                // Yield to UI thread, but don't rely on delay accuracy
+                await Task.Delay(1);
+            }
+
+            // Ensure final state
+            container.Height = targetHeight;
+
+            // Resume layout before hiding to ensure clean state
+            container.ResumeLayout(false);
+
+            if (!expand)
+            {
+                container.Visible = false;
+            }
+
+            container.AutoSize = true;
+        }
+
+        private void CollapseAllContainersInstant(Panel exceptThis = null)
+        {
+            var containers = new[]
+            {
+        deviceDropContainer,
+        sideloadContainer,
+        installedAppsMenuContainer,
+        backupContainer,
+        otherContainer
+    };
+
+            foreach (var container in containers)
+            {
+                if (container != exceptThis && container.Visible)
+                {
+                    // Hide before any layout changes to prevent flicker
+                    container.Visible = false;
+                    container.SuspendLayout();
+                    container.AutoSize = false;
+                    container.Height = 0;
+                    container.ResumeLayout(false);
+                    container.AutoSize = true;
+                }
+            }
+        }
+
+        private void ToggleContainer(Panel containerToToggle, Button dropButton)
+        {
+            // Collapse all other containers instantly
+            CollapseAllContainersInstant(containerToToggle);
+
+            // Check if we're collapsing (container is currently visible and has height)
+            bool isExpanding = !containerToToggle.Visible || containerToToggle.Height == 0;
+
+            if (isExpanding)
+            {
+                // Animate expansion
+                AnimateContainerHeight(containerToToggle, true);
+            }
+            else
+            {
+                // Close instantly without animation - hide before any layout changes
+                containerToToggle.Visible = false;
+                containerToToggle.SuspendLayout();
+                containerToToggle.AutoSize = false;
+                containerToToggle.Height = 0;
+                containerToToggle.ResumeLayout(false);
+                containerToToggle.AutoSize = true;
+            }
         }
 
         private void settingsButton_Click(object sender, EventArgs e)
@@ -2368,83 +2864,24 @@ namespace AndroidSideloader
         {
             string about = $@"Version: {Updater.LocalVersion}
 
- - Software orignally coded by rookie.wtf
- - Thanks to the VRP Mod Staff, data team, and anyone else we missed!
- - Thanks to VRP staff of the present and past: fenopy, Maxine, JarJarBlinkz
-        pmow, SytheZN, Roma/Rookie, Flow, Ivan, Kaladin, HarryEffinPotter, John, Sam Hoque
+Credits & Acknowledgements
+-----------------------------------------
+• Software originally developed by: rookie.wtf
+• Special thanks to the VRP Mod Staff, Data Team, and all contributors
+• VRP Staff (past & present):
+   fenopy, Maxine, JarJarBlinkz, pmow, SytheZN, Roma/Rookie, 
+   Flow, Ivan, Kaladin, HarryEffinPotter, John, Sam Hoque, JP
 
- - Additional Thanks and Credits:
- - -- rclone https://rclone.org/
- - -- 7zip https://www.7-zip.org/
- - -- ErikE: https://stackoverflow.com/users/57611/erike
- - -- Serge Weinstock (SergeUtils)
- - -- Mike Gold https://www.c-sharpcorner.com/members/mike-gold2
- ";
+Additional Thanks & Resources
+-----------------------------------------
+• rclone - https://rclone.org
+• 7-Zip - https://www.7-zip.org 
+• ErikE - https://stackoverflow.com/users/57611/erike  
+• Serge Weinstock (SergeUtils)  
+• Mike Gold - https://www.c-sharpcorner.com/members/mike-gold2
+";
 
             _ = FlexibleMessageBox.Show(Program.form, about);
-        }
-
-        private async void ADBWirelessEnable_Click(object sender, EventArgs e)
-        {
-            bool Manual;
-            DialogResult res = FlexibleMessageBox.Show(Program.form, "Do you want Rookie to find the IP or enter it manually\nYes = Automatic\nNo = Manual", "Automatic/Manual", MessageBoxButtons.YesNo);
-            Manual = res == DialogResult.No;
-            if (Manual)
-            {
-                adbCmd_CommandBox.Visible = true;
-                adbCmd_CommandBox.Clear();
-                adbCmd_Label.Visible = true;
-                adbCmd_Label.Text = "Enter your Quest IP Address";
-                adbCmd_background.Visible = true;
-                manualIP = true;
-                _ = adbCmd_CommandBox.Focus();
-                Program.form.changeTitle("Attempting manual connection...", false);
-            }
-            else
-            {
-                DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, "Make sure your Quest is plugged in VIA USB then press OK, if you need a moment press Cancel and come back when you're ready.", "Connect Quest now.", MessageBoxButtons.OKCancel);
-                if (dialogResult == DialogResult.Cancel)
-                {
-                    return;
-                }
-
-                _ = ADB.RunAdbCommandToString("devices");
-                _ = ADB.RunAdbCommandToString("tcpip 5555");
-
-                _ = FlexibleMessageBox.Show(Program.form, "Press OK to get your Quest's local IP address.", "Obtain local IP address", MessageBoxButtons.OKCancel);
-                await Task.Delay(1000);
-                string input = ADB.RunAdbCommandToString("shell ip route").Output;
-
-                settings.WirelessADB = true;
-                settings.Save();
-                _ = new string[] { String.Empty };
-                string[] strArrayOne = input.Split(' ');
-                if (strArrayOne[0].Length > 7)
-                {
-                    string IPaddr = strArrayOne[8];
-                    string IPcmnd = "connect " + IPaddr + ":5555";
-                    _ = FlexibleMessageBox.Show(Program.form, $"Your Quest's local IP address is: {IPaddr}\n\nPlease disconnect your Quest then wait 2 seconds.\nOnce it is disconnected hit OK", "", MessageBoxButtons.OK);
-                    await Task.Delay(2000);
-                    _ = ADB.RunAdbCommandToString(IPcmnd);
-                    _ = await Program.form.CheckForDevice();
-                    Program.form.changeTitlebarToDevice();
-                    Program.form.showAvailableSpace();
-                    settings.IPAddress = IPcmnd;
-                    settings.Save();
-                    try
-                    {
-                        File.WriteAllText(storedIpPath, IPcmnd);
-                    }
-                    catch (Exception ex) { Logger.Log($"Unable to write to StoredIP.txt due to {ex.Message}", LogLevel.ERROR); }
-                    ADB.wirelessadbON = true;
-                    _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_available 1");
-                    _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_enabled 1");
-                }
-                else
-                {
-                    _ = FlexibleMessageBox.Show(Program.form, "No device connected! Connect quest via USB and start again!");
-                }
-            }
         }
 
         private async void listApkButton_Click(object sender, EventArgs e)
@@ -2462,6 +2899,7 @@ namespace AndroidSideloader
             isLoading = false;
             await refreshCurrentMirror(titleMessage);
         }
+
         private async Task refreshCurrentMirror(string titleMessage)
         {
             changeTitle(titleMessage);
@@ -2486,10 +2924,14 @@ namespace AndroidSideloader
                 await Task.Delay(100);
             }
 
+            // Reset the initialized flag so initListView rebuilds _allItems with current install status
+            _allItemsInitialized = false;
+            _galleryDataSource = null;
+
             initListView(false);
             isLoading = false;
 
-            changeTitle(" \n\n");
+            changeTitle("");
         }
 
         private static readonly HttpClient client = new HttpClient();
@@ -2599,7 +3041,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                 if (gamesListView.SelectedItems.Count == 0)
                 {
                     progressBar.Style = ProgressBarStyle.Continuous;
-                    changeTitle("You must select a game from the Game List!");
+                    changeTitle("You must select a game from the game list!");
                     return;
                 }
                 string namebox = gamesListView.SelectedItems[0].ToString();
@@ -2712,7 +3154,9 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                             else
                             {
                                 DialogResult res = FlexibleMessageBox.Show(Program.form,
-                                    $"{gameName} exists in destination directory.\r\nWould you like to overwrite it?",
+                                    $"{gameName} already exists in destination directory.\n\n" +
+                                    "Yes = Overwrite and re-download.\n" +
+                                    "No  = Use existing files and install from them.",
                                     "Download again?", MessageBoxButtons.YesNo);
 
                                 doDownload = res == DialogResult.Yes;
@@ -2770,7 +3214,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                     t1.IsBackground = true;
                     t1.Start();
 
-                    changeTitle("Downloading game " + gameName, false);
+                    changeTitle("Downloading game " + gameName);
                     speedLabel.Text = "Starting download...";
                     etaLabel.Text = "Please wait...";
 
@@ -2840,18 +3284,18 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
 
                     if (removedownloading)
                     {
-                        changeTitle("Keep game files?", false);
+                        changeTitle("Keep game files?");
                         try
                         {
                             cleanupActiveDownloadStatus();
 
                             DialogResult res = FlexibleMessageBox.Show(
-                                $"{gameName} already has some downloaded files, do you want to delete them?\n\nClick NO to keep the files if you wish to resume your download later.",
+                                $"{gameName} exists in destination directory, do you want to delete it?\n\nClick NO to keep the files if you wish to resume your download later.",
                                 "Delete Temporary Files?", MessageBoxButtons.YesNo);
 
                             if (res == DialogResult.Yes)
                             {
-                                changeTitle("Deleting game files", false);
+                                changeTitle("Deleting game files");
                                 if (UsingPublicConfig)
                                 {
                                     if (Directory.Exists($"{settings.DownloadDir}\\{gameNameHash}"))
@@ -2921,7 +3365,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                                 }));
                                 try
                                 {
-                                    changeTitle("Extracting " + gameName, false);
+                                    changeTitle("Extracting " + gameName);
                                     Zip.ExtractFile($"{settings.DownloadDir}\\{gameNameHash}\\{gameNameHash}.7z.001", $"{settings.DownloadDir}", PublicConfigFile.Password);
                                     Program.form.changeTitle("");
                                 }
@@ -2958,7 +3402,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                             quotaTries = 0;
                             progressBar.Value = 0;
                             progressBar.Style = ProgressBarStyle.Continuous;
-                            changeTitle("Installing game apk " + gameName, false);
+                            changeTitle("Installing game APK " + gameName);
                             etaLabel.Text = "ETA: Wait for install...";
                             speedLabel.Text = "DLS: Finished";
                             if (File.Exists(Path.Combine(settings.DownloadDir, gameName, "install.txt")))
@@ -2976,14 +3420,16 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
 
                             Debug.WriteLine("Game Folder is: " + settings.DownloadDir + "\\" + gameName);
                             Debug.WriteLine("FILES IN GAME FOLDER: ");
+
                             if (isinstalltxt)
                             {
-                                if (!settings.NodeviceMode || !nodeviceonstart && DeviceConnected)
+                                // Only sideload if device is connected and sideloading not disabled
+                                if (!settings.NodeviceMode && !nodeviceonstart && DeviceConnected)
                                 {
                                     Thread installtxtThread = new Thread(() =>
                                     {
                                         output += Sideloader.RunADBCommandsFromFile(installTxtPath);
-                                        changeTitle(" \n\n");
+                                        changeTitle("");
                                     });
                                     installtxtThread.Start();
                                     while (installtxtThread.IsAlive)
@@ -2993,12 +3439,13 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                                 }
                                 else
                                 {
-                                    output.Output = "\n--- SIDELOADING DISABLED ---\nAll tasks finished.";
+                                    output.Output = "Download complete (installation skipped).\n\nConnect a device or enable sideloading to install.";
                                 }
                             }
                             else
                             {
-                                if (!settings.NodeviceMode || !nodeviceonstart && DeviceConnected)
+                                // Only sideload if device is connected and sideloading not disabled
+                                if (!settings.NodeviceMode && !nodeviceonstart && DeviceConnected)
                                 {
                                     // Find the APK file to install
                                     string apkFile = files.FirstOrDefault(file => Path.GetExtension(file) == ".apk");
@@ -3015,7 +3462,8 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                                         t.Start();
                                         Thread apkThread = new Thread(() =>
                                         {
-                                            Program.form.changeTitle($"Sideloading apk...");
+                                            Program.form.changeTitle($"Sideloading APK...");
+                                            etaLabel.Text = "Sideloading APK...";
                                             output += ADB.Sideload(apkFile, packagename);
                                         })
                                         {
@@ -3034,7 +3482,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                                             deleteOBB(packagename);
                                             Thread obbThread = new Thread(() =>
                                             {
-                                                changeTitle($"Copying {packagename} obb to device...");
+                                                changeTitle($"Copying {packagename} OBB to device...");
                                                 ADB.RunAdbCommandToString($"shell mkdir \"/sdcard/Android/obb/{packagename}\"");
                                                 output += ADB.RunAdbCommandToString($"push \"{settings.DownloadDir}\\{gameName}\\{packagename}\" \"/sdcard/Android/obb\"");
                                                 Program.form.changeTitle("");
@@ -3063,16 +3511,17 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                                 }
                                 else
                                 {
-                                    output.Output = "\n--- SIDELOADING DISABLED ---\nAll tasks finished.\n";
+                                    output.Output = "Download complete (installation skipped).\n\nConnect a device or enable sideloading to install.";
                                 }
                                 changeTitle($"Installation of {gameName} completed.");
                             }
-                            if (settings.DeleteAllAfterInstall)
+                            // Only delete if setting enabled and device was connected (so we actually installed)
+                            if (settings.DeleteAllAfterInstall && !nodeviceonstart && DeviceConnected)
                             {
-                                changeTitle("Deleting game files", false);
+                                changeTitle("Deleting game files");
                                 try { Directory.Delete(settings.DownloadDir + "\\" + gameName, true); } catch (Exception ex) { _ = FlexibleMessageBox.Show(Program.form, $"Error deleting game files: {ex.Message}"); }
                             }
-                            //Remove current game
+                            // Remove current game
                             cleanupActiveDownloadStatus();
                         }
                     }
@@ -3086,9 +3535,10 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                 }
                 if (!obbsMismatch)
                 {
-                    changeTitle("Refreshing games list, please wait...         \n");
+                    changeTitle("Refreshing games list, please wait...\n");
                     showAvailableSpace();
                     listAppsBtn();
+
                     if (!updateAvailableClicked && !upToDate_Clicked && !NeedsDonation_Clicked && !settings.NodeviceMode && !gamesQueueList.Any())
                     {
                         initListView(false);
@@ -3100,11 +3550,10 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                     progressBar.Style = ProgressBarStyle.Continuous;
                     etaLabel.Text = "ETA: Finished Queue";
                     speedLabel.Text = "DLS: Finished Queue";
-                    ProgressText.Text = "";
                     gamesAreDownloading = false;
                     isinstalling = false;
 
-                    changeTitle(" \n\n");
+                    changeTitle("");
                 }
             }
         }
@@ -3130,7 +3579,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
 
             try
             {
-                changeTitle("Comparing obbs...");
+                changeTitle("Comparing OBBs...");
                 Logger.Log("Comparing OBBs");
 
                 DirectoryInfo localFolder = new DirectoryInfo(localFolderPath);
@@ -3153,8 +3602,8 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
             }
             catch (FormatException ex)
             {
-                _ = FlexibleMessageBox.Show(Program.form, "The OBB Folder on the Quest seems to not exist or be empty\nPlease redownload the game or sideload the obb manually.", "OBB Size Undetectable!", MessageBoxButtons.OK);
-                Logger.Log($"Unable to compare obbs with the exception: {ex.Message}", LogLevel.ERROR);
+                _ = FlexibleMessageBox.Show(Program.form, "The OBB Folder on the Quest seems to not exist or be empty\nPlease redownload the game or sideload the OBB manually.", "OBB Size Undetectable!", MessageBoxButtons.OK);
+                Logger.Log($"Unable to compare OBBs with the exception: {ex.Message}", LogLevel.ERROR);
                 FlexibleMessageBox.Show($"Error comparing OBB sizes: {ex.Message}");
                 return false;
             }
@@ -3194,7 +3643,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
 
             await Task.Run(() =>
             {
-                changeTitle($"Copying {packageName} obb to device...");
+                changeTitle($"Copying {packageName} OBB to device...");
                 output += ADB.RunAdbCommandToString($"push \"{obbFolderPath}\" \"{OBBFolderPath}\"");
                 Program.form.changeTitle("");
             });
@@ -3220,11 +3669,10 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
             progressBar.Style = ProgressBarStyle.Continuous;
             etaLabel.Text = "ETA: Finished Queue";
             speedLabel.Text = "DLS: Finished Queue";
-            ProgressText.Text = string.Empty;
             gamesAreDownloading = false;
             isinstalling = false;
 
-            changeTitle(" \n\n");
+            changeTitle("");
         }
 
         static long localFolderSize(DirectoryInfo localFolder)
@@ -3283,7 +3731,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                     _ = ADB.RunAdbCommandToString("devices");
                     _ = ADB.RunAdbCommandToString($"pull /sdcard/Android/data/{CurrPCKG} \"{Environment.CurrentDirectory}\"");
                     _ = Sideloader.UninstallGame(CurrPCKG);
-                    changeTitle("Reinstalling Game");
+                    changeTitle("Reinstalling game");
                     _ = ADB.RunAdbCommandToString($"install -g \"{CurrAPK}\"");
                     _ = ADB.RunAdbCommandToString($"push \"{Environment.CurrentDirectory}\\{CurrPCKG}\" /sdcard/Android/data/");
 
@@ -3293,16 +3741,16 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                         Directory.Delete(Path.Combine(Environment.CurrentDirectory, CurrPCKG), true);
                     }
 
-                    changeTitle(" \n\n");
+                    changeTitle("");
                     return;
                 }
                 else
                 {
-                    DialogResult dialogResult2 = FlexibleMessageBox.Show(Program.form, "This install is taking an unusual amount of time, you can keep waiting or cancel the install.\n" +
+                    DialogResult dialogResult2 = FlexibleMessageBox.Show(Program.form, "This installation is taking an unusual amount of time, you can keep waiting or abort the installation.\n" +
                         "Would you like to cancel the installation?", "Cancel install?", MessageBoxButtons.YesNo);
                     if (dialogResult2 == DialogResult.Yes)
                     {
-                        changeTitle("Stopping Install...");
+                        changeTitle("Stopping installation...");
                         _ = ADB.RunAdbCommandToString("kill-server");
                         _ = ADB.RunAdbCommandToString("devices");
                     }
@@ -3329,7 +3777,6 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                 }
                 else
                 {
-                    if (!settings.TrailersOn) { Sideloader.killWebView2(); }
                     RCLONE.killRclone();
                 }
             }
@@ -3344,30 +3791,32 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                 }
                 else
                 {
-                    if (!settings.TrailersOn) { Sideloader.killWebView2(); }
                     RCLONE.killRclone();
                     _ = ADB.RunAdbCommandToString("kill-server");
                 }
             }
             else
             {
-                if (!settings.TrailersOn) { Sideloader.killWebView2(); }
                 RCLONE.killRclone();
                 _ = ADB.RunAdbCommandToString("kill-server");
             }
 
         }
 
-        private async void ADBWirelessDisable_Click(object sender, EventArgs e)
+        private async void ADBWirelessToggle_Click(object sender, EventArgs e)
         {
-            DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, "Are you sure you want to delete your saved Quest IP address/command?", "Remove saved IP address?", MessageBoxButtons.YesNo);
-            if (dialogResult == DialogResult.No)
+            // Check if wireless ADB is currently enabled
+            bool isWirelessEnabled = File.Exists(storedIpPath) && !string.IsNullOrEmpty(settings.IPAddress);
+
+            if (isWirelessEnabled)
             {
-                _ = FlexibleMessageBox.Show(Program.form, "Saved IP data reset cancelled.");
-                return;
-            }
-            else
-            {
+                // Disable wireless ADB
+                DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, "Are you sure you want to disable wireless ADB and remove your saved IP address?", "Disable Wireless ADB?", MessageBoxButtons.YesNo);
+                if (dialogResult == DialogResult.No)
+                {
+                    return;
+                }
+
                 ADB.wirelessadbON = false;
                 _ = FlexibleMessageBox.Show(Program.form, "Make sure your device is not connected to USB and press OK.");
                 _ = ADB.RunAdbCommandToString("devices");
@@ -3382,18 +3831,147 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                 settings.Save();
                 _ = Program.form.GetDeviceID();
                 Program.form.changeTitlebarToDevice();
-                _ = FlexibleMessageBox.Show(Program.form, "Relaunch Rookie to complete the process and switch back to USB adb.");
+                _ = FlexibleMessageBox.Show(Program.form, "Wireless ADB disabled. Relaunch Rookie to switch back to USB.");
                 if (File.Exists(storedIpPath))
                 {
                     File.Delete(storedIpPath);
                 }
             }
+            else
+            {
+                // Enable wireless ADB
+                DialogResult res = FlexibleMessageBox.Show(Program.form, "Do you want Rookie to find the IP automatically or enter it manually?\nYes = Automatic\nNo = Manual", "Automatic/Manual", MessageBoxButtons.YesNo);
+                bool manual = res == DialogResult.No;
+
+                if (manual)
+                {
+                    // Show a simple input dialog for IP address
+                    string ipAddress = ShowManualIPDialog();
+                    if (!string.IsNullOrEmpty(ipAddress))
+                    {
+                        string IPcmnd = "connect " + ipAddress + ":5555";
+                        await Task.Delay(1000);
+                        string errorChecker = ADB.RunAdbCommandToString(IPcmnd).Output;
+                        if (errorChecker.Contains("cannot resolve host") || errorChecker.Contains("cannot connect to"))
+                        {
+                            changeTitle("");
+                            _ = FlexibleMessageBox.Show(Program.form, "Manual ADB over WiFi Connection failed\nExiting...", "Manual IP Connection Failed!", MessageBoxButtons.OK);
+                        }
+                        else
+                        {
+                            _ = await CheckForDevice();
+                            showAvailableSpace();
+                            settings.IPAddress = IPcmnd;
+                            settings.Save();
+                            try { File.WriteAllText(storedIpPath, IPcmnd); }
+                            catch (Exception ex) { Logger.Log($"Unable to write to StoredIP.txt due to {ex.Message}", LogLevel.ERROR); }
+                            ADB.wirelessadbON = true;
+                            _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_available 1");
+                            _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_enabled 1");
+                            changeTitlebarToDevice();
+                        }
+                    }
+                    Program.form.changeTitle("", true);
+                }
+                else
+                {
+                    DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, "Make sure your Quest is plugged in VIA USB then press OK.", "Connect Quest now.", MessageBoxButtons.OKCancel);
+                    if (dialogResult == DialogResult.Cancel)
+                    {
+                        return;
+                    }
+
+                    _ = ADB.RunAdbCommandToString("devices");
+                    _ = ADB.RunAdbCommandToString("tcpip 5555");
+
+                    _ = FlexibleMessageBox.Show(Program.form, "Press OK to get your Quest's local IP address.", "Obtain local IP address", MessageBoxButtons.OKCancel);
+                    await Task.Delay(1000);
+                    string input = ADB.RunAdbCommandToString("shell ip route").Output;
+
+                    settings.WirelessADB = true;
+                    settings.Save();
+                    string[] strArrayOne = input.Split(' ');
+                    if (strArrayOne[0].Length > 7)
+                    {
+                        string IPaddr = strArrayOne[8];
+                        string IPcmnd = "connect " + IPaddr + ":5555";
+                        _ = FlexibleMessageBox.Show(Program.form, $"Your Quest's local IP address is: {IPaddr}\n\nPlease disconnect your Quest then wait 2 seconds.\nOnce it is disconnected hit OK", "", MessageBoxButtons.OK);
+                        await Task.Delay(2000);
+                        _ = ADB.RunAdbCommandToString(IPcmnd);
+                        _ = await Program.form.CheckForDevice();
+                        Program.form.changeTitlebarToDevice();
+                        Program.form.showAvailableSpace();
+                        settings.IPAddress = IPcmnd;
+                        settings.Save();
+                        try
+                        {
+                            File.WriteAllText(storedIpPath, IPcmnd);
+                        }
+                        catch (Exception ex) { Logger.Log($"Unable to write to StoredIP.txt: {ex.Message}", LogLevel.ERROR); }
+                        ADB.wirelessadbON = true;
+                        _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_available 1");
+                        _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_enabled 1");
+                    }
+                    else
+                    {
+                        _ = FlexibleMessageBox.Show(Program.form, "No device connected! Connect Quest via USB and try again.");
+                    }
+                }
+            }
+
+            // Update button text to reflect new state
+            UpdateWirelessADBButtonText();
         }
 
-        private void otherDrop_Click(object sender, EventArgs e)
+        private string ShowManualIPDialog()
         {
-            ShowSubMenu(otherContainer);
-            otherDrop.Text = (otherDrop.Text == "▼ OTHER ▼") ? "▶ OTHER ◀" : "▼ OTHER ▼";
+            using (Form dialog = new Form())
+            {
+                dialog.Text = "Enter Quest IP Address";
+                dialog.Size = new Size(350, 150);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MaximizeBox = false;
+                dialog.MinimizeBox = false;
+                dialog.BackColor = Color.FromArgb(20, 24, 29);
+                dialog.ForeColor = Color.White;
+
+                var label = new Label
+                {
+                    Text = "Enter your Quest's IP Address:",
+                    ForeColor = Color.White,
+                    AutoSize = true,
+                    Location = new Point(15, 15)
+                };
+
+                var textBox = new TextBox
+                {
+                    Location = new Point(15, 40),
+                    Size = new Size(300, 24),
+                    BackColor = Color.FromArgb(40, 44, 52),
+                    ForeColor = Color.White,
+                    BorderStyle = BorderStyle.FixedSingle
+                };
+
+                var okButton = CreateStyledButton("OK", DialogResult.OK, new Point(155, 75));
+                var cancelButton = CreateStyledButton("Cancel", DialogResult.Cancel, new Point(240, 75), false);
+
+                dialog.Controls.AddRange(new Control[] { label, textBox, okButton, cancelButton });
+                dialog.AcceptButton = okButton;
+                dialog.CancelButton = cancelButton;
+
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    return textBox.Text.Trim();
+                }
+            }
+            return null;
+        }
+
+        private void UpdateWirelessADBButtonText()
+        {
+            bool isWirelessEnabled = File.Exists(storedIpPath) && !string.IsNullOrEmpty(settings.IPAddress);
+            ADBWirelessToggle.Text = isWirelessEnabled ? "DISABLE WIRELESS ADB" : "ENABLE WIRELESS ADB";
         }
 
         private void gamesQueListBox_MouseClick(object sender, MouseEventArgs e)
@@ -3469,28 +4047,10 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                     }
                 }
                 searchTextBox.Visible = false;
-                adbCmd_background.Visible = false;
-
-                if (adbCmd_CommandBox.Visible)
-                {
-                    changeTitle($"Entered command: ADB {adbCmd_CommandBox.Text}");
-                    _ = ADB.RunAdbCommandToString(adbCmd_CommandBox.Text);
-                    changeTitle(" \n\n");
-                }
-                adbCmd_CommandBox.Visible = false;
-                adbCmd_Label.Visible = false;
-                adbCmd_background.Visible = false;
-
             }
             if (e.KeyChar == (char)Keys.Escape)
             {
                 searchTextBox.Visible = false;
-                adbCmd_background.Visible = false;
-                adbCmd_CommandBox.Visible = false;
-                adbCmd_btnToggleUpdates.Visible = false;
-                adbCmd_btnSend.Visible = false;
-                adbCmd_Label.Visible = false;
-                adbCmd_background.Visible = false;
             }
         }
 
@@ -3501,7 +4061,6 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                 // Show search box.
                 searchTextBox.Clear();
                 searchTextBox.Visible = true;
-                adbCmd_background.Visible = true;
                 _ = searchTextBox.Focus();
             }
             if (keyData == (Keys.Control | Keys.L))
@@ -3552,13 +4111,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
             }
             if (keyData == (Keys.Control | Keys.R))
             {
-                adbCmd_CommandBox.Visible = true;
-                adbCmd_btnToggleUpdates.Visible = true;
-                adbCmd_btnSend.Visible = true;
-                adbCmd_CommandBox.Clear();
-                adbCmd_Label.Visible = true;
-                adbCmd_background.Visible = true;
-                _ = adbCmd_CommandBox.Focus();
+                btnRunAdbCmd_Click(this, EventArgs.Empty);
             }
             if (keyData == (Keys.Control | Keys.F4))
             {
@@ -3591,15 +4144,40 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
             }
             if (keyData == Keys.F5)
             {
-                _ = GetDeviceID();
-                _ = FlexibleMessageBox.Show(Program.form, "If your device is not Connected, hit reconnect first or it won't work!\nNOTE: THIS MAY TAKE UP TO 60 SECONDS.\nThere will be a Popup text window with all updates available when it is done!", "Is device connected?", MessageBoxButtons.OKCancel);
+                if (!DeviceConnected && Devices.Count == 0)
+                {
+                    FlexibleMessageBox.Show(Program.form,
+                        "No device connected. Please connect your Quest and click 'RECONNECT DEVICE' first.",
+                        "Device Required",
+                        MessageBoxButtons.OK);
+                    return true;
+                }
+
+                changeTitle("Refreshing games list...");
+
+                // Reset the initialized flag so initListView rebuilds _allItems with current install status
+                _allItemsInitialized = false;
+                _galleryDataSource = null;
+
                 listAppsBtn();
                 initListView(false);
             }
             bool dialogIsUp = false;
             if (keyData == Keys.F1 && !dialogIsUp)
             {
-                _ = FlexibleMessageBox.Show(Program.form, "Shortcuts:\nF1 -------- Shortcuts List\nF3 -------- Quest Options\nF4 -------- Rookie Settings\nF5 -------- Refresh Gameslist\n\nCTRL+R - Run custom ADB command.\nCTRL+L - Copy entire list of Game Names to clipboard seperated by new lines.\nALT+L - Copy entire list of Game Names to clipboard seperated by commas(in a paragraph).CTRL+P - Copy packagename to clipboard on game select.\nCTRL + F4 - Instantly relaunch Rookie Sideloader.");
+                _ = FlexibleMessageBox.Show(Program.form,
+@"Keyboard Shortcuts
+
+F1   - Show shortcuts list
+F3   - Open Quest Settings
+F4   - Open Rookie Settings
+F5   - Refresh games list
+
+CTRL + R   - Run custom ADB command
+CTRL + L   - Copy all game names (one per line)
+ALT + L     - Copy all game names (comma-separated in a single line)
+CTRL + P   - Copy package name of selected game
+CTRL + F4  - Instantly relaunch Rookie Sideloader");
             }
             if (keyData == (Keys.Control | Keys.P))
             {
@@ -3619,8 +4197,6 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
 
         }
 
-
-
         private async void searchTextBox_TextChanged(object sender, EventArgs e)
         {
             _debounceTimer.Stop();
@@ -3635,279 +4211,527 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
             _cts?.Cancel();
 
             string searchTerm = searchTextBox.Text;
-            if (!string.IsNullOrEmpty(searchTerm))
+
+            // Ignore placeholder text
+            if (searchTerm == "Search..." || string.IsNullOrWhiteSpace(searchTerm))
             {
-                _cts = new CancellationTokenSource();
+                RestoreFullList();
+                return;
+            }
 
-                try
+            _cts = new CancellationTokenSource();
+            var token = _cts.Token;
+
+            try
+            {
+                // Perform search using index for faster lookups
+                var matches = await Task.Run(() =>
                 {
-                    var matches = _allItems
-                        .Where(i => i.Text.IndexOf(searchTerm, StringComparison.CurrentCultureIgnoreCase) >= 0
-                                || i.SubItems[1].Text.IndexOf(searchTerm, StringComparison.CurrentCultureIgnoreCase) >= 0)
-                        .ToList();
+                    if (token.IsCancellationRequested) return new List<ListViewItem>();
 
-                    gamesListView.BeginUpdate(); // Improve UI performance
-                    gamesListView.Items.Clear();
-                    foreach (var match in matches)
+                    var results = new HashSet<ListViewItem>(); // Avoid duplicates
+
+                    // Try exact match first using index
+                    if (_searchIndex != null && _searchIndex.TryGetValue(searchTerm, out var exactMatches))
                     {
-                        gamesListView.Items.Add(match);
+                        foreach (var match in exactMatches)
+                        {
+                            if (token.IsCancellationRequested) return new List<ListViewItem>();
+                            results.Add(match);
+                        }
                     }
 
-                    gamesListView.EndUpdate(); // End the update to refresh the UI
-                }
-                catch (OperationCanceledException)
+                    // Then do partial matches using index
+                    if (_searchIndex != null)
+                    {
+                        foreach (var kvp in _searchIndex)
+                        {
+                            if (token.IsCancellationRequested) return new List<ListViewItem>();
+
+                            if (kvp.Key.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                foreach (var item in kvp.Value)
+                                {
+                                    results.Add(item);
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Fallback to linear search if index not built yet
+                        foreach (var item in _allItems)
+                        {
+                            if (token.IsCancellationRequested) return new List<ListViewItem>();
+
+                            if (item.Text.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                (item.SubItems.Count > 1 && item.SubItems[1].Text.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0))
+                            {
+                                results.Add(item);
+                            }
+                        }
+                    }
+
+                    return results.ToList();
+                }, token);
+
+                // Check if cancelled before updating UI
+                if (token.IsCancellationRequested) return;
+
+                // Update UI on main thread
+                gamesListView.BeginUpdate();
+                try
                 {
-                    // A new search was initiated before the current search completed.
+                    gamesListView.Items.Clear();
+                    if (matches.Count > 0)
+                    {
+                        gamesListView.Items.AddRange(matches.ToArray());
+                    }
+                }
+                finally
+                {
+                    gamesListView.EndUpdate();
+                }
+
+                // Refresh gallery view if active
+                if (isGalleryView && gamesGalleryView.Visible)
+                {
+                    _galleryDataSource = matches;
+                    PopulateGalleryView();
                 }
             }
-            else
+            catch (OperationCanceledException)
             {
-                initListView(false);
+                // Search was cancelled - this is expected behavior
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error during search: {ex.Message}", LogLevel.ERROR);
             }
         }
 
-        private void ADBcommandbox_Enter(object sender, EventArgs e)
+        static string ExtractVideoId(string html)
         {
-            _ = adbCmd_CommandBox.Focus();
-        }
-
-        private bool fullScreen = false;
-        [DefaultValue(false)]
-        public bool FullScreen
-        {
-            get { return fullScreen; }
-            set
-            {
-                fullScreen = value;
-                if (value)
-                {
-                    MainForm.ActiveForm.FormBorderStyle = FormBorderStyle.None;
-                    webView21.Anchor = (AnchorStyles.Top | AnchorStyles.Left);
-                    webView21.Location = new System.Drawing.Point(0, 0);
-                    webView21.Size = MainForm.ActiveForm.Size;
-                }
-                else
-                {
-                    MainForm.ActiveForm.FormBorderStyle = FormBorderStyle.Sizable;
-                    webView21.Anchor = (AnchorStyles.Left | AnchorStyles.Bottom);
-                    webView21.Location = gamesPictureBox.Location;
-                    webView21.Size = new System.Drawing.Size(374, 214);
-                }
-            }
-        }
-
-        static string ExtractVideoUrl(string html)
-        {
-            Match match = Regex.Match(html, @"url""\:\""/watch\?v\=(.*?(?=""))");
-            if (!match.Success)
-            {
-                return String.Empty;
-            }
-
-            string url = match.Groups[1].Value;
-            return $"https://www.youtube.com/embed/{url}?autoplay=1&mute=1&enablejsapi=1&modestbranding=1";
+            // We want the first strict 11-char YouTube video ID after /watch?v=
+            var m = Regex.Match(html, @"\/watch\?v=([A-Za-z0-9_\-]{11})");
+            return m.Success ? m.Groups[1].Value : string.Empty;
         }
 
         private async Task CreateEnvironment()
         {
-            webView21.CoreWebView2InitializationCompleted += (sender, e) => {
-                webView21.CoreWebView2.ContainsFullScreenElementChanged += (obj, args) =>
-                {
-                    this.FullScreen = webView21.CoreWebView2.ContainsFullScreenElement;
-                };
+            if (!settings.TrailersEnabled) return;
 
-                webView21.CoreWebView2.NavigationCompleted += (obj, args) =>
+            // Fast path: already initialized
+            if (webView21.CoreWebView2 != null) return;
+
+            // Check if WebView2 runtime DLLs are present
+            string runtimesPath = Path.Combine(Environment.CurrentDirectory, "runtimes");
+            string webView2LoaderArm64 = Path.Combine(runtimesPath, "win-arm64", "native", "WebView2Loader.dll");
+            string webView2LoaderX86 = Path.Combine(runtimesPath, "win-x86", "native", "WebView2Loader.dll");
+            string webView2LoaderX64 = Path.Combine(runtimesPath, "win-x64", "native", "WebView2Loader.dll");
+
+            bool runtimeExists = File.Exists(webView2LoaderX86) || File.Exists(webView2LoaderX64) || File.Exists(webView2LoaderArm64);
+
+            if (!runtimeExists)
+            {
+                try
                 {
-                    if (!args.IsSuccess)
+                    changeTitle("Downloading Runtime...");
+                    string archivePath = Path.Combine(Environment.CurrentDirectory, "runtimes.7z");
+
+                    using (var client = new WebClient())
                     {
-                        CoreWebView2 wv2 = (CoreWebView2)obj;
-                        Logger.Log($"Failed to navigate to '{wv2.Source}': {args.WebErrorStatus}");
+                        ServicePointManager.Expect100Continue = true;
+                        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                        await Task.Run(() => client.DownloadFile("https://vrpirates.wiki/downloads/runtimes.7z", archivePath));
                     }
-                };
-            };
 
-            string appDataLocation = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL");
-            var webView2Environment = await CoreWebView2Environment.CreateAsync(userDataFolder: appDataLocation);
-            await webView21.EnsureCoreWebView2Async(webView2Environment);
-        }
+                    changeTitle("Extracting Runtime...");
+                    await Task.Run(() => Utilities.Zip.ExtractFile(archivePath, Environment.CurrentDirectory));
+                    File.Delete(archivePath);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Failed to download WebView2 runtime: {ex.Message}", LogLevel.ERROR);
+                    _ = FlexibleMessageBox.Show(Program.form,
+                        $"Unable to download WebView2 runtime: {ex.Message}\n\nTrailer playback will be disabled.",
+                        "WebView2 Download Failed");
+                    enviromentCreated = true;
+                    webView21.Hide();
+                    return;
+                }
+            }
 
-        private async Task WebView_CoreWebView2ReadyAsync(string videoUrl)
-        {
             try
             {
-                // Load the video URL in the web browser control
-                webView21.CoreWebView2.Navigate(videoUrl);
+                var appDataFolder = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL");
+                var env = await CoreWebView2Environment.CreateAsync(userDataFolder: appDataFolder);
+
+                await webView21.EnsureCoreWebView2Async(env);
+
+                // Map local folder to a trusted origin (https://app.local)
+                var webroot = Path.Combine(Environment.CurrentDirectory, "webroot");
+                Directory.CreateDirectory(webroot);
+                webView21.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    "app.local", webroot, CoreWebView2HostResourceAccessKind.Allow);
+
+                // Minimal settings required for the player page
+                var s = webView21.CoreWebView2.Settings;
+                s.IsScriptEnabled = true;       // allow IFrame API
+                s.IsWebMessageEnabled = true;   // allow PostWebMessageAsString from host
+
+                ApplyWebViewRoundedCorners();
+            }
+            catch (Exception /* ex */)
+            {
+                /*
+                Logger.Log($"Failed to initialize WebView2: {ex.Message}", LogLevel.ERROR);
+                _ = FlexibleMessageBox.Show(Program.form,
+                    $"WebView2 Runtime is not installed on this system.\n\n" +
+                    "Please download from: https://go.microsoft.com/fwlink/p/?LinkId=2124703\n\n" +
+                    "Trailer playback will be disabled.",
+                    "WebView2 Runtime Required");
+                */
+                enviromentCreated = true;
+                webView21.Hide();
+            }
+        }
+
+        private void InitializeTrailerPlayer()
+        {
+            if (!settings.TrailersEnabled) return;
+            if (_trailerPlayerInitialized) return;
+            string webroot = Path.Combine(Environment.CurrentDirectory, "webroot");
+            Directory.CreateDirectory(webroot);
+            string playerHtml = Path.Combine(webroot, "player.html");
+
+            // Lightweight HTML with YouTube IFrame API and WebView2 message bridge
+            var html = @"<!doctype html>
+<html>
+<head>
+<meta charset=""utf-8"">
+<meta name=""viewport"" content=""width=device-width,initial-scale=1""/>
+<title>Trailer Player</title>
+<style>
+html,body { margin:0; background:#181A1E; height:100%; overflow:hidden; }
+#player { width:100vw; height:100vh; }
+</style>
+<script src=""https://www.youtube.com/iframe_api""></script>
+<script>
+let player;
+let pendingId = null;
+// Youtube trailer player
+function onYouTubeIframeAPIReady() {
+    // Initialize without video
+    player = new YT.Player('player', {
+        playerVars: {
+            autoplay: 0,         // prevent autoplay at initialization
+            mute: 1,             // keep muted so subsequent loads can play instantly if desired
+            playsinline: 1,
+            rel: 0,
+            modestbranding: 1
+        },
+        events: {
+            'onReady': () => {
+                // Do nothing by default. Only play after we receive a video id message.
+                if (pendingId) {
+                    // If we received a message before ready, load now.
+                    player.loadVideoById(pendingId);
+                    pendingId = null;
+                }
+            }
+        }
+    });
+}
+// WebView2 message hook: app posts the 11-char video id.
+(function(){
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.addEventListener('message', e => {
+            const id = (e && e.data) ? String(e.data).trim() : '';
+            if (!/^[A-Za-z0-9_\-]{11}$/.test(id)) return;
+            if (player && player.loadVideoById) {
+                    player.loadVideoById(id);
+                } else {
+                    pendingId = id;
+                }
+            });
+        }
+    })();
+</script>
+</head>
+<body>
+<div id=""player""></div>
+</body>
+</html>";
+            File.WriteAllText(playerHtml, html, Encoding.UTF8);
+            _trailerPlayerInitialized = true;
+        }
+
+        // Ensure environment + initial navigation
+        private async Task EnsureTrailerEnvironmentAsync()
+        {
+            if (!settings.TrailersEnabled) return;
+
+            if (webView21.CoreWebView2 == null)
+            {
+                await CreateEnvironment();
+            }
+
+            // Check again after CreateEnvironment - it may have failed
+            if (webView21.CoreWebView2 == null)
+            {
+                Logger.Log("WebView2 CoreWebView2 is null after CreateEnvironment", LogLevel.WARNING);
+                return;
+            }
+
+            InitializeTrailerPlayer();
+
+            if (!_trailerHtmlLoaded && webView21.CoreWebView2 != null)
+            {
+                webView21.CoreWebView2.NavigationCompleted += (s, e) =>
+                {
+                    _trailerHtmlLoaded = true;
+                };
+                webView21.CoreWebView2.Navigate("https://app.local/player.html");
+            }
+        }
+
+        private async Task ShowVideoAsync(string videoId)
+        {
+            if (!settings.TrailersEnabled) return;
+            if (string.IsNullOrEmpty(videoId)) return;
+
+            try
+            {
+                await EnsureTrailerEnvironmentAsync();
+
+                // Check if WebView2 was successfully initialized
+                if (webView21.CoreWebView2 == null)
+                {
+                    return;
+                }
+
+                // If first load still in progress, small retry loop
+                int tries = 0;
+                while (!_trailerHtmlLoaded && tries < 50)
+                {
+                    await Task.Delay(50);
+                    tries++;
+                }
+
+                // Double-check after waiting
+                if (webView21.CoreWebView2 == null || !_trailerHtmlLoaded)
+                {
+                    return;
+                }
+
+                // Post the raw ID; page builds final URL
+                webView21.CoreWebView2.PostWebMessageAsString(videoId);
+                HideVideoPlaceholder(); // Video is loading, hide placeholder
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.ToString());
+                Logger.Log($"ShowVideoAsync error: {ex.Message}", LogLevel.WARNING);
             }
         }
 
-        private static CancellationTokenSource VideoDownloadTokenSource { get; set; }
+        private async Task<string> ResolveVideoIdAsync(string gameName)
+        {
+            if (!settings.TrailersEnabled) return string.Empty;
+            if (string.IsNullOrWhiteSpace(gameName)) return string.Empty;
+
+            if (_videoIdCache.TryGetValue(gameName, out var cached))
+                return cached;
+
+            // Lightweight search
+            try
+            {
+                string query = WebUtility.UrlEncode(gameName + " VR trailer");
+                string searchUrl = $"https://www.youtube.com/results?search_query={query}";
+                using (var http = new HttpClient())
+                {
+                    http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/119.0");
+                    var html = await http.GetStringAsync(searchUrl);
+                    var vid = ExtractVideoId(html);
+                    if (!string.IsNullOrEmpty(vid))
+                    {
+                        _videoIdCache[gameName] = vid;
+                        return vid;
+                    }
+                }
+            }
+            catch
+            {
+                // swallow – return empty
+            }
+            return string.Empty;
+        }
+
         public async void gamesListView_SelectedIndexChanged(object sender, EventArgs e)
         {
+            // Hide the uninstall button initially
+            if (_listViewUninstallButton != null)
+            {
+                _listViewUninstallButton.Visible = false;
+            }
+
             if (gamesListView.SelectedItems.Count < 1)
             {
+                selectedGameLabel.Text = "";
+                downloadInstallGameButton.Enabled = false;
+                downloadInstallGameButton.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(59)))), ((int)(((byte)(67)))), ((int)(((byte)(82)))));
                 return;
             }
-            string CurrentPackageName = gamesListView.SelectedItems[gamesListView.SelectedItems.Count - 1].SubItems[SideloaderRCLONE.PackageNameIndex].Text;
-            string CurrentReleaseName = gamesListView.SelectedItems[gamesListView.SelectedItems.Count - 1].SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
-            string CurrentGameName = gamesListView.SelectedItems[gamesListView.SelectedItems.Count - 1].SubItems[SideloaderRCLONE.GameNameIndex].Text;
+
+            var selectedItem = gamesListView.SelectedItems[gamesListView.SelectedItems.Count - 1];
+            string CurrentPackageName = selectedItem.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
+            string CurrentReleaseName = selectedItem.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
+            string CurrentGameName = selectedItem.SubItems[SideloaderRCLONE.GameNameIndex].Text;
             Console.WriteLine(CurrentGameName);
 
-            if (!settings.TrailersOn)
+            downloadInstallGameButton.Enabled = true;
+            downloadInstallGameButton.ForeColor = System.Drawing.Color.Black;
+
+            // Update the selected game label in the sidebar
+            selectedGameLabel.Text = CurrentGameName;
+
+            // Show uninstall button only for installed games
+            bool isInstalled = selectedItem.ForeColor.ToArgb() == ColorInstalled.ToArgb() ||
+                               selectedItem.ForeColor.ToArgb() == ColorUpdateAvailable.ToArgb() ||
+                               selectedItem.ForeColor.ToArgb() == ColorDonateGame.ToArgb();
+
+            if (isInstalled && _listViewUninstallButton != null)
             {
-                webView21.Enabled = false;
-                webView21.Hide();
-                if (!keyheld)
+                // Position the button at the right side of the selected item
+                Rectangle itemBounds = selectedItem.Bounds;
+                int buttonX = gamesListView.ClientSize.Width - _listViewUninstallButton.Width - 5;
+                int buttonY = itemBounds.Top + (itemBounds.Height - _listViewUninstallButton.Height) / 2;
+
+                // Ensure the button stays within visible bounds
+                if (buttonY >= 0 && buttonY + _listViewUninstallButton.Height <= gamesListView.ClientSize.Height)
                 {
-                    if (settings.PackageNameToCB)
-                    {
-                        Clipboard.SetText(CurrentPackageName);
-                    }
-
-                    keyheld = true;
+                    _listViewUninstallButton.Location = new Point(buttonX, buttonY);
+                    _listViewUninstallButton.Tag = selectedItem; // Store reference to the item
+                    _listViewUninstallButton.Visible = true;
                 }
-
-                string[] imageExtensions = { ".jpg", ".png" };
-                string ImagePath = String.Empty;
-
-                foreach (string extension in imageExtensions)
-                {
-                    string path = Path.Combine(SideloaderRCLONE.ThumbnailsFolder, $"{CurrentPackageName}{extension}");
-                    if (File.Exists(path))
-                    {
-                        ImagePath = path;
-                        break;
-                    }
-                }
-
-                if (gamesPictureBox.BackgroundImage != null)
-                {
-                    gamesPictureBox.BackgroundImage.Dispose();
-                }
-
-                gamesPictureBox.BackgroundImage = File.Exists(ImagePath) ? Image.FromFile(ImagePath) : new Bitmap(367, 214);
             }
-            else
+
+            // Thumbnail
+            if (!keyheld)
+            {
+                if (settings.PackageNameToCB)
+                {
+                    Clipboard.SetText(CurrentPackageName);
+                }
+
+                keyheld = true;
+            }
+
+            string[] imageExtensions = { ".jpg", ".png" };
+            string ImagePath = String.Empty;
+
+            foreach (string extension in imageExtensions)
+            {
+                string path = Path.Combine(SideloaderRCLONE.ThumbnailsFolder, $"{CurrentPackageName}{extension}");
+                if (File.Exists(path))
+                {
+                    ImagePath = path;
+                    break;
+                }
+            }
+
+            // Dispose the old image first
+            var oldImage = gamesPictureBox.BackgroundImage;
+            gamesPictureBox.BackgroundImage = null;
+
+            if (oldImage != null)
+            {
+                oldImage.Dispose();
+            }
+
+            if (File.Exists(ImagePath))
+            {
+                gamesPictureBox.BackgroundImage = Image.FromFile(ImagePath);
+            }
+
+            // If no image exists, BackgroundImage stays null and the Paint handler draws the placeholder
+            gamesPictureBox.Invalidate(); // Force repaint to show placeholder
+
+            // Fast trailer loading path
+            if (settings.TrailersEnabled)
             {
                 webView21.Enabled = true;
-                if (!Directory.Exists(Path.Combine(Environment.CurrentDirectory, "runtimes")))
-                {
-                    WebClient client = new WebClient();
-                    ServicePointManager.Expect100Continue = true;
-                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-                    try
-                    {
-                        client.DownloadFile("https://vrpirates.wiki/downloads/runtimes.7z", "runtimes.7z");
-                        Utilities.Zip.ExtractFile(Path.Combine(Environment.CurrentDirectory, "runtimes.7z"), Environment.CurrentDirectory);
-                        File.Delete("runtimes.7z");
-                    }
-                    catch (Exception ex)
-                    {
-                        _ = FlexibleMessageBox.Show(Program.form, $"You are unable to access the wiki page with the Exception: {ex.Message}\n");
-                        _ = FlexibleMessageBox.Show(Program.form, "Required files for the Trailers were unable to be downloaded, please use Thumbnails instead");
-                        enviromentCreated = true;
-                        webView21.Hide();
-                    }
-                }
-                if (!enviromentCreated)
-                {
-                    await CreateEnvironment();
-                    enviromentCreated = true;
-                }
                 webView21.Show();
 
                 try
                 {
-                    if (VideoDownloadTokenSource != null)
+                    var videoId = await ResolveVideoIdAsync(CurrentGameName);
+                    if (string.IsNullOrEmpty(videoId))
                     {
-                        Debug.WriteLine("Cancelling and/or disposing trailer download request.");
-
-                        // Just race condition protection
-                        VideoDownloadTokenSource?.Cancel();
-                        VideoDownloadTokenSource?.Dispose();
-                        VideoDownloadTokenSource = null;
+                        changeTitle("No Trailer found");
+                        ShowVideoPlaceholder();
                     }
-
-                    VideoDownloadTokenSource = new CancellationTokenSource();
-                    using (VideoDownloadTokenSource)
+                    else
                     {
-                        Debug.WriteLine("Creating trailer download request.");
-
-                        CancellationToken token = VideoDownloadTokenSource.Token;
-                        if (!await FetchAndDisplayVideoUrl(token))
-                        {
-                            return;
-                        }
+                        await ShowVideoAsync(videoId);
                     }
                 }
                 catch (Exception ex)
                 {
-                    Program.form.changeTitle($"Error loading Trailer: {ex.Message}");
-                    Logger.Log("Error Loading Trailer");
+                    Logger.Log("Error loading Trailer");
                     Logger.Log(ex.Message);
+                    ShowVideoPlaceholder();
                 }
-                finally
-                {
-                    VideoDownloadTokenSource = null;
-                }
+            }
+            else
+            {
+                ShowVideoPlaceholder();
             }
 
             string NotePath = $"{SideloaderRCLONE.NotesFolder}\\{CurrentReleaseName}.txt";
-            notesRichTextBox.Text = File.Exists(NotePath) ? File.ReadAllText(NotePath) : "";
 
-            async Task<bool> FetchAndDisplayVideoUrl(CancellationToken token)
+            if (!isGalleryView)
             {
-                string query = $"{CurrentGameName} VR trailer"; // Create the search query by appending " VR trailer" to the current game name
-                string encodedQuery = WebUtility.UrlEncode(query);
-                string url = $"https://www.youtube.com/results?search_query={encodedQuery}";
-
-                var response = await client.GetAsync(url, token);
-                if (!response.IsSuccessStatusCode)
-                {
-                    Logger.Log($"Failed to download HTML document {response.StatusCode}, {response.ReasonPhrase}", LogLevel.ERROR);
-                    return false;
-                }
-
-                string htmlDocument = await response.Content.ReadAsStringAsync();
-
-                if (string.IsNullOrWhiteSpace(htmlDocument))
-                {
-                    Logger.Log($"Fetched search document was empty, but fetch request returned {response.StatusCode}", LogLevel.ERROR);
-                    return false;
-                }
-
-                string videoUrl = ExtractVideoUrl(htmlDocument);
-                if (string.IsNullOrWhiteSpace(videoUrl))
-                {
-                    Logger.Log($"No trailer search results found for '{CurrentGameName}'.");
-                    return false;
-                }
-
-                await WebView_CoreWebView2ReadyAsync(videoUrl);
-                return true;
+                notesRichTextBox.Text = File.Exists(NotePath) ? File.ReadAllText(NotePath) : "";
+                UpdateNotesScrollBar();
             }
+        }
+
+        private async void ListViewUninstallButton_Click(object sender, EventArgs e)
+        {
+            var item = _listViewUninstallButton.Tag as ListViewItem;
+            if (item == null) return;
+
+            _listViewUninstallButton.Visible = false;
+            await UninstallGameAsync(item);
         }
 
         public void UpdateGamesButton_Click(object sender, EventArgs e)
         {
-            _ = GetDeviceID();
-            _ = FlexibleMessageBox.Show(Program.form, "If your device is not Connected, hit reconnect first or it won't work!\nNOTE: THIS MAY TAKE UP TO 60 SECONDS.\nThere will be a Popup text window with all updates available when it is done!", "Is device connected?", MessageBoxButtons.OKCancel);
+            if (!DeviceConnected && Devices.Count == 0)
+            {
+                FlexibleMessageBox.Show(Program.form,
+                    "No device connected. Please connect your Quest and click 'RECONNECT DEVICE' first.",
+                    "Device Required",
+                    MessageBoxButtons.OK);
+                return;
+            }
+
+            changeTitle("Refreshing installed apps and checking for updates...");
+
+            // Reset the initialized flag so initListView rebuilds _allItems with current install status
+            _allItemsInitialized = false;
+            _galleryDataSource = null;
+
             listAppsBtn();
             initListView(false);
 
             if (SideloaderRCLONE.games.Count < 1)
             {
-                _ = FlexibleMessageBox.Show(Program.form, "There are no games in rclone, please check your internet connection and check if the config is working properly");
+                FlexibleMessageBox.Show(Program.form,
+                    "There are no games in rclone, please check your internet connection and verify the config is working properly.");
                 return;
             }
-
-            // if (gamesToUpdate.Length > 0)
-            //     FlexibleMessageBox.Show(Program.form, gamesToUpdate);
-            //  else
-            //     FlexibleMessageBox.Show(Program.form, "All your games are up to date!");
         }
 
         private void gamesListView_MouseDoubleClick(object sender, MouseEventArgs e)
@@ -3927,16 +4751,29 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
         {
             _ = Process.Start("https://github.com/VRPirates/rookie");
         }
+
+        private void searchTextBox_Enter(object sender, EventArgs e)
+        {
+            if (searchTextBox.Text == "Search...")
+            {
+                searchTextBox.Text = "";
+            }
+
+            searchTextBox.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            searchTextBox.ForeColor = Color.FromArgb(((int)(((byte)(218)))), ((int)(((byte)(218)))), ((int)(((byte)(218)))));
+        }
+
         private void searchTextBox_Leave(object sender, EventArgs e)
         {
-            if (searchTextBox.Visible)
+            if (string.IsNullOrWhiteSpace(searchTextBox.Text))
             {
-                adbCmd_background.Visible = false;
+                searchTextBox.Text = "Search...";
+                searchTextBox.Font = new Font("Segoe UI", 9F, FontStyle.Italic);
             }
-            else
-            {
-                _ = gamesListView.Focus();
-            }
+
+            searchTextBox.ForeColor = Color.FromArgb(((int)(((byte)(180)))), ((int)(((byte)(180)))), ((int)(((byte)(180)))));
+
+            _ = gamesListView.Focus();
         }
 
         private void gamesListView_KeyPress(object sender, KeyPressEventArgs e)
@@ -3951,216 +4788,44 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
         }
 
         bool updateAvailableClicked = false;
-        private async void updateAvailable_Click(object sender, EventArgs e)
+        private void btnUpdateAvailable_Click(object sender, EventArgs e)
         {
-            lblUpToDate.Click -= lblUpToDate_Click;
-            lblUpdateAvailable.Click -= updateAvailable_Click;
-            lblNeedsDonate.Click -= lblNeedsDonate_Click;
-            changeTitle("Filtering Game List... This may take a few seconds...  \n\n");
+            btnInstalled.Click -= btnInstalled_Click;
+            btnUpdateAvailable.Click -= btnUpdateAvailable_Click;
+            btnNewerThanList.Click -= btnNewerThanList_Click;
+
             if (upToDate_Clicked || NeedsDonation_Clicked)
             {
                 upToDate_Clicked = false;
                 NeedsDonation_Clicked = false;
                 updateAvailableClicked = false;
             }
+
             if (!updateAvailableClicked)
             {
                 updateAvailableClicked = true;
-                rookienamelist = String.Empty;
-                loaded = false;
-                string installedApps = settings.InstalledApps;
-                string[] packageList = installedApps.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                string[] blacklist = new string[] { };
-                string[] whitelist = new string[] { };
-                if (File.Exists($"{settings.MainDir}\\nouns\\blacklist.txt"))
-                {
-                    blacklist = File.ReadAllLines($"{settings.MainDir}\\nouns\\blacklist.txt");
-                }
-                if (File.Exists($"{settings.MainDir}\\nouns\\whitelist.txt"))
-                {
-                    whitelist = File.ReadAllLines($"{settings.MainDir}\\nouns\\whitelist.txt");
-                }
-
-                List<ListViewItem> GameList = new List<ListViewItem>();
-
-                List<string> rookieList = new List<string>();
-                List<string> installedGames = packageList.ToList();
-                List<string> blacklistItems = blacklist.ToList();
-                List<string> whitelistItems = whitelist.ToList();
-                errorOnList = false;
-                newGamesToUploadList = whitelistItems.Intersect(installedGames).ToList();
-                progressBar.Style = ProgressBarStyle.Marquee;
-                if (SideloaderRCLONE.games.Count > 5)
-                {
-                    Thread t1 = new Thread(() =>
-                    {
-                        foreach (string[] release in SideloaderRCLONE.games)
-                        {
-                            rookieList.Add(release[SideloaderRCLONE.PackageNameIndex].ToString().ToLower());
-                            if (!rookienamelist.Contains(release[SideloaderRCLONE.GameNameIndex].ToString()))
-                            {
-                                rookienamelist += release[SideloaderRCLONE.GameNameIndex].ToString() + "\n";
-                            }
-
-                            ListViewItem Game = new ListViewItem(release);
-
-                            Color colorFont_installedGame = ColorTranslator.FromHtml("#3c91e6");
-                            lblUpToDate.ForeColor = colorFont_installedGame;
-                            Color colorFont_updateAvailable = ColorTranslator.FromHtml("#4daa57");
-                            lblUpdateAvailable.ForeColor = colorFont_updateAvailable;
-                            Color colorFont_donateGame = ColorTranslator.FromHtml("#cb9cf2");
-                            lblNeedsDonate.ForeColor = colorFont_donateGame;
-                            Color colorFont_error = ColorTranslator.FromHtml("#f52f57");
-
-                            foreach (string packagename in packageList)
-                            {
-                                if (string.Equals(release[SideloaderRCLONE.PackageNameIndex], packagename))
-                                {
-                                    Game.ForeColor = colorFont_installedGame;
-
-                                    string InstalledVersionCode;
-                                    InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {packagename} | grep versionCode -F\"").Output;
-                                    InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
-                                    InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingAfterFirst(InstalledVersionCode, " ");
-                                    try
-                                    {
-                                        ulong installedVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
-                                        ulong cloudVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(release[SideloaderRCLONE.VersionCodeIndex]));
-
-                                        _ = Logger.Log($"Checked game {release[SideloaderRCLONE.GameNameIndex]}; cloudversion={cloudVersionInt} localversion={installedVersionInt}");
-                                        if (installedVersionInt < cloudVersionInt)
-                                        {
-                                            Game.ForeColor = colorFont_updateAvailable;
-                                            GameList.Add(Game);
-                                        }
-                                        else
-                                        {
-                                            GameList.Remove(Game);
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        Game.ForeColor = colorFont_error;
-                                        _ = Logger.Log($"An error occured while rendering game {release[SideloaderRCLONE.GameNameIndex]} in ListView", LogLevel.ERROR);
-                                        _ = ADB.RunAdbCommandToString($"shell \"dumpsys package {packagename}\"");
-                                        _ = Logger.Log($"ExMsg: {ex.Message}Installed:\"{InstalledVersionCode}\" Cloud:\"{Utilities.StringUtilities.KeepOnlyNumbers(release[SideloaderRCLONE.VersionCodeIndex])}\"", LogLevel.ERROR);
-                                    }
-                                }
-                            }
-                        }
-                    })
-                    {
-                        IsBackground = true
-                    };
-                    t1.Start();
-                    while (t1.IsAlive)
-                    {
-                        await Task.Delay(100);
-                    }
-                }
-                progressBar.Style = ProgressBarStyle.Continuous;
-                ListViewItem[] arr = GameList.ToArray();
-                gamesListView.BeginUpdate();
-                gamesListView.Items.Clear();
-                gamesListView.Items.AddRange(arr);
-                gamesListView.EndUpdate();
-                changeTitle("                                                \n\n");
-                loaded = true;
+                FilterListByColor(ColorUpdateAvailable); // Update available color
             }
             else
             {
                 updateAvailableClicked = false;
-                initListView(false);
+                RestoreFullList();
             }
-            lblUpToDate.Click += lblUpToDate_Click;
-            lblUpdateAvailable.Click += updateAvailable_Click;
-            lblNeedsDonate.Click += lblNeedsDonate_Click;
-        }
 
-        private async void ADBcommandbox_KeyPress(object sender, KeyPressEventArgs e)
-        {
-            searchTextBox.KeyPress += new
-            System.Windows.Forms.KeyPressEventHandler(CheckEnter);
-            if (e.KeyChar == (char)Keys.Enter)
+            // Update button visual states
+            UpdateFilterButtonStates();
+
+            // Refresh gallery view if active
+            if (isGalleryView)
             {
-                if (manualIP)
-                {
-                    string IPaddr;
-                    IPaddr = adbCmd_CommandBox.Text;
-                    string IPcmnd = "connect " + IPaddr + ":5555";
-                    await Task.Delay(1000);
-                    string errorChecker = ADB.RunAdbCommandToString(IPcmnd).Output;
-                    if (errorChecker.Contains("cannot resolve host") | errorChecker.Contains("cannot connect to"))
-                    {
-                        changeTitle(String.Empty);
-                        _ = FlexibleMessageBox.Show(Program.form, "Manual ADB over WiFi Connection failed\nExiting...", "Manual IP Connection Failed!", MessageBoxButtons.OK);
-                        manualIP = false;
-                        adbCmd_CommandBox.Visible = false;
-                        adbCmd_btnToggleUpdates.Visible = false;
-                        adbCmd_btnSend.Visible = false;
-                        adbCmd_Label.Visible = false;
-                        adbCmd_background.Visible = false;
-                        adbCmd_Label.Text = "Type ADB Command";
-                        _ = gamesListView.Focus();
-                    }
-                    else
-                    {
-                        _ = await Program.form.CheckForDevice();
-                        Program.form.showAvailableSpace();
-                        settings.IPAddress = IPcmnd;
-                        settings.Save();
-                        try { File.WriteAllText(storedIpPath, IPcmnd); }
-                        catch (Exception ex) { Logger.Log($"Unable to write to StoredIP.txt due to {ex.Message}", LogLevel.ERROR); }
-                        ADB.wirelessadbON = true;
-                        _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_available 1");
-                        _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_enabled 1");
-                        manualIP = false;
-                        adbCmd_CommandBox.Visible = false;
-                        adbCmd_btnToggleUpdates.Visible = false;
-                        adbCmd_btnSend.Visible = false;
-                        adbCmd_Label.Visible = false;
-                        adbCmd_background.Visible = false;
-                        adbCmd_Label.Text = "Type ADB Command";
-                        changeTitle("");
-                        Program.form.changeTitlebarToDevice();
-                        _ = gamesListView.Focus();
-                    }
-                }
-                else
-                {
-                    string sentCommand = adbCmd_CommandBox.Text.Replace("adb", "");
-                    Program.form.changeTitle($"Running adb command: ADB {sentCommand}");
-                    string output = ADB.RunAdbCommandToString(adbCmd_CommandBox.Text).Output;
-                    _ = FlexibleMessageBox.Show(Program.form, $"Ran adb command: ADB {sentCommand}\r\nOutput:\r\n{output}");
-                    adbCmd_CommandBox.Visible = false;
-                    adbCmd_btnToggleUpdates.Visible = false;
-                    adbCmd_btnSend.Visible = false;
-                    adbCmd_Label.Visible = false;
-                    adbCmd_background.Visible = false;
-                    _ = gamesListView.Focus();
-                    Program.form.changeTitle(String.Empty);
-                }
+                PopulateGalleryView();
             }
-            if (e.KeyChar == (char)Keys.Escape)
-            {
-                adbCmd_CommandBox.Visible = false;
-                adbCmd_btnToggleUpdates.Visible = false;
-                adbCmd_btnSend.Visible = false;
-                adbCmd_Label.Visible = false;
-                adbCmd_background.Visible = false;
-                _ = gamesListView.Focus();
-            }
-        }
 
-        private void ADBcommandbox_Leave(object sender, EventArgs e)
-        {
-            adbCmd_background.Visible = false;
-            adbCmd_CommandBox.Visible = false;
-            adbCmd_btnToggleUpdates.Visible = false;
-            adbCmd_btnSend.Visible = false;
-            adbCmd_Label.Visible = false;
+            btnInstalled.Click += btnInstalled_Click;
+            btnUpdateAvailable.Click += btnUpdateAvailable_Click;
+            btnNewerThanList.Click += btnNewerThanList_Click;
         }
-
+        
         private void gamesQueListBox_MouseDown(object sender, MouseEventArgs e)
         {
             if (gamesQueListBox.SelectedItem == null)
@@ -4178,12 +4843,13 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
 
         private async void pullAppToDesktopBtn_Click(object sender, EventArgs e)
         {
-            if (m_combo.SelectedIndex == -1)
+            string selectedApp = ShowInstalledAppSelector("Select an app to pull to desktop");
+            if (selectedApp == null)
             {
-                notify("Please select an App from the Dropdown");
                 return;
             }
-            DialogResult dialogResult1 = FlexibleMessageBox.Show(Program.form, $"Do you want to extract {m_combo.SelectedItem}'s apk and obb to a folder on your desktop now?", "Extract app?", MessageBoxButtons.YesNo);
+
+            DialogResult dialogResult1 = FlexibleMessageBox.Show(Program.form, $"Do you want to extract {selectedApp}'s APK and OBB to a folder on your desktop now?", "Extract app?", MessageBoxButtons.YesNo);
             if (dialogResult1 == DialogResult.No)
             {
                 return;
@@ -4194,7 +4860,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                 isworking = true;
                 progressBar.Style = ProgressBarStyle.Marquee;
                 string HWID = SideloaderUtilities.UUID();
-                string GameName = m_combo.SelectedItem.ToString();
+                string GameName = selectedApp;
                 string packageName = Sideloader.gameNameToPackageName(GameName);
                 string InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {packageName} | grep versionCode -F\"").Output;
                 InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
@@ -4224,7 +4890,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                     await Task.Delay(100);
                 }
 
-                changeTitle("Extracting obb if it exists....");
+                changeTitle("Extracting OBB if it exists....");
                 Thread t2 = new Thread(() =>
                 {
                     output += ADB.RunAdbCommandToString($"pull \"/sdcard/Android/obb/{packageName}\" \"{settings.MainDir}\\{packageName}\"");
@@ -4270,273 +4936,172 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                 File.Delete($"{settings.MainDir}\\{GameName} v{VersionInt} {packageName}.zip");
                 Directory.Delete($"{settings.MainDir}\\{packageName}", true);
                 isworking = false;
-                Program.form.changeTitle("                                   \n\n");
+                Program.form.changeTitle("");
                 progressBar.Style = ProgressBarStyle.Continuous;
                 _ = FlexibleMessageBox.Show(Program.form, $"{GameName} pulled to:\n\n{GameName} v{VersionInt} {packageName}.zip\n\nOn your desktop!");
             }
         }
 
         bool upToDate_Clicked = false;
-        private async void lblUpToDate_Click(object sender, EventArgs e)
+        private void btnInstalled_Click(object sender, EventArgs e)
         {
-            lblUpToDate.Click -= lblUpToDate_Click;
-            lblUpdateAvailable.Click -= updateAvailable_Click;
-            lblNeedsDonate.Click -= lblNeedsDonate_Click;
-            changeTitle("Filtering Game List... This may take a few seconds...  \n\n");
+            btnInstalled.Click -= btnInstalled_Click;
+            btnUpdateAvailable.Click -= btnUpdateAvailable_Click;
+            btnNewerThanList.Click -= btnNewerThanList_Click;
+
             if (updateAvailableClicked || NeedsDonation_Clicked)
             {
                 updateAvailableClicked = false;
                 NeedsDonation_Clicked = false;
                 upToDate_Clicked = false;
             }
+
             if (!upToDate_Clicked)
             {
                 upToDate_Clicked = true;
-                rookienamelist = String.Empty;
-                loaded = false;
-                string installedApps = settings.InstalledApps;
-                string[] packageList = installedApps.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                string[] blacklist = new string[] { };
-                string[] whitelist = new string[] { };
-                if (File.Exists($"{settings.MainDir}\\nouns\\blacklist.txt"))
-                {
-                    blacklist = File.ReadAllLines($"{settings.MainDir}\\nouns\\blacklist.txt");
-                }
-                if (File.Exists($"{settings.MainDir}\\nouns\\whitelist.txt"))
-                {
-                    whitelist = File.ReadAllLines($"{settings.MainDir}\\nouns\\whitelist.txt");
-                }
-
-                List<ListViewItem> GameList = new List<ListViewItem>();
-
-                List<string> rookieList = new List<string>();
-                List<string> installedGames = packageList.ToList();
-                List<string> blacklistItems = blacklist.ToList();
-                List<string> whitelistItems = whitelist.ToList();
-                errorOnList = false;
-                newGamesToUploadList = whitelistItems.Intersect(installedGames).ToList();
-                progressBar.Style = ProgressBarStyle.Marquee;
-                if (SideloaderRCLONE.games.Count > 5)
-                {
-                    Thread t1 = new Thread(() =>
-                    {
-                        foreach (string[] release in SideloaderRCLONE.games)
-                        {
-                            rookieList.Add(release[SideloaderRCLONE.PackageNameIndex].ToString());
-                            if (!rookienamelist.Contains(release[SideloaderRCLONE.GameNameIndex].ToString()))
-                            {
-                                rookienamelist += release[SideloaderRCLONE.GameNameIndex].ToString() + "\n";
-                            }
-
-                            ListViewItem Game = new ListViewItem(release);
-
-                            Color colorFont_installedGame = ColorTranslator.FromHtml("#3c91e6");
-                            lblUpToDate.ForeColor = colorFont_installedGame;
-                            Color colorFont_updateAvailable = ColorTranslator.FromHtml("#4daa57");
-                            lblUpdateAvailable.ForeColor = colorFont_updateAvailable;
-                            Color colorFont_donateGame = ColorTranslator.FromHtml("#cb9cf2");
-                            lblNeedsDonate.ForeColor = colorFont_donateGame;
-                            Color colorFont_error = ColorTranslator.FromHtml("#f52f57");
-
-                            foreach (string packagename in packageList)
-                            {
-                                if (string.Equals(release[SideloaderRCLONE.PackageNameIndex], packagename))
-                                {
-                                    Game.ForeColor = colorFont_installedGame;
-
-                                    string InstalledVersionCode;
-                                    InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {packagename} | grep versionCode -F\"").Output;
-                                    InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
-                                    InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingAfterFirst(InstalledVersionCode, " ");
-                                    try
-                                    {
-                                        ulong installedVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
-                                        ulong cloudVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(release[SideloaderRCLONE.VersionCodeIndex]));
-
-                                        _ = Logger.Log($"Checked game {release[SideloaderRCLONE.GameNameIndex]}; cloudversion={cloudVersionInt} localversion={installedVersionInt}");
-                                        if (installedVersionInt == cloudVersionInt)
-                                        {
-                                            Game.ForeColor = colorFont_installedGame;
-                                            GameList.Add(Game);
-                                        }
-                                        else
-                                        {
-                                            GameList.Remove(Game);
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        Game.ForeColor = colorFont_error;
-                                        _ = Logger.Log($"An error occured while rendering game {release[SideloaderRCLONE.GameNameIndex]} in ListView", LogLevel.ERROR);
-                                        _ = ADB.RunAdbCommandToString($"shell \"dumpsys package {packagename}\"");
-                                        _ = Logger.Log($"ExMsg: {ex.Message}Installed:\"{InstalledVersionCode}\" Cloud:\"{Utilities.StringUtilities.KeepOnlyNumbers(release[SideloaderRCLONE.VersionCodeIndex])}\"", LogLevel.ERROR);
-                                    }
-                                }
-                            }
-                        }
-                    })
-                    {
-                        IsBackground = true
-                    };
-                    t1.Start();
-                    while (t1.IsAlive)
-                    {
-                        await Task.Delay(100);
-                    }
-                }
-                progressBar.Style = ProgressBarStyle.Continuous;
-                ListViewItem[] arr = GameList.ToArray();
-                gamesListView.BeginUpdate();
-                gamesListView.Items.Clear();
-                gamesListView.Items.AddRange(arr);
-                gamesListView.EndUpdate();
-                changeTitle("                                                \n\n");
-                loaded = true;
+                // Filter to show installed, update available and newer than list entries
+                FilterListByColors(new[] { ColorInstalled, ColorUpdateAvailable, ColorDonateGame });
             }
             else
             {
                 upToDate_Clicked = false;
-                initListView(false);
+                RestoreFullList();
             }
-            lblUpToDate.Click += lblUpToDate_Click;
-            lblUpdateAvailable.Click += updateAvailable_Click;
-            lblNeedsDonate.Click += lblNeedsDonate_Click;
+
+            // Update button visual states
+            UpdateFilterButtonStates();
+
+            // Refresh gallery view if active
+            if (isGalleryView)
+            {
+                PopulateGalleryView();
+            }
+
+            btnInstalled.Click += btnInstalled_Click;
+            btnUpdateAvailable.Click += btnUpdateAvailable_Click;
+            btnNewerThanList.Click += btnNewerThanList_Click;
         }
 
         bool NeedsDonation_Clicked = false;
-        private async void lblNeedsDonate_Click(object sender, EventArgs e)
+        private void btnNewerThanList_Click(object sender, EventArgs e)
         {
-            lblUpToDate.Click -= lblUpToDate_Click;
-            lblUpdateAvailable.Click -= updateAvailable_Click;
-            lblNeedsDonate.Click -= lblNeedsDonate_Click;
-            changeTitle("Filtering Game List... This may take a few seconds...  \n\n");
+            btnInstalled.Click -= btnInstalled_Click;
+            btnUpdateAvailable.Click -= btnUpdateAvailable_Click;
+            btnNewerThanList.Click -= btnNewerThanList_Click;
+
             if (updateAvailableClicked || upToDate_Clicked)
             {
                 updateAvailableClicked = false;
                 upToDate_Clicked = false;
                 NeedsDonation_Clicked = false;
             }
+
             if (!NeedsDonation_Clicked)
             {
                 NeedsDonation_Clicked = true;
-                rookienamelist = String.Empty;
-                loaded = false;
-                string installedApps = settings.InstalledApps;
-                string[] packageList = installedApps.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                string[] blacklist = new string[] { };
-                string[] whitelist = new string[] { };
-                if (File.Exists($"{settings.MainDir}\\nouns\\blacklist.txt"))
-                {
-                    blacklist = File.ReadAllLines($"{settings.MainDir}\\nouns\\blacklist.txt");
-                }
-                if (File.Exists($"{settings.MainDir}\\nouns\\whitelist.txt"))
-                {
-                    whitelist = File.ReadAllLines($"{settings.MainDir}\\nouns\\whitelist.txt");
-                }
-
-                List<ListViewItem> GameList = new List<ListViewItem>();
-
-                List<string> rookieList = new List<string>();
-                List<string> installedGames = packageList.ToList();
-                List<string> blacklistItems = blacklist.ToList();
-                List<string> whitelistItems = whitelist.ToList();
-                errorOnList = false;
-                newGamesToUploadList = whitelistItems.Intersect(installedGames, StringComparer.OrdinalIgnoreCase).ToList();
-                progressBar.Style = ProgressBarStyle.Marquee;
-                if (SideloaderRCLONE.games.Count > 5)
-                {
-                    Thread t1 = new Thread(() =>
-                    {
-                        foreach (string[] release in SideloaderRCLONE.games)
-                        {
-                            rookieList.Add(release[SideloaderRCLONE.PackageNameIndex].ToString());
-                            if (!rookienamelist.Contains(release[SideloaderRCLONE.GameNameIndex].ToString()))
-                            {
-                                rookienamelist += release[SideloaderRCLONE.GameNameIndex].ToString() + "\n";
-                            }
-
-                            ListViewItem Game = new ListViewItem(release);
-
-                            Color colorFont_installedGame = ColorTranslator.FromHtml("#3c91e6");
-                            lblUpToDate.ForeColor = colorFont_installedGame;
-                            Color colorFont_updateAvailable = ColorTranslator.FromHtml("#4daa57");
-                            lblUpdateAvailable.ForeColor = colorFont_updateAvailable;
-                            Color colorFont_donateGame = ColorTranslator.FromHtml("#cb9cf2");
-                            lblNeedsDonate.ForeColor = colorFont_donateGame;
-                            Color colorFont_error = ColorTranslator.FromHtml("#f52f57");
-
-                            foreach (string packagename in packageList)
-                            {
-                                if (string.Equals(release[SideloaderRCLONE.PackageNameIndex], packagename))
-                                {
-                                    Game.ForeColor = colorFont_installedGame;
-
-                                    string InstalledVersionCode;
-                                    InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {packagename} | grep versionCode -F\"").Output;
-                                    InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingBeforeFirst(InstalledVersionCode, "versionCode=");
-                                    InstalledVersionCode = Utilities.StringUtilities.RemoveEverythingAfterFirst(InstalledVersionCode, " ");
-                                    try
-                                    {
-                                        ulong installedVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
-                                        ulong cloudVersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(release[SideloaderRCLONE.VersionCodeIndex]));
-
-                                        _ = Logger.Log($"Checked game {release[SideloaderRCLONE.GameNameIndex]}; cloudversion={cloudVersionInt} localversion={installedVersionInt}");
-                                        if (installedVersionInt > cloudVersionInt)
-                                        {
-                                            bool dontget = false;
-                                            if (blacklist.Contains(packagename))
-                                            {
-                                                dontget = true;
-                                            }
-
-                                            if (!dontget)
-                                            {
-                                                Game.ForeColor = colorFont_donateGame;
-                                                GameList.Add(Game);
-                                            }
-                                        }
-                                        else
-                                        {
-                                            GameList.Remove(Game);
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        Game.ForeColor = colorFont_error;
-                                        _ = Logger.Log($"An error occured while rendering game {release[SideloaderRCLONE.GameNameIndex]} in ListView", LogLevel.ERROR);
-                                        _ = ADB.RunAdbCommandToString($"shell \"dumpsys package {packagename}\"");
-                                        _ = Logger.Log($"ExMsg: {ex.Message}Installed:\"{InstalledVersionCode}\" Cloud:\"{Utilities.StringUtilities.KeepOnlyNumbers(release[SideloaderRCLONE.VersionCodeIndex])}\"", LogLevel.ERROR);
-                                    }
-                                }
-                            }
-                        }
-                    })
-                    {
-                        IsBackground = true
-                    };
-                    t1.Start();
-                    while (t1.IsAlive)
-                    {
-                        await Task.Delay(100);
-                    }
-                }
-                progressBar.Style = ProgressBarStyle.Continuous;
-                ListViewItem[] arr = GameList.ToArray();
-                gamesListView.BeginUpdate();
-                gamesListView.Items.Clear();
-                gamesListView.Items.AddRange(arr);
-                gamesListView.EndUpdate();
-                changeTitle("                                                \n\n");
-                loaded = true;
+                FilterListByColor(ColorDonateGame); // Needs donation color
             }
             else
             {
                 NeedsDonation_Clicked = false;
-                initListView(false);
+                RestoreFullList();
             }
-            lblUpToDate.Click += lblUpToDate_Click;
-            lblUpdateAvailable.Click += updateAvailable_Click;
-            lblNeedsDonate.Click += lblNeedsDonate_Click;
+
+            // Update button visual states
+            UpdateFilterButtonStates();
+
+            // Refresh gallery view if active
+            if (isGalleryView)
+            {
+                PopulateGalleryView();
+            }
+
+            btnInstalled.Click += btnInstalled_Click;
+            btnUpdateAvailable.Click += btnUpdateAvailable_Click;
+            btnNewerThanList.Click += btnNewerThanList_Click;
+        }
+
+        private void FilterListByColors(Color[] targetColors)
+        {
+            changeTitle("Filtering Game List...");
+
+            if (_allItems == null || _allItems.Count == 0)
+            {
+                changeTitle("No games to filter");
+                return;
+            }
+
+            var targetArgbs = new HashSet<int>(targetColors.Select(c => c.ToArgb()));
+
+            var filteredItems = _allItems
+                .Where(item => targetArgbs.Contains(item.ForeColor.ToArgb()))
+                .ToList();
+
+            gamesListView.BeginUpdate();
+            gamesListView.Items.Clear();
+            gamesListView.Items.AddRange(filteredItems.ToArray());
+            gamesListView.EndUpdate();
+
+            // Refresh gallery view if active - set data source before calling PopulateGalleryView
+            if (isGalleryView)
+            {
+                _galleryDataSource = filteredItems;
+                PopulateGalleryView();
+            }
+
+            changeTitle("");
+        }
+
+        private void FilterListByColor(Color targetColor)
+        {
+            changeTitle("Filtering Game List...");
+
+            if (_allItems == null || _allItems.Count == 0)
+            {
+                changeTitle("No games to filter");
+                return;
+            }
+
+            var filteredItems = _allItems
+                .Where(item => item.ForeColor.ToArgb() == targetColor.ToArgb())
+                .ToList();
+
+            gamesListView.BeginUpdate();
+            gamesListView.Items.Clear();
+            gamesListView.Items.AddRange(filteredItems.ToArray());
+            gamesListView.EndUpdate();
+
+            // Refresh gallery view if active - set data source before calling PopulateGalleryView
+            if (isGalleryView)
+            {
+                _galleryDataSource = filteredItems;
+                PopulateGalleryView();
+            }
+
+            changeTitle("");
+        }
+
+        private void RestoreFullList()
+        {
+            if (_allItems == null || _allItems.Count == 0)
+            {
+                changeTitle("No games to restore");
+                return;
+            }
+
+            gamesListView.BeginUpdate();
+            gamesListView.Items.Clear();
+            gamesListView.Items.AddRange(_allItems.ToArray());
+            gamesListView.EndUpdate();
+
+            // Refresh gallery view if active
+            if (isGalleryView && gamesGalleryView.Visible)
+            {
+                _galleryDataSource = _allItems;
+                PopulateGalleryView();
+            }
+
+            changeTitle("");
         }
 
         public static void OpenDirectory(string directoryPath)
@@ -4558,16 +5123,36 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
             _ = searchTextBox.Focus();
         }
 
-        private async void btnRunAdbCmd_Click(object sender, EventArgs e)
+        private void btnRunAdbCmd_Click(object sender, EventArgs e)
         {
-            adbCmd_CommandBox.Visible = true;
-            adbCmd_btnToggleUpdates.Visible = true;
-            adbCmd_btnSend.Visible = true;
-            adbCmd_CommandBox.Clear();
-            adbCmd_Label.Text = "Type ADB Command";
-            adbCmd_Label.Visible = true;
-            adbCmd_background.Visible = true;
-            _ = adbCmd_CommandBox.Focus();
+            using (var adbForm = new AdbCommandForm())
+            {
+                if (adbForm.ShowDialog(this) == DialogResult.OK)
+                {
+                    string command = adbForm.Command;
+                    if (!string.IsNullOrWhiteSpace(command))
+                    {
+                        string sentCommand = command.Replace("adb", "").Trim();
+                        changeTitle($"Running ADB command: ADB {sentCommand}");
+                        string output = ADB.RunAdbCommandToString(command).Output;
+
+                        if (adbForm.ToggleUpdatesClicked)
+                        {
+                            bool isNowDisabled = output.Contains("disabled") || command.Contains("disable");
+                            string status = isNowDisabled ? "disabled" : "enabled";
+                            _ = JR.Utils.GUI.Forms.FlexibleMessageBox.Show(this,
+                                $"OS Updates have been {status}.\n\nOutput:\n{output}");
+                        }
+                        else
+                        {
+                            _ = JR.Utils.GUI.Forms.FlexibleMessageBox.Show(this,
+                                $"Ran ADB command: ADB {sentCommand}\r\nOutput:\r\n{output}");
+                        }
+
+                        changeTitle("");
+                    }
+                }
+            }
         }
 
         private void btnOpenDownloads_Click(object sender, EventArgs e)
@@ -4584,123 +5169,1604 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
             {
                 // No Device Mode is currently On. Toggle it Off
                 settings.NodeviceMode = false;
-                btnNoDevice.Text = "Disable Sideloading";
+                btnNoDevice.Text = "DISABLE SIDELOADING";
 
-                changeTitle($"Sideloading has been Enabled");
+                changeTitle($"Sideloading ENABLED");
             }
             else
             {
                 settings.NodeviceMode = true;
                 settings.DeleteAllAfterInstall = false;
-                btnNoDevice.Text = "Enable Sideloading";
+                btnNoDevice.Text = "ENABLE SIDELOADING";
 
-                changeTitle($"Sideloading Disabled. Games will only Download.");
+                changeTitle($"Sideloading DISABLED. Games will only download");
             }
 
             settings.Save();
         }
 
-        private void adbCmd_btnToggleUpdates_Click(object sender, EventArgs e)
-        {
-            string adbResult = ADB.RunAdbCommandToString("adb shell pm list packages -d").Output;
-            bool isUpdatesDisabled = adbResult.Contains("com.oculus.updater");
-
-            if (isUpdatesDisabled == true)
-            {
-                // Updates are already disabled. Enable them
-                adbCmd_CommandBox.Text = "adb shell pm enable com.oculus.updater";
-            }
-            else
-            {
-                adbCmd_CommandBox.Text = "shell pm disable-user --user 0 com.oculus.updater";
-            }
-
-            // adb shell pm enable com.oculus.updater
-            KeyPressEventArgs enterKeyPressArgs = new KeyPressEventArgs((char)Keys.Enter);
-            ADBcommandbox_KeyPress(adbCmd_CommandBox, enterKeyPressArgs);
-        }
-
-        private void adbCmd_btnSend_Click(object sender, EventArgs e)
-        {
-            KeyPressEventArgs enterKeyPressArgs = new KeyPressEventArgs((char)Keys.Enter);
-            ADBcommandbox_KeyPress(adbCmd_CommandBox, enterKeyPressArgs);
-        }
-
         private ListViewItem _rightClickedItem;
         private void gamesListView_MouseClick(object sender, MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Right)
-            {
-                _rightClickedItem = gamesListView.GetItemAt(e.X, e.Y);
-                gamesListView.SelectedItems.Clear();
-                if (_rightClickedItem != null)
-                {
-                    _rightClickedItem.Selected = true;
-                }
+            if (e.Button != MouseButtons.Right) return;
 
-                // Get the name of the release of the right-clicked item
-                string packageName = _rightClickedItem.SubItems[1].Text;
+            _rightClickedItem = gamesListView.GetItemAt(e.X, e.Y);
+            if (_rightClickedItem == null) return;
 
-                // Check if the game is favorited and update the menu item text accordingly
-                ToolStripMenuItem favoriteMenuItem = favoriteGame.Items[0] as ToolStripMenuItem;
-                if (SettingsManager.Instance.FavoritedGames.Contains(packageName))
-                {
-                    favoriteButton.Text = "Unfavorite";  // If it's already favorited, show "Unfavorite"
-                }
-                else
-                {
-                    favoriteButton.Text = "Favorite";  // If it's not favorited, show "Favorite"
-                }
-
-                // Show the context menu at the mouse position
-                favoriteGame.Show(gamesListView, e.Location);
-            }
+            gamesListView.SelectedItems.Clear();
+            _rightClickedItem.Selected = true;
+            
+            UpdateFavoriteMenuItemText();
+            favoriteGame.Show(gamesListView, e.Location);
         }
 
         private void favoriteButton_Click(object sender, EventArgs e)
         {
-            if (_rightClickedItem != null)
-            {
-                string packageName = _rightClickedItem.SubItems[1].Text;
+            if (_rightClickedItem == null) return;
 
-                // Check the menu item's text to decide whether to add or remove the game from favorites
-                if ((sender as ToolStripMenuItem).Text == "Favorite")
-                {
-                    // Add to favorites
-                    settings.AddFavoriteGame(packageName);
-                    Console.WriteLine($"{packageName} has been added to favorites.");
-                }
-                else if ((sender as ToolStripMenuItem).Text == "Unfavorite")
-                {
-                    // Remove from favorites
-                    settings.RemoveFavoriteGame(packageName);
-                    Console.WriteLine($"{packageName} has been removed from favorites.");
-                }
+            string packageName = _rightClickedItem.SubItems[1].Text;
 
-                // After adding/removing, update the context menu text
-                ToolStripMenuItem favoriteMenuItem = sender as ToolStripMenuItem;
-                if (settings.FavoritedGames.Contains(packageName))
-                {
-                    favoriteMenuItem.Text = "Unfavorite";
-                }
-                else
-                {
-                    favoriteMenuItem.Text = "Favorite";
-                }
-            }
+            if (settings.FavoritedGames.Contains(packageName))
+                settings.RemoveFavoriteGame(packageName);
+            else
+                settings.AddFavoriteGame(packageName);
+
+            UpdateFavoriteMenuItemText();
+        }
+
+        private void UpdateFavoriteMenuItemText()
+        {
+            if (_rightClickedItem == null) return;
+            string packageName = _rightClickedItem.SubItems[1].Text;
+            favoriteButton.Text = settings.FavoritedGames.Contains(packageName) ? "Remove from Favorites" : "★ Add to Favorites";
         }
 
         private void favoriteSwitcher_Click(object sender, EventArgs e)
         {
-            if (favoriteSwitcher.Text == "Games List")
+            // Guard: ensure _allItems is populated
+            if (_allItems == null || _allItems.Count == 0)
             {
-                favoriteSwitcher.Text = "Favorited Games";
-                initListView(true);  
+                Logger.Log("favoriteSwitcher_Click: _allItems is null or empty");
+                return;
+            }
+
+            bool showFavoritesOnly = favoriteSwitcher.Text == "FAVORITES";
+
+            if (showFavoritesOnly)
+            {
+                favoriteSwitcher.Text = "ALL";
+
+                var favSet = new HashSet<string>(settings.FavoritedGames, StringComparer.OrdinalIgnoreCase);
+
+                var favoriteItems = _allItems
+                    .Where(item => item.SubItems.Count > 1 && favSet.Contains(item.SubItems[1].Text))
+                    .ToList();
+
+                gamesListView.BeginUpdate();
+                gamesListView.Items.Clear();
+                gamesListView.Items.AddRange(favoriteItems.ToArray());
+                gamesListView.EndUpdate();
+
+                _galleryDataSource = favoriteItems;
+                if (isGalleryView && _fastGallery != null)
+                {
+                    _fastGallery.RefreshFavoritesCache();
+                    _fastGallery.UpdateItems(favoriteItems);
+                }
             }
             else
             {
-                favoriteSwitcher.Text = "Games List";
-                initListView(false); 
+                favoriteSwitcher.Text = "FAVORITES";
+
+                gamesListView.BeginUpdate();
+                gamesListView.Items.Clear();
+                gamesListView.Items.AddRange(_allItems.ToArray());
+                gamesListView.EndUpdate();
+
+                _galleryDataSource = _allItems;
+                if (isGalleryView && _fastGallery != null)
+                {
+                    _fastGallery.RefreshFavoritesCache();
+                    _fastGallery.UpdateItems(_allItems);
+                }
+            }
+        }
+
+        public async void UpdateQuestInfoPanel()
+        {
+            // Check if device is actually connected by checking Devices list
+            bool hasDevice = Devices != null && Devices.Count > 0 && !Devices.Contains("unauthorized");
+
+            if ((!settings.NodeviceMode && hasDevice) || DeviceConnected)
+            {
+                try
+                {
+                    ADB.DeviceID = GetDeviceID();
+
+                    // Get device model
+                    string deviceModel = ADB.RunAdbCommandToString("shell getprop ro.product.model").Output.Trim();
+                    if (string.IsNullOrEmpty(deviceModel))
+                    {
+                        deviceModel = "No Device Found";
+                    }
+
+                    // Get storage info
+                    string storageOutput = ADB.RunAdbCommandToString("shell df /sdcard").Output;
+                    string[] lines = storageOutput.Split('\n');
+
+                    long totalSpace = 0;
+                    long usedSpace = 0;
+                    long freeSpace = 0;
+                    
+                    if (lines.Length > 1)
+                    {
+                        string[] parts = lines[1].Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length >= 4)
+                        {
+                            if (long.TryParse(parts[1], out totalSpace) &&
+                                long.TryParse(parts[2], out usedSpace) &&
+                                long.TryParse(parts[3], out freeSpace))
+                            {
+                                totalSpace = totalSpace / 1024; // Convert to MB
+                                usedSpace = usedSpace / 1024;
+                                freeSpace = freeSpace / 1024;
+
+                                // Format free space display
+                                if (freeSpace > 1024)
+                                {
+                                    freeSpaceText = $"{(freeSpace / 1024.0):F2} GB AVAILABLE";
+                                }
+                                else
+                                {
+                                    freeSpaceText = $"{freeSpace} MB AVAILABLE";
+                                }
+
+                                freeSpaceTextDetailed = $"{(usedSpace / 1024.0):F0} GB OF {(totalSpace / 1024.0):F0} GB USED";
+                            }
+                        }
+                    }
+
+                    // Calculate storage percentage used - clamped to 1%..100%
+                    int storagePercentUsed = Math.Min(100, Math.Max(1, (100 - (totalSpace > 0 ? (int)((usedSpace * 100) / totalSpace) : 0))));
+
+                    // Update UI on main thread
+                    questInfoPanel.Invoke(() =>
+                    {
+                        questInfoLabel.Text = deviceModel;
+                        diskLabel.Text = freeSpaceText;
+
+                        // Update custom progress bar
+                        SetQuestStorageProgress(storagePercentUsed);
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Unable to update quest info panel: {ex.Message}", LogLevel.ERROR);
+                    questInfoPanel.Invoke(() =>
+                    {
+                        questInfoLabel.Text = "Device Info Unavailable";
+                        SetQuestStorageProgress(0);
+                    });
+                }
+            }
+            else
+            {
+                questInfoPanel.Invoke(() =>
+                {
+                    questInfoLabel.Text = "No Device Connected";
+                    SetQuestStorageProgress(0);
+                });
+            }
+
+            // Determine visibility based on device existence
+            bool showQuestInfo = ((!settings.NodeviceMode && hasDevice) || DeviceConnected);
+
+            // Toggle visibility atomically on UI thread
+            questInfoPanel.Invoke(() =>
+            {
+                questStorageProgressBar.Visible = showQuestInfo;
+                batteryLevImg.Visible = showQuestInfo;
+                batteryLabel.Visible = showQuestInfo;
+                questInfoLabel.Visible = showQuestInfo;
+                diskLabel.Visible = showQuestInfo;
+            });
+        }
+
+        private void QuestInfoHoverEnter(object sender, EventArgs e)
+        {
+            // Only react when device info is shown
+            if (!questStorageProgressBar.Visible) return;
+
+            diskLabel.Text = freeSpaceTextDetailed;
+        }
+
+        // Restore the original baseline text ("XX GB FREE")
+        private void QuestInfoHoverLeave(object sender, EventArgs e)
+        {
+            // Only react when device info is shown
+            if (!questStorageProgressBar.Visible) return;
+
+            // Ignore leave fired when moving between child controls inside the container
+            var panel = questInfoPanel;
+            var mouse = panel.PointToClient(MousePosition);
+            if (panel.ClientRectangle.Contains(mouse)) return;
+
+            diskLabel.Text = freeSpaceText;
+        }
+
+        private void questStorageProgressBar_Paint(object sender, PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.Clear(questStorageProgressBar.BackColor);
+
+            int w = questStorageProgressBar.ClientSize.Width;
+            int h = questStorageProgressBar.ClientSize.Height;
+            if (w <= 0 || h <= 0) return;
+
+            // Rounded rectangle parameters (outer + fill share the same geometry).
+            int radius = 10;
+            Color bgColor = Color.FromArgb(28, 32, 38);
+            Color borderColor = Color.FromArgb(60, 65, 75);
+
+            // Modern fill gradient (adjust as desired)
+            Color progressStart = Color.FromArgb(43, 160, 140);
+            Color progressEnd = Color.FromArgb(30, 110, 95);
+
+            // Build the rounded outer path (used for background and clipping).
+            var outer = new RoundedRectangleF(w, h, radius);
+
+            // Paint background
+            using (var bgBrush = new SolidBrush(bgColor))
+            using (var borderPen = new Pen(borderColor, 1f))
+            {
+                g.FillPath(bgBrush, outer.Path);
+                g.DrawPath(borderPen, outer.Path);
+            }
+
+            // Progress fraction and width
+            float p = Math.Max(0f, Math.Min(1f, _questStorageProgress / 100f));
+            int progressWidth = Math.Max(0, (int)(w * p));
+            if (progressWidth <= 0) return;
+
+            // Near-full rounding behavior:
+            // As progress approaches 100%, progressively include the outer right-rounded corners.
+            // Threshold start at 97%. At 97% -> straight cut; at 100% -> fully rounded outer corners.
+            float t = 0f;
+            if (p > 0.97f)
+            {
+                t = Math.Min(1f, (p - 0.97f) / 0.03f); // 0..1 over last 3%
+            }
+
+            // Build a clipping region for the fill: intersection of outer rounded rect with
+            // the left rectangular portion [0..progressWidth]
+            // plus a progressive right-cap region that extends into the rounded corners
+            // with width up to 2*radius, scaled by t.
+            Region fillClip = new Region(new Rectangle(0, 0, progressWidth, h));
+            if (t > 0f)
+            {
+                int capWidth = (int)(t * (2 * radius));
+                if (capWidth > 0)
+                {
+                    // This rectangle sits inside the area of the right rounded corners,
+                    // so union-ing it with the rectangular clip allows the fill to
+                    // progressively "wrap" into the curvature.
+                    var rightCapRect = new Rectangle(w - (2 * radius), 0, capWidth, h);
+                    fillClip.Union(rightCapRect);
+                }
+            }
+
+            Region prevClip = g.Clip;
+            try
+            {
+                // Final fill region = outer rounded path ∩ fillClip
+                using (var outerRegion = new Region(outer.Path))
+                {
+                    outerRegion.Intersect(fillClip);
+                    g.SetClip(outerRegion, CombineMode.Replace);
+
+                    using (var progressBrush = new LinearGradientBrush(
+                        new Rectangle(0, 0, Math.Max(1, progressWidth), h),
+                        progressStart,
+                        progressEnd,
+                        LinearGradientMode.Horizontal))
+                    {
+                        // Fill the outer path; clipping ensures the fill grows left to right,
+                        // stays fully flush to the outer geometry, and never exceeds it.
+                        g.FillPath(progressBrush, outer.Path);
+                    }
+                }
+            }
+            finally
+            {
+                // Restore clip and re-stroke border to keep outline crisp
+                g.Clip = prevClip;
+                using (var borderPen = new Pen(borderColor, 1f))
+                {
+                    g.DrawPath(borderPen, outer.Path);
+                }
+            }
+        }
+
+        private void SetQuestStorageProgress(int percentage)
+        {
+            _questStorageProgress = Math.Max(0, Math.Min(100, percentage));
+
+            if (questStorageProgressBar.InvokeRequired)
+            {
+                questStorageProgressBar.Invoke(new Action(() => questStorageProgressBar.Invalidate()));
+            }
+            else
+            {
+                questStorageProgressBar.Invalidate();
+            }
+        }
+
+        private void btnViewToggle_Click(object sender, EventArgs e)
+        {
+            // Capture currently selected item before switching views
+            string selectedPackageName = null;
+            if (gamesListView.SelectedItems.Count > 0)
+            {
+                var selectedItem = gamesListView.SelectedItems[0];
+                if (selectedItem.SubItems.Count > 2)
+                {
+                    selectedPackageName = selectedItem.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
+                }
+            }
+
+            isGalleryView = !isGalleryView;
+
+            // Save user preference
+            settings.UseGalleryView = isGalleryView;
+            settings.Save();
+
+            if (isGalleryView)
+            {
+                btnViewToggle.Text = "LIST";
+                gamesListView.Visible = false;
+                gamesGalleryView.Visible = true;
+
+                // Only populate if data is available, otherwise it will be populated when initListView completes
+                if (_allItems != null && _allItems.Count > 0)
+                {
+                    PopulateGalleryView();
+
+                    // Scroll to the previously selected item in gallery view
+                    if (!string.IsNullOrEmpty(selectedPackageName) && _fastGallery != null)
+                    {
+                        _fastGallery.ScrollToPackage(selectedPackageName);
+                    }
+                }
+            }
+            else
+            {
+                btnViewToggle.Text = "GALLERY";
+                gamesGalleryView.Visible = false;
+                gamesListView.Visible = true;
+                CleanupGalleryView();
+            }
+        }
+
+        private void PopulateGalleryView()
+        {
+            // If _galleryDataSource was already set (by search or filter), use it
+            // Otherwise, determine what to display based on current state
+            if (_galleryDataSource == null)
+            {
+                if (updateAvailableClicked || upToDate_Clicked || NeedsDonation_Clicked)
+                {
+                    _galleryDataSource = gamesListView.Items.Cast<ListViewItem>().ToList();
+                }
+                else
+                {
+                    _galleryDataSource = _allItems ?? gamesListView.Items.Cast<ListViewItem>().ToList();
+                }
+            }
+
+            if (_galleryDataSource == null)
+            {
+                _galleryDataSource = new List<ListViewItem>();
+            }
+
+            // If gallery already exists, just update the data source
+            if (_fastGallery != null && !_fastGallery.IsDisposed)
+            {
+                _fastGallery.UpdateItems(_galleryDataSource);
+                return;
+            }
+
+            // First time creation
+            CleanupGalleryView();
+
+            int targetWidth = gamesGalleryView.ClientSize.Width > 0 ? gamesGalleryView.ClientSize.Width : gamesGalleryView.Width;
+            int targetHeight = gamesGalleryView.ClientSize.Height > 0 ? gamesGalleryView.ClientSize.Height : gamesGalleryView.Height;
+
+            if (targetHeight <= 0) targetHeight = 350;
+            if (targetWidth <= 0) targetWidth = 1145;
+
+            gamesGalleryView.AutoScroll = false;
+            gamesGalleryView.Padding = Padding.Empty;
+            gamesGalleryView.Controls.Clear();
+
+            _fastGallery = new FastGalleryPanel(_galleryDataSource, TILE_WIDTH, TILE_HEIGHT, TILE_SPACING, targetWidth, targetHeight);
+            _fastGallery.TileClicked += FastGallery_TileClicked;
+            _fastGallery.TileDoubleClicked += FastGallery_TileDoubleClicked;
+            _fastGallery.TileDeleteClicked += FastGallery_TileDeleteClicked;
+
+            gamesGalleryView.Controls.Add(_fastGallery);
+            _fastGallery.Anchor = AnchorStyles.None;
+
+            gamesGalleryView.Resize += GamesGalleryView_Resize;
+        }
+
+        private async void FastGallery_TileDeleteClicked(object sender, int index)
+        {
+            if (index < 0 || _fastGallery == null) return;
+
+            var item = _fastGallery.GetItemAtIndex(index);
+            if (item == null) return;
+
+            await UninstallGameAsync(item);
+        }
+
+        private void GamesGalleryView_Resize(object sender, EventArgs e)
+        {
+            if (_fastGallery != null && !_fastGallery.IsDisposed)
+            {
+                _fastGallery.Size = gamesGalleryView.ClientSize;
+            }
+        }
+
+        private void CleanupGalleryView()
+        {
+            gamesGalleryView.Resize -= GamesGalleryView_Resize;
+
+            if (_fastGallery != null)
+            {
+                _fastGallery.Dispose();
+                _fastGallery = null;
+            }
+        }
+
+        private void FastGallery_TileClicked(object sender, int itemIndex)
+        {
+            if (itemIndex < 0 || _fastGallery == null) return;
+
+            // Get the actual item from the gallery's current (sorted) list
+            var item = _fastGallery.GetItemAtIndex(itemIndex);
+            if (item == null || item.SubItems.Count <= 2) return;
+
+            string packageName = item.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
+            string releaseName = item.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
+            string gameName = item.SubItems[SideloaderRCLONE.GameNameIndex].Text;
+
+            // Clear all selections first - must deselect each item individually
+            // because SelectedItems.Clear() doesn't work reliably when ListView is hidden
+            foreach (ListViewItem listItem in gamesListView.Items)
+            {
+                listItem.Selected = false;
+            }
+
+            // Find and select the matching item in gamesListView
+            foreach (ListViewItem listItem in gamesListView.Items)
+            {
+                if (listItem.SubItems.Count > 2 && listItem.SubItems[2].Text == packageName)
+                {
+                    listItem.Selected = true;
+                    listItem.EnsureVisible();
+                    break;
+                }
+            }
+
+            // Load release notes
+            string notePath = Path.Combine(SideloaderRCLONE.NotesFolder, $"{releaseName}.txt");
+            notesRichTextBox.Text = File.Exists(notePath) ? File.ReadAllText(notePath) : "";
+            UpdateNotesScrollBar();
+        }
+
+        private void FastGallery_TileDoubleClicked(object sender, int itemIndex)
+        {
+            if (itemIndex < 0 || _fastGallery == null) return;
+
+            // Get the actual item from the gallery's current (sorted) list
+            var item = _fastGallery.GetItemAtIndex(itemIndex);
+            if (item == null || item.SubItems.Count <= 2) return;
+
+            string packageName = item.SubItems[2].Text;
+
+            // Clear all selections first - must deselect each item individually
+            // because SelectedItems.Clear() doesn't work reliably when ListView is hidden
+            foreach (ListViewItem listItem in gamesListView.Items)
+            {
+                listItem.Selected = false;
+            }
+
+            // Find and select the matching item in gamesListView, then trigger download
+            foreach (ListViewItem listItem in gamesListView.Items)
+            {
+                if (listItem.SubItems.Count > 2 && listItem.SubItems[2].Text == packageName)
+                {
+                    listItem.Selected = true;
+                    downloadInstallGameButton_Click(downloadInstallGameButton, EventArgs.Empty);
+                    break;
+                }
+            }
+        }
+
+        private void ListViewUninstallButton_Paint(object sender, PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            g.Clear(gamesListView.BackColor);
+
+            int w = _listViewUninstallButton.Width;
+            int h = _listViewUninstallButton.Height;
+            var btnRect = new Rectangle(0, 0, w, h);
+
+            // Colors matching GalleryPanel's uninstall button
+            Color bgColor = _listViewUninstallButtonHovered
+                ? Color.FromArgb(255, 220, 70, 70)   // DeleteButtonHoverBg
+                : Color.FromArgb(255, 180, 50, 50);  // DeleteButtonBg
+
+            // Draw rectangle background
+            using (var bgBrush = new SolidBrush(bgColor))
+            {
+                g.FillRectangle(bgBrush, btnRect);
+            }
+
+            // Draw trash icon
+            int iconPadding = 3;
+            int iconX = iconPadding;
+            int iconY = iconPadding - 1;
+            int iconSize = w - iconPadding * 2;
+
+            using (var pen = new Pen(Color.White, 1.5f))
+            {
+                // Trash can body
+                int bodyTop = iconY + 4;
+                int bodyBottom = iconY + iconSize;
+                int bodyLeft = iconX + 2;
+                int bodyRight = iconX + iconSize - 2;
+
+                // Draw body outline (trapezoid-ish shape)
+                g.DrawLine(pen, bodyLeft, bodyTop, bodyLeft + 1, bodyBottom);
+                g.DrawLine(pen, bodyLeft + 1, bodyBottom, bodyRight - 1, bodyBottom);
+                g.DrawLine(pen, bodyRight - 1, bodyBottom, bodyRight, bodyTop);
+
+                // Draw lid
+                g.DrawLine(pen, iconX, bodyTop, iconX + iconSize, bodyTop);
+
+                // Draw handle on lid
+                int handleLeft = iconX + iconSize / 2 - 3;
+                int handleRight = iconX + iconSize / 2 + 3;
+                int handleTop = iconY + 1;
+                g.DrawLine(pen, handleLeft, bodyTop, handleLeft, handleTop);
+                g.DrawLine(pen, handleLeft, handleTop, handleRight, handleTop);
+                g.DrawLine(pen, handleRight, handleTop, handleRight, bodyTop);
+
+                // Draw vertical lines inside trash
+                int lineY1 = bodyTop + 3;
+                int lineY2 = bodyBottom - 3;
+                g.DrawLine(pen, iconX + iconSize / 2, lineY1, iconX + iconSize / 2, lineY2);
+                if (iconSize > 10)
+                {
+                    g.DrawLine(pen, iconX + iconSize / 2 - 4, lineY1, iconX + iconSize / 2 - 4, lineY2);
+                    g.DrawLine(pen, iconX + iconSize / 2 + 4, lineY1, iconX + iconSize / 2 + 4, lineY2);
+                }
+            }
+        }
+
+        private void gamesPictureBox_Paint(object sender, PaintEventArgs e)
+        {
+            // Only draw placeholder if no image is loaded
+            if (gamesPictureBox.BackgroundImage != null &&
+                gamesPictureBox.BackgroundImage.Width > 1 &&
+                gamesPictureBox.BackgroundImage.Height > 1)
+            {
+                return;
+            }
+
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            var thumbRect = new Rectangle(0, 0, gamesPictureBox.Width, gamesPictureBox.Height);
+
+            // Draw placeholder background
+            using (var brush = new SolidBrush(Color.FromArgb(35, 35, 40)))
+            {
+                g.FillRectangle(brush, thumbRect);
+            }
+
+            // When disclaimer is gone
+            if (freeDisclaimer.Enabled == false)
+            {
+                // Draw emoji placeholder
+                using (var textBrush = new SolidBrush(Color.FromArgb(70, 70, 80)))
+                {
+                    var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                    g.DrawString("🎮", new Font("Segoe UI Emoji", 32f), textBrush, thumbRect, sf);
+                }
+            }
+        }
+
+        private void webViewPlaceholderPanel_Paint(object sender, PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+            int radius = 8;
+            var rect = new Rectangle(0, 0, webViewPlaceholderPanel.Width - 1, webViewPlaceholderPanel.Height - 1);
+            Color panelColor = Color.FromArgb(24, 26, 30);
+            Color cornerBgColor = Color.FromArgb(32, 35, 45);
+
+            // Clear with corner background color first
+            g.Clear(cornerBgColor);
+
+            using (var path = CreateRoundedRectPath(rect, radius))
+            {
+                // Draw rounded background
+                using (var brush = new SolidBrush(panelColor))
+                {
+                    g.FillPath(brush, path);
+                }
+            }
+
+            // Apply rounded region to clip the panel
+            using (var regionPath = CreateRoundedRectPath(new Rectangle(0, 0, webViewPlaceholderPanel.Width, webViewPlaceholderPanel.Height), radius))
+            {
+                webViewPlaceholderPanel.Region = new Region(regionPath);
+            }
+
+            // Draw emoji placeholder
+            using (var textBrush = new SolidBrush(Color.FromArgb(60, 65, 70)))
+            {
+                var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                g.DrawString("🎮", new Font("Segoe UI Emoji", 32f), textBrush, rect, sf);
+            }
+        }
+
+        public void ShowVideoPlaceholder()
+        {
+            webViewPlaceholderPanel.Visible = true;
+            webViewPlaceholderPanel.BringToFront();
+        }
+
+        public void HideVideoPlaceholder()
+        {
+            webViewPlaceholderPanel.Visible = false;
+        }
+
+        private void SubscribeToHoverEvents(Control parent)
+        {
+            parent.MouseEnter += QuestInfoHoverEnter;
+            parent.MouseLeave += QuestInfoHoverLeave;
+
+            foreach (Control child in parent.Controls)
+            {
+                SubscribeToHoverEvents(child);
+            }
+        }
+
+        private string ShowInstalledAppSelector(string promptText = "Select an installed app...")
+        {
+            // Refresh the list of installed apps
+            listAppsBtn();
+
+            if (m_combo.Items.Count == 0)
+            {
+                FlexibleMessageBox.Show(Program.form, "No installed apps found on the device.");
+                return null;
+            }
+
+            // Create a dialog to show the combo selection
+            using (Form dialog = new Form())
+            {
+                dialog.Text = promptText;
+                dialog.Size = new Size(450, 150);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MaximizeBox = false;
+                dialog.MinimizeBox = false;
+                dialog.BackColor = Color.FromArgb(20, 24, 29);
+                dialog.ForeColor = Color.White;
+
+                var label = new Label
+                {
+                    Text = promptText,
+                    ForeColor = Color.White,
+                    AutoSize = true,
+                    Location = new Point(15, 15)
+                };
+
+                var comboBox = new ComboBox
+                {
+                    Location = new Point(15, 40),
+                    Size = new Size(400, 24),
+                    DropDownStyle = ComboBoxStyle.DropDown,
+                    BackColor = Color.FromArgb(42, 45, 58),
+                    ForeColor = Color.White,
+                    FlatStyle = FlatStyle.Standard
+                };
+
+                // Copy items from m_combo
+                foreach (var item in m_combo.Items)
+                {
+                    comboBox.Items.Add(item);
+                }
+
+                var okButton = CreateStyledButton("OK", DialogResult.OK, new Point(255, 75));
+                var cancelButton = CreateStyledButton("Cancel", DialogResult.Cancel, new Point(340, 75), false);
+
+                dialog.Controls.AddRange(new Control[] { label, comboBox, okButton, cancelButton });
+                dialog.AcceptButton = okButton;
+                dialog.CancelButton = cancelButton;
+
+                if (dialog.ShowDialog(this) == DialogResult.OK && comboBox.SelectedIndex != -1)
+                {
+                    return comboBox.SelectedItem.ToString();
+                }
+            }
+
+            return null;
+        }
+
+        private string ShowDeviceSelector(string promptText = "Select a device")
+        {
+            // Refresh the list of devices first
+            string output = ADB.RunAdbCommandToString("devices").Output;
+            string[] lines = output.Split('\n');
+
+            var deviceList = new List<string>();
+            for (int i = 1; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (line.Length > 0 && !string.IsNullOrWhiteSpace(line))
+                {
+                    string deviceId = line.Split('\t')[0];
+                    if (!string.IsNullOrEmpty(deviceId))
+                    {
+                        deviceList.Add(deviceId);
+                    }
+                }
+            }
+
+            if (deviceList.Count == 0)
+            {
+                FlexibleMessageBox.Show(Program.form, "No devices found. Please connect a device and try again.");
+                return null;
+            }
+
+            // If only one device, return it directly
+            if (deviceList.Count == 1)
+            {
+                // Update internal combo for compatibility
+                devicesComboBox.Items.Clear();
+                devicesComboBox.Items.Add(deviceList[0]);
+                devicesComboBox.SelectedIndex = 0;
+                FlexibleMessageBox.Show(this, $"Connected device '{deviceList[0]}'. No other devices detected.");
+                return deviceList[0];
+            }
+
+            // Create a dialog to show the device selection
+            using (Form dialog = new Form())
+            {
+                dialog.Text = promptText;
+                dialog.Size = new Size(400, 150);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MaximizeBox = false;
+                dialog.MinimizeBox = false;
+                dialog.BackColor = Color.FromArgb(20, 24, 29);
+                dialog.ForeColor = Color.White;
+
+                var label = new Label
+                {
+                    Text = promptText,
+                    ForeColor = Color.White,
+                    AutoSize = true,
+                    Location = new Point(15, 15)
+                };
+
+                var comboBox = new ComboBox
+                {
+                    Location = new Point(15, 40),
+                    Size = new Size(350, 24),
+                    DropDownStyle = ComboBoxStyle.DropDownList,
+                    BackColor = Color.FromArgb(42, 45, 58),
+                    ForeColor = Color.White,
+                    FlatStyle = FlatStyle.Standard
+                };
+
+                // Add devices to combo
+                foreach (var device in deviceList)
+                {
+                    comboBox.Items.Add(device);
+                }
+
+                if (comboBox.Items.Count > 0)
+                {
+                    comboBox.SelectedIndex = 0;
+                }
+
+                var okButton = CreateStyledButton("OK", DialogResult.OK, new Point(205, 75));
+                var cancelButton = CreateStyledButton("Cancel", DialogResult.Cancel, new Point(290, 75), false);
+
+                dialog.Controls.AddRange(new Control[] { label, comboBox, okButton, cancelButton });
+                dialog.AcceptButton = okButton;
+                dialog.CancelButton = cancelButton;
+
+                if (dialog.ShowDialog(this) == DialogResult.OK && comboBox.SelectedIndex != -1)
+                {
+                    string selectedDevice = comboBox.SelectedItem.ToString();
+
+                    // Update internal combo for compatibility
+                    devicesComboBox.Items.Clear();
+                    foreach (var device in deviceList)
+                    {
+                        devicesComboBox.Items.Add(device);
+                    }
+                    devicesComboBox.SelectedItem = selectedDevice;
+
+                    return selectedDevice;
+                }
+            }
+
+            return null;
+        }
+
+        private void selectDeviceButton_Click(object sender, EventArgs e)
+        {
+            string selectedDevice = ShowDeviceSelector("Select a device");
+            if (selectedDevice != null)
+            {
+                ADB.DeviceID = selectedDevice;
+                changeTitlebarToDevice();
+                showAvailableSpace();
+                changeTitle($"Selected device: {selectedDevice}", true);
+            }
+        }
+
+        private void selectMirrorButton_Click(object sender, EventArgs e)
+        {
+            string selectedMirror = ShowMirrorSelector("Select a mirror");
+            if (selectedMirror != null)
+            {
+                // Find and select the mirror in the hidden remotesList
+                for (int i = 0; i < remotesList.Items.Count; i++)
+                {
+                    if (remotesList.Items[i].ToString() == selectedMirror)
+                    {
+                        remotesList.SelectedIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        private string ShowMirrorSelector(string promptText = "Select a mirror")
+        {
+            if (remotesList.Items.Count == 0)
+            {
+                FlexibleMessageBox.Show(this, "No mirrors available.");
+                return null;
+            }
+
+            // If only one mirror, just inform the user
+            if (remotesList.Items.Count == 1)
+            {
+                string onlyMirror = remotesList.Items[0].ToString();
+                FlexibleMessageBox.Show(this, $"Currently using '{onlyMirror}' mirror. No other mirrors available.");
+                return onlyMirror;
+            }
+
+            using (Form dialog = new Form())
+            {
+                dialog.Text = promptText;
+                dialog.Size = new Size(350, 150);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MaximizeBox = false;
+                dialog.MinimizeBox = false;
+                dialog.BackColor = Color.FromArgb(20, 24, 29);
+                dialog.ForeColor = Color.White;
+
+                var label = new Label
+                {
+                    Text = $"{promptText} (Current: {remotesList.SelectedItem ?? "None"})",
+                    ForeColor = Color.White,
+                    AutoSize = true,
+                    Location = new Point(15, 15)
+                };
+
+                var comboBox = new ComboBox
+                {
+                    Location = new Point(15, 40),
+                    Size = new Size(300, 24),
+                    DropDownStyle = ComboBoxStyle.DropDownList,
+                    BackColor = Color.FromArgb(42, 45, 58),
+                    ForeColor = Color.White,
+                    FlatStyle = FlatStyle.Standard
+                };
+
+                // Add mirrors to combo
+                foreach (var item in remotesList.Items)
+                {
+                    comboBox.Items.Add(item.ToString());
+                }
+
+                // Select current mirror
+                if (remotesList.SelectedIndex >= 0)
+                {
+                    comboBox.SelectedIndex = remotesList.SelectedIndex;
+                }
+                else if (comboBox.Items.Count > 0)
+                {
+                    comboBox.SelectedIndex = 0;
+                }
+
+                var okButton = CreateStyledButton("OK", DialogResult.OK, new Point(155, 75));
+                var cancelButton = CreateStyledButton("Cancel", DialogResult.Cancel, new Point(240, 75), false);
+
+                dialog.Controls.AddRange(new Control[] { label, comboBox, okButton, cancelButton });
+                dialog.AcceptButton = okButton;
+                dialog.CancelButton = cancelButton;
+
+                if (dialog.ShowDialog(this) == DialogResult.OK && comboBox.SelectedIndex != -1)
+                {
+                    return comboBox.SelectedItem.ToString();
+                }
+            }
+
+            return null;
+        }
+
+        private Button CreateStyledButton(string text, DialogResult dialogResult, Point location, bool isPrimary = true)
+        {
+            var button = new Button
+            {
+                Text = text,
+                DialogResult = dialogResult,
+                Location = location,
+                Size = new Size(75, 28),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(42, 45, 58),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9F),
+                Cursor = Cursors.Hand
+            };
+
+            button.FlatAppearance.BorderSize = 0;
+
+            // Track hover state
+            bool isHovered = false;
+
+            button.MouseEnter += (s, e) => { isHovered = true; button.Invalidate(); };
+            button.MouseLeave += (s, e) => { isHovered = false; button.Invalidate(); };
+
+            button.Paint += (s, e) =>
+            {
+                var btn = s as Button;
+                var g = e.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+                int radius = 4;
+                Rectangle drawRect = new Rectangle(1, 1, btn.Width - 2, btn.Height - 2);
+
+                // Clear with parent background
+                using (SolidBrush clearBrush = new SolidBrush(btn.Parent?.BackColor ?? Color.FromArgb(20, 24, 29)))
+                {
+                    g.FillRectangle(clearBrush, 0, 0, btn.Width, btn.Height);
+                }
+
+                using (GraphicsPath path = CreateRoundedRectPath(drawRect, radius))
+                {
+                    // Hover: accent color, Normal: dark button color
+                    Color bgColor = isHovered
+                        ? Color.FromArgb(93, 203, 173)
+                        : btn.BackColor;
+
+                    Color textColor = isHovered
+                        ? Color.FromArgb(20, 20, 20)
+                        : btn.ForeColor;
+
+                    using (SolidBrush brush = new SolidBrush(bgColor))
+                    {
+                        g.FillPath(brush, path);
+                    }
+
+                    // Subtle border on normal state
+                    if (!isHovered)
+                    {
+                        using (Pen borderPen = new Pen(Color.FromArgb(70, 75, 90), 1))
+                        {
+                            g.DrawPath(borderPen, path);
+                        }
+                    }
+
+                    TextRenderer.DrawText(g, btn.Text, btn.Font,
+                        new Rectangle(0, 0, btn.Width, btn.Height), textColor,
+                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                }
+
+                // Set rounded region
+                using (GraphicsPath regionPath = CreateRoundedRectPath(new Rectangle(0, 0, btn.Width, btn.Height), radius))
+                {
+                    btn.Region = new Region(regionPath);
+                }
+            };
+
+            return button;
+        }
+
+        private GraphicsPath CreateRoundedRectPath(Rectangle rect, int radius)
+        {
+            GraphicsPath path = new GraphicsPath();
+
+            if (radius <= 0)
+            {
+                path.AddRectangle(rect);
+                return path;
+            }
+
+            int diameter = radius * 2;
+            diameter = Math.Min(diameter, Math.Min(rect.Width, rect.Height));
+            radius = diameter / 2;
+
+            Rectangle arcRect = new Rectangle(rect.Location, new Size(diameter, diameter));
+
+            path.AddArc(arcRect, 180, 90);
+            arcRect.X = rect.Right - diameter;
+            path.AddArc(arcRect, 270, 90);
+            arcRect.Y = rect.Bottom - diameter;
+            path.AddArc(arcRect, 0, 90);
+            arcRect.X = rect.Left;
+            path.AddArc(arcRect, 90, 90);
+
+            path.CloseFigure();
+            return path;
+        }
+
+        private void UpdateFilterButtonStates()
+        {
+            Color inactiveStroke = Color.FromArgb(74, 74, 74);
+            Color activeBg = Color.FromArgb(40, 45, 55);
+            Color inactiveBg = Color.FromArgb(32, 35, 45);
+
+            // btnInstalled state
+            if (upToDate_Clicked)
+            {
+                btnInstalled.StrokeColor = ColorInstalled;
+                btnInstalled.Inactive1 = activeBg;
+                btnInstalled.Inactive2 = activeBg;
+            }
+            else
+            {
+                btnInstalled.StrokeColor = inactiveStroke;
+                btnInstalled.Inactive1 = inactiveBg;
+                btnInstalled.Inactive2 = inactiveBg;
+            }
+
+            // btnUpdateAvailable state
+            if (updateAvailableClicked)
+            {
+                btnUpdateAvailable.StrokeColor = ColorUpdateAvailable;
+                btnUpdateAvailable.Inactive1 = activeBg;
+                btnUpdateAvailable.Inactive2 = activeBg;
+            }
+            else
+            {
+                btnUpdateAvailable.StrokeColor = inactiveStroke;
+                btnUpdateAvailable.Inactive1 = inactiveBg;
+                btnUpdateAvailable.Inactive2 = inactiveBg;
+            }
+
+            // btnNewerThanList state
+            if (NeedsDonation_Clicked)
+            {
+                btnNewerThanList.StrokeColor = ColorDonateGame;
+                btnNewerThanList.Inactive1 = activeBg;
+                btnNewerThanList.Inactive2 = activeBg;
+            }
+            else
+            {
+                btnNewerThanList.StrokeColor = inactiveStroke;
+                btnNewerThanList.Inactive1 = inactiveBg;
+                btnNewerThanList.Inactive2 = inactiveBg;
+            }
+
+            // Force repaint
+            btnInstalled.Invalidate();
+            btnUpdateAvailable.Invalidate();
+            btnNewerThanList.Invalidate();
+        }
+
+        private void UnfocusSearchTextBox(object sender, EventArgs e)
+        {
+            // Only unfocus if the search text box currently has focus
+            if (searchTextBox.Focused)
+            {
+                // Move focus to the appropriate view
+                if (isGalleryView && gamesGalleryView.Visible)
+                {
+                    gamesGalleryView.Focus();
+                }
+                else
+                {
+                    gamesListView.Focus();
+                }
+            }
+        }
+
+        private void UpdateNotesScrollBar()
+        {
+            // Check if content height exceeds visible height
+            int contentHeight = notesRichTextBox.GetPositionFromCharIndex(notesRichTextBox.TextLength).Y
+                                + notesRichTextBox.Font.Height;
+
+            if (contentHeight > notesRichTextBox.ClientSize.Height)
+            {
+                notesRichTextBox.ScrollBars = RichTextBoxScrollBars.Vertical;
+            }
+            else
+            {
+                notesRichTextBox.ScrollBars = RichTextBoxScrollBars.None;
+            }
+        }
+
+        public class CenteredMenuRenderer : ToolStripProfessionalRenderer
+        {
+            protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+            {
+                var rect = new Rectangle(Point.Empty, e.Item.Size);
+                Color bgColor = e.Item.Selected ? Color.FromArgb(55, 58, 65) : Color.FromArgb(40, 42, 48);
+                using (var brush = new SolidBrush(bgColor))
+                    e.Graphics.FillRectangle(brush, rect);
+            }
+
+            protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+            {
+                // Use the full item bounds for centered text
+                var textRect = new Rectangle(0, 0, e.Item.Width, e.Item.Height);
+                TextRenderer.DrawText(e.Graphics, e.Text, e.TextFont, textRect, e.TextColor,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            }
+
+            protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+            {
+                using (var brush = new SolidBrush(Color.FromArgb(40, 42, 48)))
+                    e.Graphics.FillRectangle(brush, e.AffectedBounds);
+            }
+
+            protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+            {
+                using (var pen = new Pen(Color.FromArgb(60, 63, 70)))
+                    e.Graphics.DrawRectangle(pen, 0, 0, e.AffectedBounds.Width - 1, e.AffectedBounds.Height - 1);
+            }
+        }
+
+        public void SetTrailerVisibility(bool visible)
+        {
+            webView21.Enabled = visible;
+            webView21.Visible = visible;
+
+            if (!visible) ShowVideoPlaceholder();
+        }
+
+        private void InitializeModernPanels()
+        {
+            Color panelColor = Color.FromArgb(24, 26, 30);
+
+            // Create rounded panel for notesRichTextBox
+            notesPanel = CreateRoundedPanel(notesRichTextBox, panelColor, 8, true);
+
+            // Create rounded panel for gamesQueListBox
+            queuePanel = CreateRoundedPanel(gamesQueListBox, panelColor, 8, false);
+
+            // Bring labels to front so they appear above the panels
+            gamesQueueLabel.BringToFront();
+            lblNotes.BringToFront();
+        }
+        
+        private void notesRichTextBox_LinkClicked(object sender, LinkClickedEventArgs e)
+        {
+            try
+            {
+                Process.Start(e.LinkText);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to open link: {ex.Message}", LogLevel.WARNING);
+            }
+        }
+
+        private void gamesQueListBox_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0) return;
+
+            // Determine colors based on selection state
+            Color backColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected
+                ? Color.FromArgb(93, 203, 173)  // Accent color for selected
+                : gamesQueListBox.BackColor;
+
+            Color foreColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected
+                ? Color.FromArgb(20, 20, 20)    // Dark text on accent
+                : gamesQueListBox.ForeColor;
+
+            Font font = (e.State & DrawItemState.Selected) == DrawItemState.Selected
+                ? new Font("Microsoft Sans Serif", 10F, FontStyle.Bold)
+                : new Font("Microsoft Sans Serif", 10F, FontStyle.Regular);
+
+            // Clear the item background first
+            using (SolidBrush clearBrush = new SolidBrush(gamesQueListBox.BackColor))
+            {
+                e.Graphics.FillRectangle(clearBrush, e.Bounds);
+            }
+
+            // Draw rounded background
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            int radius = 1;
+            int margin = 4;
+            Rectangle roundedRect = new Rectangle(
+                e.Bounds.X,
+                e.Bounds.Y,
+                e.Bounds.Width - (margin * 2),
+                e.Bounds.Height
+            );
+
+            using (GraphicsPath path = CreateRoundedRectPath(roundedRect, radius))
+            using (SolidBrush backgroundBrush = new SolidBrush(backColor))
+            {
+                e.Graphics.FillPath(backgroundBrush, path);
+            }
+
+            // Draw text with padding
+            string text = gamesQueListBox.Items[e.Index].ToString();
+            Rectangle textRect = new Rectangle(
+                roundedRect.X + 4,
+                roundedRect.Y,
+                roundedRect.Width - 8,
+                roundedRect.Height
+            );
+
+            using (SolidBrush textBrush = new SolidBrush(foreColor))
+            {
+                var sf = new StringFormat
+                {
+                    Alignment = StringAlignment.Near,
+                    LineAlignment = StringAlignment.Center,
+                    Trimming = StringTrimming.EllipsisCharacter,
+                    FormatFlags = StringFormatFlags.NoWrap
+                };
+                e.Graphics.DrawString(text, font, textBrush, textRect, sf);
+            }
+        }
+
+        private void ApplyWebViewRoundedCorners()
+        {
+            if (webView21 == null) return;
+
+            int radius = 8;
+            using (var path = CreateRoundedRectPath(new Rectangle(0, 0, webView21.Width, webView21.Height), radius))
+            {
+                webView21.Region = new Region(path);
+            }
+
+            // Re-apply on resize
+            webView21.SizeChanged -= WebView21_SizeChanged;
+            webView21.SizeChanged += WebView21_SizeChanged;
+        }
+
+        private void WebView21_SizeChanged(object sender, EventArgs e)
+        {
+            if (webView21 == null || webView21.Width <= 0 || webView21.Height <= 0) return;
+
+            int radius = 8;
+            using (var path = CreateRoundedRectPath(new Rectangle(0, 0, webView21.Width, webView21.Height), radius))
+            {
+                webView21.Region = new Region(path);
+            }
+        }
+
+        private void MainForm_Resize(object sender, EventArgs e)
+        {
+            LayoutBottomPanels();
+        }
+
+        private void LayoutChildInPanel(Panel panel, Control child, bool isNotesPanel)
+        {
+            int leftMargin = isNotesPanel ? NotesLeftMargin : ChildHorizontalPadding;
+
+            child.Location = new Point(leftMargin, ChildTopMargin);
+
+            // Width: panel width minus left + right margins
+            int widthReduction = leftMargin + ChildRightMargin;
+            int childWidth = Math.Max(0, panel.Width - widthReduction);
+
+            // Height: panel height minus vertical padding and reserved label area
+            int childHeight = Math.Max(0,
+                panel.Height - (ChildHorizontalPadding * 2) - ReservedLabelHeight);
+
+            child.Size = new Size(childWidth, childHeight);
+        }
+
+        private Panel CreateRoundedPanel(Control childControl, Color panelColor, int radius, bool isNotesPanel)
+        {
+            // Create wrapper panel
+            var panel = new Panel
+            {
+                Location = childControl.Location,
+                Size = new Size(
+                    childControl.Width + ChildHorizontalPadding + ChildRightMargin,
+                    childControl.Height + ReservedLabelHeight
+                ),
+                Anchor = AnchorStyles.None,
+                BackColor = Color.Transparent,
+                Padding = new Padding(ChildHorizontalPadding, ChildTopMargin, ChildRightMargin, ChildTopMargin)
+            };
+
+            // Enable double buffering
+            typeof(Panel).InvokeMember(
+                "DoubleBuffered",
+                System.Reflection.BindingFlags.SetProperty |
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic,
+                null, panel, new object[] { true });
+
+            // Add paint handler for rounded corners
+            panel.Paint += (sender, e) =>
+            {
+                var p = (Panel)sender;
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+                var rect = new Rectangle(0, 0, p.Width - 1, p.Height - 1);
+
+                using (var path = CreateRoundedRectPath(rect, radius))
+                using (var brush = new SolidBrush(panelColor))
+                {
+                    e.Graphics.FillPath(brush, path);
+                }
+
+                // Apply rounded region
+                using (var regionPath = CreateRoundedRectPath(
+                           new Rectangle(0, 0, p.Width, p.Height),
+                           radius))
+                {
+                    p.Region = new Region(regionPath);
+                }
+            };
+
+            // Move child control into panel
+            var parent = childControl.Parent;
+            parent.Controls.Add(panel);
+            parent.Controls.Remove(childControl);
+
+            // Layout child inside panel using shared helper
+            childControl.Anchor = AnchorStyles.None;
+            childControl.BackColor = panelColor;
+            LayoutChildInPanel(panel, childControl, isNotesPanel);
+
+            panel.Controls.Add(childControl);
+            panel.BringToFront();
+
+            return panel;
+        }
+
+        private void LayoutBottomPanels()
+        {
+            // Skip if panels aren't initialized yet
+            if (notesPanel == null || queuePanel == null) return;
+            if (gamesQueListBox == null || notesRichTextBox == null) return;
+
+            // Panels start after webView21 (webView21 ends at 259 + 384 = 643, add spacing)
+            int panelsStartX = 654;
+            int availableWidth = this.ClientSize.Width - panelsStartX - RightMargin;
+
+            // Queue panel gets fixed width, notes panel fills remaining space
+            int desiredQueueWidth = 290;
+            int queueWidth = Math.Max(200, Math.Min(desiredQueueWidth, availableWidth / 2));
+            int notesWidth = availableWidth - queueWidth - PanelSpacing;
+            notesWidth = Math.Max(200, notesWidth);
+
+            int panelY = this.ClientSize.Height - BottomPanelHeight - BottomMargin;
+
+            // Queue panel
+            queuePanel.Location = new Point(panelsStartX, panelY);
+            queuePanel.Size = new Size(queueWidth, BottomPanelHeight);
+
+            // Notes panel
+            int notesX = panelsStartX + queueWidth + PanelSpacing;
+            notesPanel.Location = new Point(notesX, panelY);
+            notesPanel.Size = new Size(this.ClientSize.Width - notesX - RightMargin, BottomPanelHeight);
+
+            // Layout children using the same helper as CreateRoundedPanel
+            LayoutChildInPanel(queuePanel, gamesQueListBox, isNotesPanel: false);
+            LayoutChildInPanel(notesPanel, notesRichTextBox, isNotesPanel: true);
+
+            // Position labels at bottom of their panels
+            gamesQueueLabel.Location = new Point(
+                queuePanel.Location.X + ChildHorizontalPadding + 3,
+                queuePanel.Location.Y + queuePanel.Height - (LabelHeight + LabelBottomOffset)
+            );
+
+            lblNotes.Location = new Point(
+                notesPanel.Location.X + ChildHorizontalPadding,
+                notesPanel.Location.Y + notesPanel.Height - (LabelHeight + LabelBottomOffset)
+            );
+
+            // Ensure labels are visible
+            gamesQueueLabel.BringToFront();
+            lblNotes.BringToFront();
+
+            // Force repaint of panels to update rounded corners
+            queuePanel.Invalidate();
+            notesPanel.Invalidate();
+        }
+
+        private async Task UninstallGameAsync(ListViewItem item)
+        {
+            string packageName = item.SubItems.Count > 2 ? item.SubItems[2].Text : "";
+            string gameName = item.Text;
+
+            if (string.IsNullOrEmpty(packageName))
+                return;
+
+            // Confirm uninstall
+            DialogResult dialogresult = FlexibleMessageBox.Show(
+                $"Are you sure you want to uninstall {gameName}?", 
+                "Proceed with uninstall?", MessageBoxButtons.YesNo);
+
+            if (dialogresult == DialogResult.No)
+                return;
+
+            // Ask about backup
+            if (!settings.CustomBackupDir)
+            {
+                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
+            }
+            else
+            {
+                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
+            }
+
+            DialogResult dialogresult2 = FlexibleMessageBox.Show(
+                $"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\", 
+                "Attempt Game Backup?", MessageBoxButtons.YesNo);
+
+            if (dialogresult2 == DialogResult.Yes)
+            {
+                Sideloader.BackupGame(packageName);
+            }
+
+            // Perform uninstall
+            ProcessOutput output = new ProcessOutput("", "");
+            progressBar.Style = ProgressBarStyle.Marquee;
+
+            await Task.Run(() => {
+                output += Sideloader.UninstallGame(packageName);
+            });
+
+            ShowPrcOutput(output);
+            showAvailableSpace();
+            progressBar.Style = ProgressBarStyle.Continuous;
+
+            // Remove from combo box
+            for (int i = 0; i < m_combo.Items.Count; i++)
+            {
+                string comboItem = m_combo.Items[i].ToString();
+                if (comboItem.Equals(gameName, StringComparison.OrdinalIgnoreCase) ||
+                    comboItem.Equals(packageName, StringComparison.OrdinalIgnoreCase))
+                {
+                    m_combo.Items.RemoveAt(i);
+                    break;
+                }
+            }
+
+            await RefreshGameListAsync();
+        }
+
+        private async Task RefreshGameListAsync()
+        {
+            // Save current filter state before refreshing
+            bool wasUpdateAvailableClicked = updateAvailableClicked;
+            bool wasUpToDateClicked = upToDate_Clicked;
+            bool wasNeedsDonationClicked = NeedsDonation_Clicked;
+
+            // Temporarily clear filter states
+            updateAvailableClicked = false;
+            upToDate_Clicked = false;
+            NeedsDonation_Clicked = false;
+
+            // Refresh the list to update installed status
+            _allItemsInitialized = false;
+            _galleryDataSource = null;
+            listAppsBtn();
+
+            bool wasGalleryView = isGalleryView;
+            isGalleryView = false;
+
+            initListView(false);
+
+            // Wait for initListView to finish rebuilding _allItems
+            while (!_allItemsInitialized || !loaded)
+            {
+                await Task.Delay(50);
+            }
+
+            isGalleryView = wasGalleryView;
+
+            // Reapply the active filter
+            if (wasUpToDateClicked)
+            {
+                upToDate_Clicked = true;
+                FilterListByColors(new[] { ColorInstalled, ColorUpdateAvailable, ColorDonateGame });
+            }
+            else if (wasUpdateAvailableClicked)
+            {
+                updateAvailableClicked = true;
+                FilterListByColor(ColorUpdateAvailable);
+            }
+            else if (wasNeedsDonationClicked)
+            {
+                NeedsDonation_Clicked = true;
+                FilterListByColor(ColorDonateGame);
+            }
+            else if (isGalleryView)
+            {
+                gamesListView.Visible = false;
+                gamesGalleryView.Visible = true;
+                PopulateGalleryView();
+            }
+        }
+
+        private async void timer_DeviceCheck(object sender, EventArgs e)
+        {
+            // Skip if a device is connected, we're in the middle of loading or other operations
+            if (DeviceConnected || isLoading || isinstalling || isuploading) return;
+
+            // Run a quick device check in background
+            try
+            {
+                string output = await Task.Run(() => ADB.RunAdbCommandToString("devices").Output);
+
+                string[] lines = output.Split('\n');
+                bool hasDeviceNow = false;
+
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    string line = lines[i].Trim();
+                    if (line.Length > 0 && !string.IsNullOrWhiteSpace(line) && !line.Contains("unauthorized"))
+                    {
+                        hasDeviceNow = true;
+                        break;
+                    }
+                }
+
+                // Device state changed
+                if (hasDeviceNow)
+                {
+                    // Device connected - do a full refresh
+                    await CheckForDevice();
+                    changeTitlebarToDevice();
+                    showAvailableSpace();
+
+                    // Reset the initialized flag so initListView rebuilds _allItems with current install status
+                    _allItemsInitialized = false;
+                    _galleryDataSource = null;
+
+                    listAppsBtn();
+                    initListView(false);
+                }
+            }
+            catch
+            {
+                // Silently catch errors
             }
         }
     }

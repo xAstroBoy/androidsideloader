@@ -120,7 +120,6 @@ namespace AndroidSideloader.Utilities
         public DateTime LastLaunch2 { get; set; } = new DateTime(1969, 4, 20, 16, 20, 0);
         public bool Wired { get; set; } = false;
         public string AppPackages { get; set; } = string.Empty;
-        public bool TrailersOn { get; set; } = false;
         public string DownloadDir { get; set; } = string.Empty;
         public bool CustomDownloadDir { get; set; } = false;
         public bool CustomBackupDir { get; set; } = false;
@@ -133,7 +132,8 @@ namespace AndroidSideloader.Utilities
         public bool UseDownloadedFiles { get; set; } = false;
         public float BandwidthLimit { get; set; } = 0f;
         public string[] FavoritedGames { get; set; } = new string[0];
-
+        public bool TrailersEnabled { get; set; } = true;
+        public bool UseGalleryView { get; set; } = true;
         private SettingsManager()
         {
             Load();
@@ -241,7 +241,6 @@ namespace AndroidSideloader.Utilities
             LastLaunch2 = new DateTime(1969, 4, 20, 16, 20, 0);
             Wired = false;
             AppPackages = string.Empty;
-            TrailersOn = false;
             DownloadDir = string.Empty;
             CustomDownloadDir = false;
             CustomBackupDir = false;
@@ -254,8 +253,10 @@ namespace AndroidSideloader.Utilities
             UseDownloadedFiles = false;
             BandwidthLimit = 0f;
             FavoritedGames = new string[0];
+            TrailersEnabled = true;
+            UseGalleryView = true;
 
-        Save();
+            Save();
             Debug.WriteLine("Default settings created.");
         }
 

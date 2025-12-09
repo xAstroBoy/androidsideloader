@@ -13,7 +13,7 @@ namespace AndroidSideloader
         private static readonly string RawGitHubUrl = "https://raw.githubusercontent.com/VRPirates/rookie";
         private static readonly string GitHubUrl = "https://github.com/VRPirates/rookie";
 
-        public static readonly string LocalVersion = "2.35.0";
+        public static readonly string LocalVersion = "3.0";
         public static string currentVersion = string.Empty;
         public static string changelog = string.Empty;
 
@@ -34,10 +34,41 @@ namespace AndroidSideloader
                 }
             }
 
-            return LocalVersion.Trim() != currentVersion;
+            // Compare versions - only return true if server version is greater than local version
+            return CompareVersions(currentVersion, LocalVersion.Trim()) > 0;
         }
 
-        // Call this to ask the user if they want to update
+        // Compares two semantic version strings (e.g., "2.35")
+        // returns: 1 if version1 > version2, -1 if version1 < version2, 0 if equal
+        private static int CompareVersions(string version1, string version2)
+        {
+            try
+            {
+                // Parse versions into parts
+                string[] parts1 = version1.Split('.');
+                string[] parts2 = version2.Split('.');
+
+                // Compare each part
+                int maxLength = Math.Max(parts1.Length, parts2.Length);
+                for (int i = 0; i < maxLength; i++)
+                {
+                    int v1 = i < parts1.Length && int.TryParse(parts1[i], out int p1) ? p1 : 0;
+                    int v2 = i < parts2.Length && int.TryParse(parts2[i], out int p2) ? p2 : 0;
+
+                    if (v1 > v2) return 1;
+                    if (v1 < v2) return -1;
+                }
+
+                return 0; // Versions are equal
+            }
+            catch
+            {
+                // Fallback to string comparison if parsing fails
+                return string.Compare(version1, version2, StringComparison.Ordinal);
+            }
+        }
+
+        // Ask the user if they want to update
         public static async Task Update()
         {
             if (await IsUpdateAvailableAsync())

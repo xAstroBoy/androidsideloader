@@ -63,8 +63,6 @@ namespace AndroidSideloader
         // Download required dependencies.
         public static void downloadFiles()
         {
-            MainForm.SplashScreen.UpdateBackgroundImage(AndroidSideloader.Properties.Resources.splashimage_deps);
-            
             WebClient client = new WebClient();
             ServicePointManager.Expect100Continue = true;
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
@@ -202,8 +200,6 @@ namespace AndroidSideloader
                         File.Copy(configPath, tempConfigPath, true);
                         hasConfig = true;
                     }
-
-                    MainForm.SplashScreen.UpdateBackgroundImage(AndroidSideloader.Properties.Resources.splashimage_rclone);
 
                     string architecture = Environment.Is64BitOperatingSystem ? "amd64" : "386";
                     string url = $"https://downloads.rclone.org/v{wantedRcloneVersion}/rclone-v{wantedRcloneVersion}-windows-{architecture}.zip";

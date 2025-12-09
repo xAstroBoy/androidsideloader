@@ -36,8 +36,6 @@
             // textBox1
             //
             this.textBox1.BackColor = global::AndroidSideloader.Properties.Settings.Default.TextBoxColor;
-            this.textBox1.DataBindings.Add(new System.Windows.Forms.Binding("BackColor", global::AndroidSideloader.Properties.Settings.Default, "TextBoxColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.textBox1.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
             this.textBox1.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
             this.textBox1.ForeColor = System.Drawing.Color.White;
             this.textBox1.Location = new System.Drawing.Point(13, 13);
@@ -72,11 +70,9 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = global::AndroidSideloader.Properties.Settings.Default.BackColor;
-            this.BackgroundImage = global::AndroidSideloader.Properties.Resources.pattern_cubes;
             this.ClientSize = new System.Drawing.Size(443, 100);
             this.Controls.Add(this.button1);
             this.Controls.Add(this.textBox1);
-            this.DataBindings.Add(new System.Windows.Forms.Binding("BackColor", global::AndroidSideloader.Properties.Settings.Default, "BackColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
             this.ForeColor = System.Drawing.Color.White;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MaximumSize = new System.Drawing.Size(459, 139);

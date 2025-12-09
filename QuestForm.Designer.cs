@@ -7,8 +7,6 @@ namespace AndroidSideloader
         /// <summary>
         /// Required designer variable.
         /// </summary>
-        ///
-
         private System.ComponentModel.IContainer components = null;
 
         /// <summary>
@@ -33,379 +31,426 @@ namespace AndroidSideloader
         private void InitializeComponent()
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(QuestForm));
-            this.label1 = new System.Windows.Forms.Label();
-            this.label2 = new System.Windows.Forms.Label();
-            this.label11 = new System.Windows.Forms.Label();
-            this.label12 = new System.Windows.Forms.Label();
-            this.DeleteShots = new System.Windows.Forms.CheckBox();
-            this.splitter1 = new System.Windows.Forms.Splitter();
-            this.label10 = new System.Windows.Forms.Label();
-            this.label14 = new System.Windows.Forms.Label();
-            this.label16 = new System.Windows.Forms.Label();
-            this.CPUComboBox = new System.Windows.Forms.ComboBox();
-            this.GPUComboBox = new System.Windows.Forms.ComboBox();
-            this.ResolutionLabel = new System.Windows.Forms.Label();
+            this.lblUsernameSection = new System.Windows.Forms.Label();
+            this.lblMediaSection = new System.Windows.Forms.Label();
+            this.lblPerformanceSection = new System.Windows.Forms.Label();
             this.GlobalUsername = new System.Windows.Forms.TextBox();
-            this.TextureResTextBox = new System.Windows.Forms.TextBox();
-            this.RefreshRateComboBox = new System.Windows.Forms.ComboBox();
-            this.btnApplyTempSettings = new AndroidSideloader.RoundButton();
-            this.questVids = new AndroidSideloader.RoundButton();
-            this.questPics = new AndroidSideloader.RoundButton();
             this.btnApplyUsername = new AndroidSideloader.RoundButton();
-            this.label3 = new System.Windows.Forms.Label();
+            this.questPics = new AndroidSideloader.RoundButton();
+            this.questVids = new AndroidSideloader.RoundButton();
+            this.lblScreenshotsPath = new System.Windows.Forms.Label();
+            this.lblRecordingsPath = new System.Windows.Forms.Label();
+            this.toggleDeleteAfterTransfer = new AndroidSideloader.ToggleSwitch();
+            this.lblDeleteAfterTransfer = new System.Windows.Forms.Label();
+            this.lblPerformanceNote = new System.Windows.Forms.Label();
+            this.lblRefreshRate = new System.Windows.Forms.Label();
+            this.RefreshRateComboBox = new System.Windows.Forms.ComboBox();
+            this.lblGpuLevel = new System.Windows.Forms.Label();
+            this.GPUComboBox = new System.Windows.Forms.ComboBox();
+            this.lblCpuLevel = new System.Windows.Forms.Label();
+            this.CPUComboBox = new System.Windows.Forms.ComboBox();
+            this.lblResolution = new System.Windows.Forms.Label();
+            this.TextureResTextBox = new System.Windows.Forms.TextBox();
+            this.btnApplyTempSettings = new AndroidSideloader.RoundButton();
+            this.separator1 = new System.Windows.Forms.Panel();
+            this.separator2 = new System.Windows.Forms.Panel();
+            this.btnClose = new AndroidSideloader.RoundButton();
             this.SuspendLayout();
             // 
-            // label1
+            // lblUsernameSection
             // 
-            this.label1.AutoSize = true;
-            this.label1.BackColor = System.Drawing.Color.Transparent;
-            this.label1.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label1.ForeColor = System.Drawing.Color.LightCyan;
-            this.label1.Location = new System.Drawing.Point(72, 276);
-            this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(165, 20);
-            this.label1.TabIndex = 6;
-            this.label1.Text = "Temporary Settings";
-            this.label1.TextAlign = System.Drawing.ContentAlignment.TopCenter;
+            this.lblUsernameSection.AutoSize = true;
+            this.lblUsernameSection.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold);
+            this.lblUsernameSection.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.lblUsernameSection.Location = new System.Drawing.Point(20, 15);
+            this.lblUsernameSection.Name = "lblUsernameSection";
+            this.lblUsernameSection.Size = new System.Drawing.Size(80, 20);
+            this.lblUsernameSection.TabIndex = 0;
+            this.lblUsernameSection.Text = "Username";
             // 
-            // label2
+            // lblMediaSection
             // 
-            this.label2.AutoSize = true;
-            this.label2.BackColor = System.Drawing.Color.Transparent;
-            this.label2.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.label2.Font = new System.Drawing.Font("Microsoft Sans Serif", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label2.ForeColor = System.Drawing.Color.LightSteelBlue;
-            this.label2.Location = new System.Drawing.Point(83, 303);
-            this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(143, 16);
-            this.label2.TabIndex = 6;
-            this.label2.Text = "Reboot Quest to Reset";
-            this.label2.TextAlign = System.Drawing.ContentAlignment.TopCenter;
+            this.lblMediaSection.AutoSize = true;
+            this.lblMediaSection.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold);
+            this.lblMediaSection.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.lblMediaSection.Location = new System.Drawing.Point(20, 97);
+            this.lblMediaSection.Name = "lblMediaSection";
+            this.lblMediaSection.Size = new System.Drawing.Size(114, 20);
+            this.lblMediaSection.TabIndex = 3;
+            this.lblMediaSection.Text = "Media Transfer";
             // 
-            // label11
+            // lblPerformanceSection
             // 
-            this.label11.AutoSize = true;
-            this.label11.BackColor = System.Drawing.Color.Transparent;
-            this.label11.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.label11.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label11.ForeColor = System.Drawing.Color.LightCyan;
-            this.label11.Location = new System.Drawing.Point(18, 94);
-            this.label11.Name = "label11";
-            this.label11.Size = new System.Drawing.Size(272, 20);
-            this.label11.TabIndex = 6;
-            this.label11.Text = "Transfer screenshots to Desktop";
-            this.label11.TextAlign = System.Drawing.ContentAlignment.TopCenter;
-            // 
-            // label12
-            // 
-            this.label12.AutoSize = true;
-            this.label12.BackColor = System.Drawing.Color.Transparent;
-            this.label12.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.label12.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label12.ForeColor = System.Drawing.Color.LightCyan;
-            this.label12.Location = new System.Drawing.Point(92, 9);
-            this.label12.Name = "label12";
-            this.label12.Size = new System.Drawing.Size(124, 20);
-            this.label12.TabIndex = 6;
-            this.label12.Text = "Set Username";
-            this.label12.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            // 
-            // DeleteShots
-            // 
-            this.DeleteShots.AutoSize = true;
-            this.DeleteShots.BackColor = System.Drawing.Color.Transparent;
-            this.DeleteShots.CheckAlign = System.Drawing.ContentAlignment.MiddleRight;
-            this.DeleteShots.Cursor = System.Windows.Forms.Cursors.Default;
-            this.DeleteShots.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.DeleteShots.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F);
-            this.DeleteShots.ForeColor = System.Drawing.Color.LightSkyBlue;
-            this.DeleteShots.Location = new System.Drawing.Point(33, 232);
-            this.DeleteShots.Name = "DeleteShots";
-            this.DeleteShots.Size = new System.Drawing.Size(242, 21);
-            this.DeleteShots.TabIndex = 7;
-            this.DeleteShots.Text = "Delete files on Quest after transfer";
-            this.DeleteShots.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            this.DeleteShots.UseVisualStyleBackColor = false;
-            this.DeleteShots.CheckedChanged += new System.EventHandler(this.DeleteShots_CheckedChanged);
-            // 
-            // splitter1
-            // 
-            this.splitter1.Location = new System.Drawing.Point(0, 0);
-            this.splitter1.Name = "splitter1";
-            this.splitter1.Size = new System.Drawing.Size(3, 486);
-            this.splitter1.TabIndex = 14;
-            this.splitter1.TabStop = false;
-            // 
-            // label10
-            // 
-            this.label10.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(20)))), ((int)(((byte)(20)))));
-            this.label10.BorderStyle = System.Windows.Forms.BorderStyle.Fixed3D;
-            this.label10.Location = new System.Drawing.Point(-4, 261);
-            this.label10.Name = "label10";
-            this.label10.Size = new System.Drawing.Size(394, 3);
-            this.label10.TabIndex = 15;
-            // 
-            // label14
-            // 
-            this.label14.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(20)))), ((int)(((byte)(20)))));
-            this.label14.BorderStyle = System.Windows.Forms.BorderStyle.Fixed3D;
-            this.label14.Location = new System.Drawing.Point(-4, 80);
-            this.label14.Name = "label14";
-            this.label14.Size = new System.Drawing.Size(394, 3);
-            this.label14.TabIndex = 17;
-            // 
-            // label16
-            // 
-            this.label16.AutoSize = true;
-            this.label16.BackColor = System.Drawing.Color.Transparent;
-            this.label16.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.label16.Font = new System.Drawing.Font("Microsoft Sans Serif", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label16.ForeColor = System.Drawing.Color.LightSteelBlue;
-            this.label16.Location = new System.Drawing.Point(34, 153);
-            this.label16.Name = "label16";
-            this.label16.Size = new System.Drawing.Size(240, 16);
-            this.label16.TabIndex = 6;
-            this.label16.Text = "Exports to: Desktop\\Quest Screenshots";
-            this.label16.TextAlign = System.Drawing.ContentAlignment.TopCenter;
-            // 
-            // CPUComboBox
-            // 
-            this.CPUComboBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.CPUComboBox.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.CPUComboBox.DataBindings.Add(new System.Windows.Forms.Binding("ForeColor", global::AndroidSideloader.Properties.Settings.Default, "FontColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.CPUComboBox.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.CPUComboBox.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.CPUComboBox.ForeColor = global::AndroidSideloader.Properties.Settings.Default.FontColor;
-            this.CPUComboBox.FormattingEnabled = true;
-            this.CPUComboBox.Items.AddRange(new object[] {
-            "0",
-            "1",
-            "2",
-            "3",
-            "4"});
-            this.CPUComboBox.Location = new System.Drawing.Point(38, 383);
-            this.CPUComboBox.Name = "CPUComboBox";
-            this.CPUComboBox.Size = new System.Drawing.Size(232, 26);
-            this.CPUComboBox.TabIndex = 2;
-            this.CPUComboBox.Text = "Select CPU level (0 for default)";
-            // 
-            // GPUComboBox
-            // 
-            this.GPUComboBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.GPUComboBox.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.GPUComboBox.DataBindings.Add(new System.Windows.Forms.Binding("ForeColor", global::AndroidSideloader.Properties.Settings.Default, "FontColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.GPUComboBox.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.GPUComboBox.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.GPUComboBox.ForeColor = global::AndroidSideloader.Properties.Settings.Default.FontColor;
-            this.GPUComboBox.FormattingEnabled = true;
-            this.GPUComboBox.Items.AddRange(new object[] {
-            "0",
-            "1",
-            "2",
-            "3",
-            "4"});
-            this.GPUComboBox.Location = new System.Drawing.Point(38, 354);
-            this.GPUComboBox.Name = "GPUComboBox";
-            this.GPUComboBox.Size = new System.Drawing.Size(232, 26);
-            this.GPUComboBox.TabIndex = 1;
-            this.GPUComboBox.Text = "Select GPU level (0 for default)";
-            // 
-            // ResolutionLabel
-            // 
-            this.ResolutionLabel.AutoSize = true;
-            this.ResolutionLabel.BackColor = System.Drawing.Color.Transparent;
-            this.ResolutionLabel.DataBindings.Add(new System.Windows.Forms.Binding("ForeColor", global::AndroidSideloader.Properties.Settings.Default, "FontColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.ResolutionLabel.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.ResolutionLabel.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.ResolutionLabel.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.ResolutionLabel.ForeColor = global::AndroidSideloader.Properties.Settings.Default.FontColor;
-            this.ResolutionLabel.Location = new System.Drawing.Point(38, 413);
-            this.ResolutionLabel.Name = "ResolutionLabel";
-            this.ResolutionLabel.Size = new System.Drawing.Size(153, 18);
-            this.ResolutionLabel.TabIndex = 3;
-            this.ResolutionLabel.Text = "Resolution (0=default)";
+            this.lblPerformanceSection.AutoSize = true;
+            this.lblPerformanceSection.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold);
+            this.lblPerformanceSection.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.lblPerformanceSection.Location = new System.Drawing.Point(20, 232);
+            this.lblPerformanceSection.Name = "lblPerformanceSection";
+            this.lblPerformanceSection.Size = new System.Drawing.Size(147, 20);
+            this.lblPerformanceSection.TabIndex = 9;
+            this.lblPerformanceSection.Text = "Temporary Settings";
             // 
             // GlobalUsername
             // 
-            this.GlobalUsername.BackColor = global::AndroidSideloader.Properties.Settings.Default.TextBoxColor;
-            this.GlobalUsername.DataBindings.Add(new System.Windows.Forms.Binding("BackColor", global::AndroidSideloader.Properties.Settings.Default, "TextBoxColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.GlobalUsername.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.GlobalUsername.DataBindings.Add(new System.Windows.Forms.Binding("ForeColor", global::AndroidSideloader.Properties.Settings.Default, "FontColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.GlobalUsername.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.GlobalUsername.ForeColor = global::AndroidSideloader.Properties.Settings.Default.FontColor;
-            this.GlobalUsername.Location = new System.Drawing.Point(33, 39);
+            this.GlobalUsername.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.GlobalUsername.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.GlobalUsername.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.GlobalUsername.ForeColor = System.Drawing.Color.White;
+            this.GlobalUsername.Location = new System.Drawing.Point(24, 45);
             this.GlobalUsername.Name = "GlobalUsername";
-            this.GlobalUsername.Size = new System.Drawing.Size(142, 24);
-            this.GlobalUsername.TabIndex = 12;
+            this.GlobalUsername.Size = new System.Drawing.Size(200, 24);
+            this.GlobalUsername.TabIndex = 1;
             this.GlobalUsername.TextChanged += new System.EventHandler(this.GlobalUsername_TextChanged);
-            // 
-            // TextureResTextBox
-            // 
-            this.TextureResTextBox.BackColor = global::AndroidSideloader.Properties.Settings.Default.TextBoxColor;
-            this.TextureResTextBox.DataBindings.Add(new System.Windows.Forms.Binding("BackColor", global::AndroidSideloader.Properties.Settings.Default, "TextBoxColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.TextureResTextBox.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.TextureResTextBox.DataBindings.Add(new System.Windows.Forms.Binding("ForeColor", global::AndroidSideloader.Properties.Settings.Default, "FontColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.TextureResTextBox.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.TextureResTextBox.ForeColor = global::AndroidSideloader.Properties.Settings.Default.FontColor;
-            this.TextureResTextBox.Location = new System.Drawing.Point(38, 436);
-            this.TextureResTextBox.Name = "TextureResTextBox";
-            this.TextureResTextBox.Size = new System.Drawing.Size(111, 24);
-            this.TextureResTextBox.TabIndex = 3;
-            this.TextureResTextBox.Text = "0";
-            // 
-            // RefreshRateComboBox
-            // 
-            this.RefreshRateComboBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.RefreshRateComboBox.DataBindings.Add(new System.Windows.Forms.Binding("Font", global::AndroidSideloader.Properties.Settings.Default, "FontStyle", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.RefreshRateComboBox.DataBindings.Add(new System.Windows.Forms.Binding("ForeColor", global::AndroidSideloader.Properties.Settings.Default, "FontColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.RefreshRateComboBox.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.RefreshRateComboBox.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
-            this.RefreshRateComboBox.ForeColor = global::AndroidSideloader.Properties.Settings.Default.FontColor;
-            this.RefreshRateComboBox.FormattingEnabled = true;
-            this.RefreshRateComboBox.Items.AddRange(new object[] {
-            "72",
-            "90",
-            "120"});
-            this.RefreshRateComboBox.Location = new System.Drawing.Point(38, 325);
-            this.RefreshRateComboBox.Name = "RefreshRateComboBox";
-            this.RefreshRateComboBox.Size = new System.Drawing.Size(232, 26);
-            this.RefreshRateComboBox.TabIndex = 0;
-            this.RefreshRateComboBox.Text = "Select refresh rate";
-            // 
-            // btnApplyTempSettings
-            // 
-            this.btnApplyTempSettings.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
-            this.btnApplyTempSettings.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
-            this.btnApplyTempSettings.BackColor = System.Drawing.Color.Transparent;
-            this.btnApplyTempSettings.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.btnApplyTempSettings.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
-            this.btnApplyTempSettings.ForeColor = System.Drawing.Color.White;
-            this.btnApplyTempSettings.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.btnApplyTempSettings.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.btnApplyTempSettings.Location = new System.Drawing.Point(185, 434);
-            this.btnApplyTempSettings.Name = "btnApplyTempSettings";
-            this.btnApplyTempSettings.Radius = 5;
-            this.btnApplyTempSettings.Size = new System.Drawing.Size(85, 25);
-            this.btnApplyTempSettings.Stroke = true;
-            this.btnApplyTempSettings.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
-            this.btnApplyTempSettings.TabIndex = 19;
-            this.btnApplyTempSettings.Text = "APPLY";
-            this.btnApplyTempSettings.Transparency = false;
-            this.btnApplyTempSettings.Click += new System.EventHandler(this.btnApplyTempSettings_Click);
-            // 
-            // questVids
-            // 
-            this.questVids.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
-            this.questVids.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
-            this.questVids.BackColor = System.Drawing.Color.Transparent;
-            this.questVids.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.questVids.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
-            this.questVids.ForeColor = System.Drawing.Color.White;
-            this.questVids.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.questVids.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.questVids.Location = new System.Drawing.Point(72, 178);
-            this.questVids.Name = "questVids";
-            this.questVids.Radius = 5;
-            this.questVids.Size = new System.Drawing.Size(165, 25);
-            this.questVids.Stroke = true;
-            this.questVids.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
-            this.questVids.TabIndex = 21;
-            this.questVids.Text = "RECORDINGS";
-            this.questVids.Transparency = false;
-            this.questVids.Click += new System.EventHandler(this.questVids_Click);
-            // 
-            // questPics
-            // 
-            this.questPics.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
-            this.questPics.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
-            this.questPics.BackColor = System.Drawing.Color.Transparent;
-            this.questPics.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.questPics.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
-            this.questPics.ForeColor = System.Drawing.Color.White;
-            this.questPics.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.questPics.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.questPics.Location = new System.Drawing.Point(72, 124);
-            this.questPics.Name = "questPics";
-            this.questPics.Radius = 5;
-            this.questPics.Size = new System.Drawing.Size(165, 25);
-            this.questPics.Stroke = true;
-            this.questPics.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
-            this.questPics.TabIndex = 22;
-            this.questPics.Text = "SCREENSHOTS";
-            this.questPics.Transparency = false;
-            this.questPics.Click += new System.EventHandler(this.questPics_Click);
             // 
             // btnApplyUsername
             // 
-            this.btnApplyUsername.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
-            this.btnApplyUsername.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
+            this.btnApplyUsername.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(113)))), ((int)(((byte)(223)))), ((int)(((byte)(193)))));
+            this.btnApplyUsername.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(113)))), ((int)(((byte)(223)))), ((int)(((byte)(193)))));
             this.btnApplyUsername.BackColor = System.Drawing.Color.Transparent;
+            this.btnApplyUsername.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnApplyUsername.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.btnApplyUsername.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
-            this.btnApplyUsername.ForeColor = System.Drawing.Color.White;
-            this.btnApplyUsername.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.btnApplyUsername.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.btnApplyUsername.Location = new System.Drawing.Point(194, 38);
+            this.btnApplyUsername.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.btnApplyUsername.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.btnApplyUsername.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnApplyUsername.Enabled = false;
+            this.btnApplyUsername.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this.btnApplyUsername.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(80)))), ((int)(((byte)(80)))), ((int)(((byte)(80)))));
+            this.btnApplyUsername.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.btnApplyUsername.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.btnApplyUsername.Location = new System.Drawing.Point(234, 45);
             this.btnApplyUsername.Name = "btnApplyUsername";
             this.btnApplyUsername.Radius = 5;
-            this.btnApplyUsername.Size = new System.Drawing.Size(81, 25);
-            this.btnApplyUsername.Stroke = true;
-            this.btnApplyUsername.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
-            this.btnApplyUsername.TabIndex = 27;
+            this.btnApplyUsername.Size = new System.Drawing.Size(80, 25);
+            this.btnApplyUsername.Stroke = false;
+            this.btnApplyUsername.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.btnApplyUsername.TabIndex = 1;
             this.btnApplyUsername.Text = "APPLY";
             this.btnApplyUsername.Transparency = false;
             this.btnApplyUsername.Click += new System.EventHandler(this.btnApplyUsername_Click);
             // 
-            // label3
+            // questPics
             // 
-            this.label3.AutoSize = true;
-            this.label3.BackColor = System.Drawing.Color.Transparent;
-            this.label3.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.label3.Font = new System.Drawing.Font("Microsoft Sans Serif", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label3.ForeColor = System.Drawing.Color.LightSteelBlue;
-            this.label3.Location = new System.Drawing.Point(37, 206);
-            this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(235, 16);
-            this.label3.TabIndex = 28;
-            this.label3.Text = "Exports to: Desktop\\Quest Recordings";
-            this.label3.TextAlign = System.Drawing.ContentAlignment.TopCenter;
+            this.questPics.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.questPics.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.questPics.BackColor = System.Drawing.Color.Transparent;
+            this.questPics.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.questPics.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.questPics.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.questPics.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.questPics.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.questPics.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.questPics.ForeColor = System.Drawing.Color.White;
+            this.questPics.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.questPics.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.questPics.Location = new System.Drawing.Point(24, 127);
+            this.questPics.Name = "questPics";
+            this.questPics.Radius = 5;
+            this.questPics.Size = new System.Drawing.Size(140, 28);
+            this.questPics.Stroke = true;
+            this.questPics.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.questPics.TabIndex = 2;
+            this.questPics.Text = "Screenshots";
+            this.questPics.Transparency = false;
+            this.questPics.Click += new System.EventHandler(this.questPics_Click);
+            // 
+            // questVids
+            // 
+            this.questVids.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.questVids.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.questVids.BackColor = System.Drawing.Color.Transparent;
+            this.questVids.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.questVids.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.questVids.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.questVids.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.questVids.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.questVids.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.questVids.ForeColor = System.Drawing.Color.White;
+            this.questVids.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.questVids.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.questVids.Location = new System.Drawing.Point(174, 127);
+            this.questVids.Name = "questVids";
+            this.questVids.Radius = 5;
+            this.questVids.Size = new System.Drawing.Size(140, 28);
+            this.questVids.Stroke = true;
+            this.questVids.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.questVids.TabIndex = 3;
+            this.questVids.Text = "Recordings";
+            this.questVids.Transparency = false;
+            this.questVids.Click += new System.EventHandler(this.questVids_Click);
+            // 
+            // lblScreenshotsPath
+            // 
+            this.lblScreenshotsPath.AutoSize = true;
+            this.lblScreenshotsPath.Font = new System.Drawing.Font("Segoe UI", 8F);
+            this.lblScreenshotsPath.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(120)))), ((int)(((byte)(120)))), ((int)(((byte)(120)))));
+            this.lblScreenshotsPath.Location = new System.Drawing.Point(24, 158);
+            this.lblScreenshotsPath.Name = "lblScreenshotsPath";
+            this.lblScreenshotsPath.Size = new System.Drawing.Size(161, 13);
+            this.lblScreenshotsPath.TabIndex = 4;
+            this.lblScreenshotsPath.Text = "→ Desktop\\Quest Screenshots";
+            // 
+            // lblRecordingsPath
+            // 
+            this.lblRecordingsPath.AutoSize = true;
+            this.lblRecordingsPath.Font = new System.Drawing.Font("Segoe UI", 8F);
+            this.lblRecordingsPath.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(120)))), ((int)(((byte)(120)))), ((int)(((byte)(120)))));
+            this.lblRecordingsPath.Location = new System.Drawing.Point(174, 158);
+            this.lblRecordingsPath.Name = "lblRecordingsPath";
+            this.lblRecordingsPath.Size = new System.Drawing.Size(157, 13);
+            this.lblRecordingsPath.TabIndex = 5;
+            this.lblRecordingsPath.Text = "→ Desktop\\Quest Recordings";
+            // 
+            // toggleDeleteAfterTransfer
+            // 
+            this.toggleDeleteAfterTransfer.BackColor = System.Drawing.Color.Transparent;
+            this.toggleDeleteAfterTransfer.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleDeleteAfterTransfer.Location = new System.Drawing.Point(27, 189);
+            this.toggleDeleteAfterTransfer.Name = "toggleDeleteAfterTransfer";
+            this.toggleDeleteAfterTransfer.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleDeleteAfterTransfer.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleDeleteAfterTransfer.Size = new System.Drawing.Size(36, 18);
+            this.toggleDeleteAfterTransfer.TabIndex = 6;
+            this.toggleDeleteAfterTransfer.ThumbColor = System.Drawing.Color.White;
+            this.toggleDeleteAfterTransfer.CheckedChanged += new System.EventHandler(this.toggleDeleteAfterTransfer_CheckedChanged);
+            // 
+            // lblDeleteAfterTransfer
+            // 
+            this.lblDeleteAfterTransfer.AutoSize = true;
+            this.lblDeleteAfterTransfer.Font = new System.Drawing.Font("Segoe UI", 9.5F);
+            this.lblDeleteAfterTransfer.ForeColor = System.Drawing.Color.White;
+            this.lblDeleteAfterTransfer.Location = new System.Drawing.Point(72, 188);
+            this.lblDeleteAfterTransfer.Name = "lblDeleteAfterTransfer";
+            this.lblDeleteAfterTransfer.Size = new System.Drawing.Size(195, 17);
+            this.lblDeleteAfterTransfer.TabIndex = 7;
+            this.lblDeleteAfterTransfer.Text = "Delete from Quest after transfer";
+            // 
+            // lblPerformanceNote
+            // 
+            this.lblPerformanceNote.AutoSize = true;
+            this.lblPerformanceNote.Font = new System.Drawing.Font("Segoe UI", 8F);
+            this.lblPerformanceNote.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(120)))), ((int)(((byte)(120)))), ((int)(((byte)(120)))));
+            this.lblPerformanceNote.Location = new System.Drawing.Point(21, 254);
+            this.lblPerformanceNote.Name = "lblPerformanceNote";
+            this.lblPerformanceNote.Size = new System.Drawing.Size(120, 13);
+            this.lblPerformanceNote.TabIndex = 10;
+            this.lblPerformanceNote.Text = "Reboot Quest to reset";
+            // 
+            // lblRefreshRate
+            // 
+            this.lblRefreshRate.AutoSize = true;
+            this.lblRefreshRate.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.lblRefreshRate.ForeColor = System.Drawing.Color.White;
+            this.lblRefreshRate.Location = new System.Drawing.Point(24, 280);
+            this.lblRefreshRate.Name = "lblRefreshRate";
+            this.lblRefreshRate.Size = new System.Drawing.Size(72, 15);
+            this.lblRefreshRate.TabIndex = 11;
+            this.lblRefreshRate.Text = "Refresh Rate";
+            // 
+            // RefreshRateComboBox
+            // 
+            this.RefreshRateComboBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.RefreshRateComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.RefreshRateComboBox.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.RefreshRateComboBox.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.RefreshRateComboBox.ForeColor = System.Drawing.Color.White;
+            this.RefreshRateComboBox.FormattingEnabled = true;
+            this.RefreshRateComboBox.Items.AddRange(new object[] {
+            "72 Hz",
+            "90 Hz",
+            "120 Hz"});
+            this.RefreshRateComboBox.Location = new System.Drawing.Point(24, 298);
+            this.RefreshRateComboBox.Name = "RefreshRateComboBox";
+            this.RefreshRateComboBox.Size = new System.Drawing.Size(130, 23);
+            this.RefreshRateComboBox.TabIndex = 12;
+            // 
+            // lblGpuLevel
+            // 
+            this.lblGpuLevel.AutoSize = true;
+            this.lblGpuLevel.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.lblGpuLevel.ForeColor = System.Drawing.Color.White;
+            this.lblGpuLevel.Location = new System.Drawing.Point(170, 280);
+            this.lblGpuLevel.Name = "lblGpuLevel";
+            this.lblGpuLevel.Size = new System.Drawing.Size(60, 15);
+            this.lblGpuLevel.TabIndex = 13;
+            this.lblGpuLevel.Text = "GPU Level";
+            // 
+            // GPUComboBox
+            // 
+            this.GPUComboBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.GPUComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.GPUComboBox.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.GPUComboBox.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.GPUComboBox.ForeColor = System.Drawing.Color.White;
+            this.GPUComboBox.FormattingEnabled = true;
+            this.GPUComboBox.Items.AddRange(new object[] {
+            "0 (Default)",
+            "1",
+            "2",
+            "3",
+            "4"});
+            this.GPUComboBox.Location = new System.Drawing.Point(170, 298);
+            this.GPUComboBox.Name = "GPUComboBox";
+            this.GPUComboBox.Size = new System.Drawing.Size(130, 23);
+            this.GPUComboBox.TabIndex = 14;
+            // 
+            // lblCpuLevel
+            // 
+            this.lblCpuLevel.AutoSize = true;
+            this.lblCpuLevel.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.lblCpuLevel.ForeColor = System.Drawing.Color.White;
+            this.lblCpuLevel.Location = new System.Drawing.Point(24, 330);
+            this.lblCpuLevel.Name = "lblCpuLevel";
+            this.lblCpuLevel.Size = new System.Drawing.Size(60, 15);
+            this.lblCpuLevel.TabIndex = 15;
+            this.lblCpuLevel.Text = "CPU Level";
+            // 
+            // CPUComboBox
+            // 
+            this.CPUComboBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.CPUComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.CPUComboBox.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.CPUComboBox.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.CPUComboBox.ForeColor = System.Drawing.Color.White;
+            this.CPUComboBox.FormattingEnabled = true;
+            this.CPUComboBox.Items.AddRange(new object[] {
+            "0 (Default)",
+            "1",
+            "2",
+            "3",
+            "4"});
+            this.CPUComboBox.Location = new System.Drawing.Point(24, 348);
+            this.CPUComboBox.Name = "CPUComboBox";
+            this.CPUComboBox.Size = new System.Drawing.Size(130, 23);
+            this.CPUComboBox.TabIndex = 16;
+            // 
+            // lblResolution
+            // 
+            this.lblResolution.AutoSize = true;
+            this.lblResolution.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.lblResolution.ForeColor = System.Drawing.Color.White;
+            this.lblResolution.Location = new System.Drawing.Point(170, 330);
+            this.lblResolution.Name = "lblResolution";
+            this.lblResolution.Size = new System.Drawing.Size(63, 15);
+            this.lblResolution.TabIndex = 17;
+            this.lblResolution.Text = "Resolution";
+            // 
+            // TextureResTextBox
+            // 
+            this.TextureResTextBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.TextureResTextBox.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.TextureResTextBox.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.TextureResTextBox.ForeColor = System.Drawing.Color.White;
+            this.TextureResTextBox.Location = new System.Drawing.Point(170, 348);
+            this.TextureResTextBox.Name = "TextureResTextBox";
+            this.TextureResTextBox.Size = new System.Drawing.Size(130, 23);
+            this.TextureResTextBox.TabIndex = 18;
+            this.TextureResTextBox.Text = "0";
+            // 
+            // btnApplyTempSettings
+            // 
+            this.btnApplyTempSettings.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(113)))), ((int)(((byte)(223)))), ((int)(((byte)(193)))));
+            this.btnApplyTempSettings.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(113)))), ((int)(((byte)(223)))), ((int)(((byte)(193)))));
+            this.btnApplyTempSettings.BackColor = System.Drawing.Color.Transparent;
+            this.btnApplyTempSettings.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnApplyTempSettings.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.btnApplyTempSettings.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.btnApplyTempSettings.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.btnApplyTempSettings.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnApplyTempSettings.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this.btnApplyTempSettings.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(24)))), ((int)(((byte)(29)))));
+            this.btnApplyTempSettings.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.btnApplyTempSettings.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.btnApplyTempSettings.Location = new System.Drawing.Point(24, 385);
+            this.btnApplyTempSettings.Name = "btnApplyTempSettings";
+            this.btnApplyTempSettings.Radius = 5;
+            this.btnApplyTempSettings.Size = new System.Drawing.Size(130, 30);
+            this.btnApplyTempSettings.Stroke = false;
+            this.btnApplyTempSettings.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.btnApplyTempSettings.TabIndex = 10;
+            this.btnApplyTempSettings.Text = "APPLY SETTINGS";
+            this.btnApplyTempSettings.Transparency = false;
+            this.btnApplyTempSettings.Click += new System.EventHandler(this.btnApplyTempSettings_Click);
+            // 
+            // separator1
+            // 
+            this.separator1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.separator1.Location = new System.Drawing.Point(20, 85);
+            this.separator1.Name = "separator1";
+            this.separator1.Size = new System.Drawing.Size(295, 1);
+            this.separator1.TabIndex = 2;
+            // 
+            // separator2
+            // 
+            this.separator2.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.separator2.Location = new System.Drawing.Point(20, 220);
+            this.separator2.Name = "separator2";
+            this.separator2.Size = new System.Drawing.Size(295, 1);
+            this.separator2.TabIndex = 8;
+            // 
+            // btnClose
+            // 
+            this.btnClose.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.btnClose.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.btnClose.BackColor = System.Drawing.Color.Transparent;
+            this.btnClose.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnClose.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.btnClose.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.btnClose.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.btnClose.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnClose.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.btnClose.ForeColor = System.Drawing.Color.White;
+            this.btnClose.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnClose.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.btnClose.Location = new System.Drawing.Point(170, 385);
+            this.btnClose.Name = "btnClose";
+            this.btnClose.Radius = 5;
+            this.btnClose.Size = new System.Drawing.Size(130, 30);
+            this.btnClose.Stroke = true;
+            this.btnClose.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(74)))), ((int)(((byte)(74)))), ((int)(((byte)(74)))));
+            this.btnClose.TabIndex = 11;
+            this.btnClose.Text = "Close";
+            this.btnClose.Transparency = false;
+            this.btnClose.Click += new System.EventHandler(this.btnClose_Click);
             // 
             // QuestForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
-            this.BackgroundImage = global::AndroidSideloader.Properties.Resources.pattern_cubes;
-            this.ClientSize = new System.Drawing.Size(309, 486);
-            this.Controls.Add(this.label3);
+            this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(24)))), ((int)(((byte)(29)))));
+            this.CancelButton = this.btnClose;
+            this.ClientSize = new System.Drawing.Size(340, 435);
+            this.Controls.Add(this.lblUsernameSection);
+            this.Controls.Add(this.GlobalUsername);
             this.Controls.Add(this.btnApplyUsername);
+            this.Controls.Add(this.separator1);
+            this.Controls.Add(this.lblMediaSection);
             this.Controls.Add(this.questPics);
             this.Controls.Add(this.questVids);
-            this.Controls.Add(this.btnApplyTempSettings);
-            this.Controls.Add(this.label14);
-            this.Controls.Add(this.label10);
-            this.Controls.Add(this.splitter1);
-            this.Controls.Add(this.DeleteShots);
-            this.Controls.Add(this.label16);
-            this.Controls.Add(this.label2);
-            this.Controls.Add(this.label11);
-            this.Controls.Add(this.label12);
-            this.Controls.Add(this.label1);
-            this.Controls.Add(this.CPUComboBox);
-            this.Controls.Add(this.GPUComboBox);
-            this.Controls.Add(this.ResolutionLabel);
-            this.Controls.Add(this.GlobalUsername);
-            this.Controls.Add(this.TextureResTextBox);
+            this.Controls.Add(this.lblScreenshotsPath);
+            this.Controls.Add(this.lblRecordingsPath);
+            this.Controls.Add(this.toggleDeleteAfterTransfer);
+            this.Controls.Add(this.lblDeleteAfterTransfer);
+            this.Controls.Add(this.separator2);
+            this.Controls.Add(this.lblPerformanceSection);
+            this.Controls.Add(this.lblPerformanceNote);
+            this.Controls.Add(this.lblRefreshRate);
             this.Controls.Add(this.RefreshRateComboBox);
+            this.Controls.Add(this.lblGpuLevel);
+            this.Controls.Add(this.GPUComboBox);
+            this.Controls.Add(this.lblCpuLevel);
+            this.Controls.Add(this.CPUComboBox);
+            this.Controls.Add(this.lblResolution);
+            this.Controls.Add(this.TextureResTextBox);
+            this.Controls.Add(this.btnApplyTempSettings);
+            this.Controls.Add(this.btnClose);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
-            this.MaximumSize = new System.Drawing.Size(325, 525);
-            this.MinimumSize = new System.Drawing.Size(325, 525);
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
             this.Name = "QuestForm";
             this.ShowIcon = false;
-            this.SizeGripStyle = System.Windows.Forms.SizeGripStyle.Hide;
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "Quest settings";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+            this.Text = "Quest Settings";
             this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.QuestForm_FormClosed);
             this.Load += new System.EventHandler(this.QuestForm_Load);
             this.ResumeLayout(false);
@@ -415,26 +460,40 @@ namespace AndroidSideloader
 
         #endregion
 
-        private System.Windows.Forms.ComboBox RefreshRateComboBox;
-        private System.Windows.Forms.TextBox TextureResTextBox;
-        private System.Windows.Forms.Label ResolutionLabel;
-        private System.Windows.Forms.ComboBox GPUComboBox;
-        private System.Windows.Forms.ComboBox CPUComboBox;
-        private Label label1;
-        private Label label2;
-        private Label label11;
-        private Label label12;
-        private CheckBox DeleteShots;
-        private Splitter splitter1;
-        private Label label10;
-        private Label label14;
-        private Label label16;
-        private TextBox GlobalUsername;
-        private RoundButton btnApplyTempSettings;
-        private RoundButton questVids;
-        private RoundButton questPics;
-        private RoundButton btnApplyUsername;
-        private Label label3;
-    }
+        // Section Labels
+        private System.Windows.Forms.Label lblUsernameSection;
+        private System.Windows.Forms.Label lblMediaSection;
+        private System.Windows.Forms.Label lblPerformanceSection;
 
+        // Username controls
+        private System.Windows.Forms.TextBox GlobalUsername;
+        private RoundButton btnApplyUsername;
+
+        // Media controls
+        private RoundButton questPics;
+        private RoundButton questVids;
+        private System.Windows.Forms.Label lblScreenshotsPath;
+        private System.Windows.Forms.Label lblRecordingsPath;
+        private ToggleSwitch toggleDeleteAfterTransfer;
+        private System.Windows.Forms.Label lblDeleteAfterTransfer;
+
+        // Performance controls
+        private System.Windows.Forms.Label lblPerformanceNote;
+        private System.Windows.Forms.Label lblRefreshRate;
+        private System.Windows.Forms.ComboBox RefreshRateComboBox;
+        private System.Windows.Forms.Label lblGpuLevel;
+        private System.Windows.Forms.ComboBox GPUComboBox;
+        private System.Windows.Forms.Label lblCpuLevel;
+        private System.Windows.Forms.ComboBox CPUComboBox;
+        private System.Windows.Forms.Label lblResolution;
+        private System.Windows.Forms.TextBox TextureResTextBox;
+        private RoundButton btnApplyTempSettings;
+
+        // Separators
+        private System.Windows.Forms.Panel separator1;
+        private System.Windows.Forms.Panel separator2;
+
+        // Close button
+        private RoundButton btnClose;
+    }
 }
