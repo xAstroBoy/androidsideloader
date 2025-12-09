@@ -304,7 +304,7 @@ namespace AndroidSideloader
 
             System.Windows.Forms.Timer t2 = new System.Windows.Forms.Timer
             {
-                Interval = 300 // 30ms
+                Interval = 300 // 300ms
             };
             t2.Tick += new EventHandler(timer_Tick2);
             t2.Start();
@@ -964,22 +964,19 @@ namespace AndroidSideloader
                 DeviceConnected = false;
                 this.Invoke(() =>
                 {
-                    Text = "Device Not Authorized";
+                    Text = "Rookie Sideloader " + Updater.LocalVersion + " | Device Not Authorized";
                     DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, "Please check inside your headset for ADB DEBUGGING prompt/notification, check the box \"Always allow from this computer.\" and hit OK.", "Not Authorized", MessageBoxButtons.RetryCancel);
                     if (dialogResult == DialogResult.Retry)
                     {
                         devicesbutton.PerformClick();
                     }
-                    else
-                    {
-                        return;
-                    }
                 });
             }
             else if (Devices.Count > 0 && Devices[0].Length > 1) // Check if Devices list is not empty and the first device has a valid length
             {
-                this.Invoke(() => { Text = "Device Connected with ID | " + Devices[0].Replace("device", String.Empty); });
+                this.Invoke(() => { Text = "Rookie Sideloader " + Updater.LocalVersion + " | Device Connected: " + Devices[0].Replace("device", String.Empty).Trim(); });
                 DeviceConnected = true;
+                nodeviceonstart = false; // Device connected, clear the flag
             }
             else
             {
@@ -999,8 +996,12 @@ namespace AndroidSideloader
                             return;
                         }
                     }
+                    nodeviceonstart = true;
+                    Text = "Rookie Sideloader " + Updater.LocalVersion + " | No Device (Download Only)";
                 });
             }
+
+            UpdateQuestInfoPanel();
         }
 
         public async void showAvailableSpace()
@@ -1971,9 +1972,8 @@ namespace AndroidSideloader
 
             if (packageList.Length == 0)
             {
-                Logger.Log("No installed packages found");
-                loaded = true;
-                return;
+                Logger.Log("No installed packages found, continuing in download-only mode");
+                nodeviceonstart = true;
             }
 
             string[] blacklist = new string[] { };
@@ -3141,7 +3141,9 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                             else
                             {
                                 DialogResult res = FlexibleMessageBox.Show(Program.form,
-                                    $"{gameName} exists in destination directory.\r\nWould you like to overwrite it?",
+                                    $"{gameName} already exists in destination directory.\n" +
+                                    "Yes = Overwrite and re-download.\n" +
+                                    "No  = Use existing files and install from them.",
                                     "Download again?", MessageBoxButtons.YesNo);
 
                                 doDownload = res == DialogResult.Yes;
@@ -3405,9 +3407,11 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
 
                             Debug.WriteLine("Game Folder is: " + settings.DownloadDir + "\\" + gameName);
                             Debug.WriteLine("FILES IN GAME FOLDER: ");
+
                             if (isinstalltxt)
                             {
-                                if (!settings.NodeviceMode || !nodeviceonstart && DeviceConnected)
+                                // Only sideload if device is connected and sideloading not disabled
+                                if (!settings.NodeviceMode && !nodeviceonstart && DeviceConnected)
                                 {
                                     Thread installtxtThread = new Thread(() =>
                                     {
@@ -3422,12 +3426,13 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                                 }
                                 else
                                 {
-                                    output.Output = "\n--- SIDELOADING DISABLED ---\nAll tasks finished.";
+                                    output.Output = "Download complete (installation skipped).\n\nConnect a device or enable sideloading to install.";
                                 }
                             }
                             else
                             {
-                                if (!settings.NodeviceMode || !nodeviceonstart && DeviceConnected)
+                                // Only sideload if device is connected and sideloading not disabled
+                                if (!settings.NodeviceMode && !nodeviceonstart && DeviceConnected)
                                 {
                                     // Find the APK file to install
                                     string apkFile = files.FirstOrDefault(file => Path.GetExtension(file) == ".apk");
@@ -3493,11 +3498,12 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                                 }
                                 else
                                 {
-                                    output.Output = "\n--- SIDELOADING DISABLED ---\nAll tasks finished.\n";
+                                    output.Output = "Download complete (installation skipped).\n\nConnect a device or enable sideloading to install.";
                                 }
                                 changeTitle($"Installation of {gameName} completed.");
                             }
-                            if (settings.DeleteAllAfterInstall)
+                            // Only delete if setting enabled and device was connected (so we actually installed)
+                            if (settings.DeleteAllAfterInstall && !nodeviceonstart && DeviceConnected)
                             {
                                 changeTitle("Deleting game files");
                                 try { Directory.Delete(settings.DownloadDir + "\\" + gameName, true); } catch (Exception ex) { _ = FlexibleMessageBox.Show(Program.form, $"Error deleting game files: {ex.Message}"); }
@@ -5262,7 +5268,7 @@ function onYouTubeIframeAPIReady() {
                     string deviceModel = ADB.RunAdbCommandToString("shell getprop ro.product.model").Output.Trim();
                     if (string.IsNullOrEmpty(deviceModel))
                     {
-                        deviceModel = "Device";
+                        deviceModel = "No Device Found";
                     }
 
                     // Get storage info
