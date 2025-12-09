@@ -4680,77 +4680,10 @@ function onYouTubeIframeAPIReady() {
         private async void ListViewUninstallButton_Click(object sender, EventArgs e)
         {
             var item = _listViewUninstallButton.Tag as ListViewItem;
-            if (item == null)
-                return;
+            if (item == null) return;
 
-            string packageName = item.SubItems.Count > 2 ? item.SubItems[2].Text : "";
-            string gameName = item.Text;
-
-            if (string.IsNullOrEmpty(packageName))
-                return;
-
-            // Hide the button immediately
             _listViewUninstallButton.Visible = false;
-
-            // Confirm uninstall
-            DialogResult dialogresult = FlexibleMessageBox.Show($"Are you sure you want to uninstall {gameName}?", "Proceed with uninstall?", MessageBoxButtons.YesNo);
-            if (dialogresult == DialogResult.No)
-                return;
-
-            // Ask about backup
-            if (!settings.CustomBackupDir)
-            {
-                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
-            }
-            else
-            {
-                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
-            }
-
-            DialogResult dialogresult2 = FlexibleMessageBox.Show($"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\", "Attempt Game Backup?", MessageBoxButtons.YesNo);
-            if (dialogresult2 == DialogResult.Yes)
-            {
-                Sideloader.BackupGame(packageName);
-            }
-
-            // Perform uninstall
-            ProcessOutput output = new ProcessOutput("", "");
-            progressBar.Style = ProgressBarStyle.Marquee;
-
-            Thread t1 = new Thread(() =>
-            {
-                output += Sideloader.UninstallGame(packageName);
-            });
-            t1.Start();
-            t1.IsBackground = true;
-
-            while (t1.IsAlive)
-            {
-                await Task.Delay(100);
-            }
-
-            ShowPrcOutput(output);
-            showAvailableSpace();
-            progressBar.Style = ProgressBarStyle.Continuous;
-
-            // Remove from combo box if present
-            for (int i = 0; i < m_combo.Items.Count; i++)
-            {
-                string comboItem = m_combo.Items[i].ToString();
-                if (comboItem.Equals(gameName, StringComparison.OrdinalIgnoreCase) ||
-                    comboItem.Equals(packageName, StringComparison.OrdinalIgnoreCase))
-                {
-                    m_combo.Items.RemoveAt(i);
-                    break;
-                }
-            }
-
-            // Refresh the list to update installed status
-            _allItemsInitialized = false;
-            _galleryDataSource = null;
-
-            listAppsBtn();
-            initListView(false);
+            await UninstallGameAsync(item);
         }
 
         public void UpdateGamesButton_Click(object sender, EventArgs e)
@@ -5582,6 +5515,17 @@ function onYouTubeIframeAPIReady() {
 
         private void btnViewToggle_Click(object sender, EventArgs e)
         {
+            // Capture currently selected item before switching views
+            string selectedPackageName = null;
+            if (gamesListView.SelectedItems.Count > 0)
+            {
+                var selectedItem = gamesListView.SelectedItems[0];
+                if (selectedItem.SubItems.Count > 2)
+                {
+                    selectedPackageName = selectedItem.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
+                }
+            }
+
             isGalleryView = !isGalleryView;
 
             // Save user preference
@@ -5598,6 +5542,12 @@ function onYouTubeIframeAPIReady() {
                 if (_allItems != null && _allItems.Count > 0)
                 {
                     PopulateGalleryView();
+
+                    // Scroll to the previously selected item in gallery view
+                    if (!string.IsNullOrEmpty(selectedPackageName) && _fastGallery != null)
+                    {
+                        _fastGallery.ScrollToPackage(selectedPackageName);
+                    }
                 }
             }
             else
@@ -5665,75 +5615,10 @@ function onYouTubeIframeAPIReady() {
         {
             if (index < 0 || _fastGallery == null) return;
 
-            // Get the actual item from the gallery's current (sorted) list
             var item = _fastGallery.GetItemAtIndex(index);
             if (item == null) return;
 
-            string packageName = item.SubItems.Count > 2 ? item.SubItems[2].Text : "";
-            string gameName = item.Text;
-
-            if (string.IsNullOrEmpty(packageName))
-                return;
-
-            // Confirm uninstall
-            DialogResult dialogresult = FlexibleMessageBox.Show($"Are you sure you want to uninstall {gameName}?", "Proceed with uninstall?", MessageBoxButtons.YesNo);
-            if (dialogresult == DialogResult.No)
-                return;
-
-            // Ask about backup
-            if (!settings.CustomBackupDir)
-            {
-                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
-            }
-            else
-            {
-                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
-            }
-
-            DialogResult dialogresult2 = FlexibleMessageBox.Show($"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\", "Attempt Game Backup?", MessageBoxButtons.YesNo);
-            if (dialogresult2 == DialogResult.Yes)
-            {
-                Sideloader.BackupGame(packageName);
-            }
-
-            // Perform uninstall
-            ProcessOutput output = new ProcessOutput("", "");
-            progressBar.Style = ProgressBarStyle.Marquee;
-
-            Thread t1 = new Thread(() =>
-            {
-                output += Sideloader.UninstallGame(packageName);
-            });
-            t1.Start();
-            t1.IsBackground = true;
-
-            while (t1.IsAlive)
-            {
-                await Task.Delay(100);
-            }
-
-            ShowPrcOutput(output);
-            showAvailableSpace();
-            progressBar.Style = ProgressBarStyle.Continuous;
-
-            // Remove from combo box if present
-            for (int i = 0; i < m_combo.Items.Count; i++)
-            {
-                string comboItem = m_combo.Items[i].ToString();
-                if (comboItem.Equals(gameName, StringComparison.OrdinalIgnoreCase) ||
-                    comboItem.Equals(packageName, StringComparison.OrdinalIgnoreCase))
-                {
-                    m_combo.Items.RemoveAt(i);
-                    break;
-                }
-            }
-
-            // Refresh the list to update installed status
-            _allItemsInitialized = false;
-            _galleryDataSource = null;
-
-            listAppsBtn();
-            initListView(false);
+            await UninstallGameAsync(item);
         }
 
         private void GamesGalleryView_Resize(object sender, EventArgs e)
@@ -6732,6 +6617,122 @@ function onYouTubeIframeAPIReady() {
             // Force repaint of panels to update rounded corners
             queuePanel.Invalidate();
             notesPanel.Invalidate();
+        }
+
+        private async Task UninstallGameAsync(ListViewItem item)
+        {
+            string packageName = item.SubItems.Count > 2 ? item.SubItems[2].Text : "";
+            string gameName = item.Text;
+
+            if (string.IsNullOrEmpty(packageName))
+                return;
+
+            // Confirm uninstall
+            DialogResult dialogresult = FlexibleMessageBox.Show(
+                $"Are you sure you want to uninstall {gameName}?", 
+                "Proceed with uninstall?", MessageBoxButtons.YesNo);
+
+            if (dialogresult == DialogResult.No)
+                return;
+
+            // Ask about backup
+            if (!settings.CustomBackupDir)
+            {
+                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
+            }
+            else
+            {
+                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
+            }
+
+            DialogResult dialogresult2 = FlexibleMessageBox.Show(
+                $"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\", 
+                "Attempt Game Backup?", MessageBoxButtons.YesNo);
+
+            if (dialogresult2 == DialogResult.Yes)
+            {
+                Sideloader.BackupGame(packageName);
+            }
+
+            // Perform uninstall
+            ProcessOutput output = new ProcessOutput("", "");
+            progressBar.Style = ProgressBarStyle.Marquee;
+
+            await Task.Run(() => {
+                output += Sideloader.UninstallGame(packageName);
+            });
+
+            ShowPrcOutput(output);
+            showAvailableSpace();
+            progressBar.Style = ProgressBarStyle.Continuous;
+
+            // Remove from combo box
+            for (int i = 0; i < m_combo.Items.Count; i++)
+            {
+                string comboItem = m_combo.Items[i].ToString();
+                if (comboItem.Equals(gameName, StringComparison.OrdinalIgnoreCase) ||
+                    comboItem.Equals(packageName, StringComparison.OrdinalIgnoreCase))
+                {
+                    m_combo.Items.RemoveAt(i);
+                    break;
+                }
+            }
+
+            await RefreshGameListAsync();
+        }
+
+        private async Task RefreshGameListAsync()
+        {
+            // Save current filter state before refreshing
+            bool wasUpdateAvailableClicked = updateAvailableClicked;
+            bool wasUpToDateClicked = upToDate_Clicked;
+            bool wasNeedsDonationClicked = NeedsDonation_Clicked;
+
+            // Temporarily clear filter states
+            updateAvailableClicked = false;
+            upToDate_Clicked = false;
+            NeedsDonation_Clicked = false;
+
+            // Refresh the list to update installed status
+            _allItemsInitialized = false;
+            _galleryDataSource = null;
+            listAppsBtn();
+
+            bool wasGalleryView = isGalleryView;
+            isGalleryView = false;
+
+            initListView(false);
+
+            // Wait for initListView to finish rebuilding _allItems
+            while (!_allItemsInitialized || !loaded)
+            {
+                await Task.Delay(50);
+            }
+
+            isGalleryView = wasGalleryView;
+
+            // Reapply the active filter
+            if (wasUpToDateClicked)
+            {
+                upToDate_Clicked = true;
+                FilterListByColors(new[] { ColorInstalled, ColorUpdateAvailable, ColorDonateGame });
+            }
+            else if (wasUpdateAvailableClicked)
+            {
+                updateAvailableClicked = true;
+                FilterListByColor(ColorUpdateAvailable);
+            }
+            else if (wasNeedsDonationClicked)
+            {
+                NeedsDonation_Clicked = true;
+                FilterListByColor(ColorDonateGame);
+            }
+            else if (isGalleryView)
+            {
+                gamesListView.Visible = false;
+                gamesGalleryView.Visible = true;
+                PopulateGalleryView();
+            }
         }
     }
 

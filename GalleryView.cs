@@ -1259,6 +1259,46 @@ public class FastGalleryPanel : Control
         _favoritesCache = new HashSet<string>(SettingsManager.Instance.FavoritedGames, StringComparer.OrdinalIgnoreCase);
     }
 
+    public void ScrollToPackage(string packageName)
+    {
+        if (string.IsNullOrEmpty(packageName) || _items == null || _items.Count == 0)
+            return;
+
+        // Find the index of the item with the matching package name
+        for (int i = 0; i < _items.Count; i++)
+        {
+            var item = _items[i];
+            if (item.SubItems.Count > 2 &&
+                item.SubItems[2].Text.Equals(packageName, StringComparison.OrdinalIgnoreCase))
+            {
+                // Calculate the row this item is in
+                int row = i / _columns;
+
+                // Calculate the Y position to scroll to (center the row in view if possible)
+                int targetY = _spacing + SORT_PANEL_HEIGHT + row * (_tileHeight + _spacing);
+                int viewportHeight = this.Height - SORT_PANEL_HEIGHT;
+                int centeredY = targetY - (viewportHeight / 2) + (_tileHeight / 2);
+
+                // Clamp to valid scroll range
+                int maxScroll = Math.Max(0, _contentHeight - viewportHeight);
+                _scrollY = Math.Max(0, Math.Min(centeredY, maxScroll));
+                _targetScrollY = _scrollY;
+
+                // Update scrollbar and redraw
+                if (_scrollBar.Visible)
+                {
+                    _scrollBar.Value = Math.Max(_scrollBar.Minimum, Math.Min(_scrollBar.Maximum - _scrollBar.LargeChange + 1, (int)_scrollY));
+                }
+
+                // Also select this item visually
+                _selectedIndex = i;
+
+                Invalidate();
+                break;
+            }
+        }
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
