@@ -1052,7 +1052,7 @@ namespace AndroidSideloader
             else if (itemCount > 1)
             {
                 // Multiple devices but none selected - prompt user
-                deviceId = ShowDeviceSelector("Multiple devices detected - Select a Device");
+                deviceId = ShowDeviceSelector("Multiple devices detected - Select a device");
             }
             else if (itemCount == 1)
             {
@@ -5976,7 +5976,7 @@ function onYouTubeIframeAPIReady() {
             }
         }
 
-        private string ShowInstalledAppSelector(string promptText = "Select an Installed App...")
+        private string ShowInstalledAppSelector(string promptText = "Select an installed app...")
         {
             // Refresh the list of installed apps
             listAppsBtn();
@@ -6039,7 +6039,7 @@ function onYouTubeIframeAPIReady() {
             return null;
         }
 
-        private string ShowDeviceSelector(string promptText = "Select a Device")
+        private string ShowDeviceSelector(string promptText = "Select a device")
         {
             // Refresh the list of devices first
             string output = ADB.RunAdbCommandToString("devices").Output;
@@ -6072,6 +6072,7 @@ function onYouTubeIframeAPIReady() {
                 devicesComboBox.Items.Clear();
                 devicesComboBox.Items.Add(deviceList[0]);
                 devicesComboBox.SelectedIndex = 0;
+                FlexibleMessageBox.Show(this, $"Connected device '{deviceList[0]}'. No other devices detected.");
                 return deviceList[0];
             }
 
@@ -6144,7 +6145,7 @@ function onYouTubeIframeAPIReady() {
 
         private void selectDeviceButton_Click(object sender, EventArgs e)
         {
-            string selectedDevice = ShowDeviceSelector("Select a Device");
+            string selectedDevice = ShowDeviceSelector("Select a device");
             if (selectedDevice != null)
             {
                 ADB.DeviceID = selectedDevice;
@@ -6156,7 +6157,7 @@ function onYouTubeIframeAPIReady() {
 
         private void selectMirrorButton_Click(object sender, EventArgs e)
         {
-            string selectedMirror = ShowMirrorSelector("Select a Mirror");
+            string selectedMirror = ShowMirrorSelector("Select a mirror");
             if (selectedMirror != null)
             {
                 // Find and select the mirror in the hidden remotesList
@@ -6171,7 +6172,7 @@ function onYouTubeIframeAPIReady() {
             }
         }
 
-        private string ShowMirrorSelector(string promptText = "Select a Mirror")
+        private string ShowMirrorSelector(string promptText = "Select a mirror")
         {
             if (remotesList.Items.Count == 0)
             {

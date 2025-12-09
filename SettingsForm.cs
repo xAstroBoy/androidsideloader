@@ -61,8 +61,8 @@ namespace AndroidSideloader
             toolTip.SetToolTip(lblDeleteAfterInstall, "Delete game files after downloading and installing");
             toolTip.SetToolTip(toggleUseDownloadedFiles, "Always install downloaded files without prompting to re-download");
             toolTip.SetToolTip(lblUseDownloadedFiles, "Always install downloaded files without prompting to re-download");
-            toolTip.SetToolTip(toggleTrailers, "Show game trailers in the sidebar when selecting a game");
-            toolTip.SetToolTip(lblTrailers, "Show game trailers in the sidebar when selecting a game");
+            toolTip.SetToolTip(toggleTrailers, "Show game trailers when selecting a game");
+            toolTip.SetToolTip(lblTrailers, "Show game trailers when selecting a game");
         }
 
         private void SaveAllSettings()
