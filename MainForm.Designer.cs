@@ -1213,16 +1213,16 @@ namespace AndroidSideloader
             // 
             // tableLayoutPanel1
             // 
-            this.tableLayoutPanel1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.tableLayoutPanel1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
             this.tableLayoutPanel1.BackColor = System.Drawing.Color.Transparent;
             this.tableLayoutPanel1.ColumnCount = 6;
-            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
-            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
-            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
-            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
-            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
+            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
+            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
+            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
+            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             this.tableLayoutPanel1.Controls.Add(this.searchPanel, 0, 0);
             this.tableLayoutPanel1.Controls.Add(this.btnViewToggle, 1, 0);
             this.tableLayoutPanel1.Controls.Add(this.favoriteSwitcher, 2, 0);
@@ -1292,6 +1292,7 @@ namespace AndroidSideloader
             // 
             this.searchPanel.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(51)))), ((int)(((byte)(56)))), ((int)(((byte)(70)))));
             this.searchPanel.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(51)))), ((int)(((byte)(56)))), ((int)(((byte)(70)))));
+            this.searchPanel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
             this.searchPanel.BackColor = System.Drawing.Color.Transparent;
             this.searchPanel.Controls.Add(this.searchIconPictureBox);
             this.searchPanel.Controls.Add(this.searchTextBox);
@@ -1306,6 +1307,7 @@ namespace AndroidSideloader
             this.searchPanel.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(51)))), ((int)(((byte)(56)))), ((int)(((byte)(70)))));
             this.searchPanel.Location = new System.Drawing.Point(0, 3);
             this.searchPanel.Margin = new System.Windows.Forms.Padding(0, 3, 3, 3);
+            this.searchPanel.MinimumSize = new System.Drawing.Size(110, 28);
             this.searchPanel.Name = "searchPanel";
             this.searchPanel.Radius = 5;
             this.searchPanel.Size = new System.Drawing.Size(340, 28);
@@ -1329,7 +1331,7 @@ namespace AndroidSideloader
             // 
             // searchTextBox
             // 
-            this.searchTextBox.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            this.searchTextBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
             this.searchTextBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(51)))), ((int)(((byte)(56)))), ((int)(((byte)(70)))));
             this.searchTextBox.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.searchTextBox.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Italic);
