@@ -5163,65 +5163,37 @@ function onYouTubeIframeAPIReady() {
         private ListViewItem _rightClickedItem;
         private void gamesListView_MouseClick(object sender, MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Right)
-            {
-                _rightClickedItem = gamesListView.GetItemAt(e.X, e.Y);
-                gamesListView.SelectedItems.Clear();
-                if (_rightClickedItem != null)
-                {
-                    _rightClickedItem.Selected = true;
-                }
+            if (e.Button != MouseButtons.Right) return;
 
-                // Get the name of the release of the right-clicked item
-                string packageName = _rightClickedItem.SubItems[1].Text;
+            _rightClickedItem = gamesListView.GetItemAt(e.X, e.Y);
+            if (_rightClickedItem == null) return;
 
-                // Check if the game is favorited and update the menu item text accordingly
-                ToolStripMenuItem favoriteMenuItem = favoriteGame.Items[0] as ToolStripMenuItem;
-                if (SettingsManager.Instance.FavoritedGames.Contains(packageName))
-                {
-                    favoriteButton.Text = "Remove from Favorites";  // If it's already favorited, show "Unfavorite"
-                }
-                else
-                {
-                    favoriteButton.Text = "★ Add to Favorites";  // If it's not favorited, show "Favorite"
-                }
-
-                // Show the context menu at the mouse position
-                favoriteGame.Show(gamesListView, e.Location);
-            }
+            gamesListView.SelectedItems.Clear();
+            _rightClickedItem.Selected = true;
+            
+            UpdateFavoriteMenuItemText();
+            favoriteGame.Show(gamesListView, e.Location);
         }
 
         private void favoriteButton_Click(object sender, EventArgs e)
         {
-            if (_rightClickedItem != null)
-            {
-                string packageName = _rightClickedItem.SubItems[1].Text;
+            if (_rightClickedItem == null) return;
 
-                // Check the menu item's text to decide whether to add or remove the game from favorites
-                if ((sender as ToolStripMenuItem).Text == "★ Add to Favorites")
-                {
-                    // Add to favorites
-                    settings.AddFavoriteGame(packageName);
-                    Console.WriteLine($"{packageName} has been added to favorites.");
-                }
-                else if ((sender as ToolStripMenuItem).Text == "Remove from Favorites")
-                {
-                    // Remove from favorites
-                    settings.RemoveFavoriteGame(packageName);
-                    Console.WriteLine($"{packageName} has been removed from favorites.");
-                }
+            string packageName = _rightClickedItem.SubItems[1].Text;
 
-                // After adding/removing, update the context menu text
-                ToolStripMenuItem favoriteMenuItem = sender as ToolStripMenuItem;
-                if (settings.FavoritedGames.Contains(packageName))
-                {
-                    favoriteMenuItem.Text = "Remove from Favorites";
-                }
-                else
-                {
-                    favoriteMenuItem.Text = "★ Add to Favorites";
-                }
-            }
+            if (settings.FavoritedGames.Contains(packageName))
+                settings.RemoveFavoriteGame(packageName);
+            else
+                settings.AddFavoriteGame(packageName);
+
+            UpdateFavoriteMenuItemText();
+        }
+
+        private void UpdateFavoriteMenuItemText()
+        {
+            if (_rightClickedItem == null) return;
+            string packageName = _rightClickedItem.SubItems[1].Text;
+            favoriteButton.Text = settings.FavoritedGames.Contains(packageName) ? "Remove from Favorites" : "★ Add to Favorites";
         }
 
         private void favoriteSwitcher_Click(object sender, EventArgs e)
@@ -5240,13 +5212,6 @@ function onYouTubeIframeAPIReady() {
                 favoriteSwitcher.Text = "ALL";
 
                 var favSet = new HashSet<string>(settings.FavoritedGames, StringComparer.OrdinalIgnoreCase);
-
-                // DEBUG: Check if favorites exist
-                if (favSet.Count == 0)
-                {
-                    changeTitle("No favorites saved yet!");
-                    return;
-                }
 
                 var favoriteItems = _allItems
                     .Where(item => item.SubItems.Count > 1 && favSet.Contains(item.SubItems[1].Text))
