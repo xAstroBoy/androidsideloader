@@ -3141,7 +3141,7 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
                             else
                             {
                                 DialogResult res = FlexibleMessageBox.Show(Program.form,
-                                    $"{gameName} already exists in destination directory.\n" +
+                                    $"{gameName} already exists in destination directory.\n\n" +
                                     "Yes = Overwrite and re-download.\n" +
                                     "No  = Use existing files and install from them.",
                                     "Download again?", MessageBoxButtons.YesNo);
