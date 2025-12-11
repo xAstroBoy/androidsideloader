@@ -115,15 +115,15 @@ namespace AndroidSideloader
             this.questInfoLabel = new System.Windows.Forms.Label();
             this.ULLabel = new System.Windows.Forms.Label();
             this.leftNavContainer = new System.Windows.Forms.Panel();
+            this.statusInfoPanel = new System.Windows.Forms.Panel();
+            this.sideloadingStatusLabel = new System.Windows.Forms.Label();
+            this.rookieStatusLabel = new System.Windows.Forms.Label();
+            this.activeMirrorLabel = new System.Windows.Forms.Label();
+            this.deviceIdLabel = new System.Windows.Forms.Label();
             this.sidebarMediaPanel = new System.Windows.Forms.Panel();
+            this.downloadInstallGameButton = new AndroidSideloader.RoundButton();
             this.selectedGameLabel = new System.Windows.Forms.Label();
             this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
-            this.webView21 = new Microsoft.Web.WebView2.WinForms.WebView2();
-            this.favoriteGame = new System.Windows.Forms.ContextMenuStrip(this.components);
-            this.favoriteButton = new System.Windows.Forms.ToolStripMenuItem();
-            this.gamesGalleryView = new System.Windows.Forms.FlowLayoutPanel();
-            this.btnViewToggle_Tooltip = new System.Windows.Forms.ToolTip(this.components);
-            this.webViewPlaceholderPanel = new System.Windows.Forms.Panel();
             this.searchPanel = new AndroidSideloader.RoundButton();
             this.searchIconPictureBox = new System.Windows.Forms.PictureBox();
             this.searchTextBox = new System.Windows.Forms.TextBox();
@@ -132,7 +132,12 @@ namespace AndroidSideloader
             this.btnInstalled = new AndroidSideloader.RoundButton();
             this.btnUpdateAvailable = new AndroidSideloader.RoundButton();
             this.btnNewerThanList = new AndroidSideloader.RoundButton();
-            this.downloadInstallGameButton = new AndroidSideloader.RoundButton();
+            this.webView21 = new Microsoft.Web.WebView2.WinForms.WebView2();
+            this.favoriteGame = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.favoriteButton = new System.Windows.Forms.ToolStripMenuItem();
+            this.gamesGalleryView = new System.Windows.Forms.FlowLayoutPanel();
+            this.btnViewToggle_Tooltip = new System.Windows.Forms.ToolTip(this.components);
+            this.webViewPlaceholderPanel = new System.Windows.Forms.Panel();
             ((System.ComponentModel.ISupportInitialize)(this.gamesPictureBox)).BeginInit();
             this.gamesPictureBox.SuspendLayout();
             this.progressDLbtnContainer.SuspendLayout();
@@ -145,12 +150,13 @@ namespace AndroidSideloader
             this.otherContainer.SuspendLayout();
             this.questInfoPanel.SuspendLayout();
             this.leftNavContainer.SuspendLayout();
+            this.statusInfoPanel.SuspendLayout();
             this.sidebarMediaPanel.SuspendLayout();
             this.tableLayoutPanel1.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.webView21)).BeginInit();
-            this.favoriteGame.SuspendLayout();
             this.searchPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.searchIconPictureBox)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.webView21)).BeginInit();
+            this.favoriteGame.SuspendLayout();
             this.SuspendLayout();
             // 
             // m_combo
@@ -161,7 +167,7 @@ namespace AndroidSideloader
             this.m_combo.ForeColor = global::AndroidSideloader.Properties.Settings.Default.FontColor;
             this.m_combo.Location = new System.Drawing.Point(253, 9);
             this.m_combo.Name = "m_combo";
-            this.m_combo.Size = new System.Drawing.Size(374, 24);
+            this.m_combo.Size = new System.Drawing.Size(374, 25);
             this.m_combo.TabIndex = 0;
             this.m_combo.Text = "Select an Installed App...";
             this.m_combo.Visible = false;
@@ -254,7 +260,7 @@ namespace AndroidSideloader
             this.devicesComboBox.Location = new System.Drawing.Point(253, 39);
             this.devicesComboBox.Margin = new System.Windows.Forms.Padding(2);
             this.devicesComboBox.Name = "devicesComboBox";
-            this.devicesComboBox.Size = new System.Drawing.Size(164, 24);
+            this.devicesComboBox.Size = new System.Drawing.Size(164, 25);
             this.devicesComboBox.TabIndex = 1;
             this.devicesComboBox.Text = "Select your device";
             this.devicesComboBox.Visible = false;
@@ -270,7 +276,7 @@ namespace AndroidSideloader
             this.remotesList.Location = new System.Drawing.Point(567, 40);
             this.remotesList.Margin = new System.Windows.Forms.Padding(2);
             this.remotesList.Name = "remotesList";
-            this.remotesList.Size = new System.Drawing.Size(67, 24);
+            this.remotesList.Size = new System.Drawing.Size(67, 25);
             this.remotesList.TabIndex = 3;
             this.remotesList.Visible = false;
             this.remotesList.SelectedIndexChanged += new System.EventHandler(this.remotesList_SelectedIndexChanged);
@@ -291,7 +297,7 @@ namespace AndroidSideloader
             this.VersionNameIndex,
             this.DownloadsIndex});
             this.gamesListView.Font = new System.Drawing.Font("Segoe UI", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.gamesListView.ForeColor = Color.White;
+            this.gamesListView.ForeColor = System.Drawing.Color.White;
             this.gamesListView.HideSelection = false;
             this.gamesListView.ImeMode = System.Windows.Forms.ImeMode.Off;
             this.gamesListView.Location = new System.Drawing.Point(258, 44);
@@ -1166,6 +1172,7 @@ namespace AndroidSideloader
             // 
             this.leftNavContainer.AutoScroll = true;
             this.leftNavContainer.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(24)))), ((int)(((byte)(29)))));
+            this.leftNavContainer.Controls.Add(this.statusInfoPanel);
             this.leftNavContainer.Controls.Add(this.aboutBtn);
             this.leftNavContainer.Controls.Add(this.otherContainer);
             this.leftNavContainer.Controls.Add(this.otherDrop);
@@ -1186,6 +1193,73 @@ namespace AndroidSideloader
             this.leftNavContainer.Size = new System.Drawing.Size(250, 721);
             this.leftNavContainer.TabIndex = 73;
             // 
+            // statusInfoPanel
+            // 
+            this.statusInfoPanel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(24)))), ((int)(((byte)(29)))));
+            this.statusInfoPanel.Controls.Add(this.sideloadingStatusLabel);
+            this.statusInfoPanel.Controls.Add(this.activeMirrorLabel);
+            this.statusInfoPanel.Controls.Add(this.deviceIdLabel);
+            this.statusInfoPanel.Controls.Add(this.rookieStatusLabel);
+            this.statusInfoPanel.AutoSize = false;
+            this.statusInfoPanel.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.statusInfoPanel.Location = new System.Drawing.Point(0, 1019);
+            this.statusInfoPanel.Name = "statusInfoPanel";
+            this.statusInfoPanel.Padding = new System.Windows.Forms.Padding(8, 4, 8, 8);
+            this.statusInfoPanel.Size = new System.Drawing.Size(233, 81);
+            this.statusInfoPanel.TabIndex = 102;
+            // 
+            // rookieStatusLabel
+            // 
+            this.rookieStatusLabel.AutoSize = false;
+            this.rookieStatusLabel.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
+            this.rookieStatusLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.rookieStatusLabel.Location = new System.Drawing.Point(8, 4);
+            this.rookieStatusLabel.Name = "rookieStatusLabel";
+            this.rookieStatusLabel.Padding = new System.Windows.Forms.Padding(0, 2, 0, 2);
+            this.rookieStatusLabel.Size = new System.Drawing.Size(225, 17);
+            this.rookieStatusLabel.AutoEllipsis = true;
+            this.rookieStatusLabel.TabIndex = 0;
+            this.rookieStatusLabel.Text = "Status";
+            // 
+            // deviceIdLabel
+            // 
+            this.deviceIdLabel.AutoSize = false;
+            this.deviceIdLabel.Font = new System.Drawing.Font("Segoe UI", 8F);
+            this.deviceIdLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(145)))), ((int)(((byte)(150)))));
+            this.deviceIdLabel.Location = new System.Drawing.Point(8, 21);
+            this.deviceIdLabel.Name = "deviceIdLabel";
+            this.deviceIdLabel.Padding = new System.Windows.Forms.Padding(0, 2, 0, 2);
+            this.deviceIdLabel.Size = new System.Drawing.Size(225, 17);
+            this.deviceIdLabel.AutoEllipsis = true;
+            this.deviceIdLabel.TabIndex = 1;
+            this.deviceIdLabel.Text = "Device: Not connected";
+            // 
+            // activeMirrorLabel
+            // 
+            this.activeMirrorLabel.AutoSize = false;
+            this.activeMirrorLabel.Font = new System.Drawing.Font("Segoe UI", 8F);
+            this.activeMirrorLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(145)))), ((int)(((byte)(150)))));
+            this.activeMirrorLabel.Location = new System.Drawing.Point(8, 38);
+            this.activeMirrorLabel.Name = "activeMirrorLabel";
+            this.activeMirrorLabel.Padding = new System.Windows.Forms.Padding(0, 2, 0, 2);
+            this.activeMirrorLabel.Size = new System.Drawing.Size(225, 17);
+            this.activeMirrorLabel.AutoEllipsis = true;
+            this.activeMirrorLabel.TabIndex = 2;
+            this.activeMirrorLabel.Text = "Mirror: None";
+            // 
+            // sideloadingStatusLabel
+            // 
+            this.sideloadingStatusLabel.AutoSize = false;
+            this.sideloadingStatusLabel.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
+            this.sideloadingStatusLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.sideloadingStatusLabel.Location = new System.Drawing.Point(8, 55);
+            this.sideloadingStatusLabel.Name = "sideloadingStatusLabel";
+            this.sideloadingStatusLabel.Padding = new System.Windows.Forms.Padding(0, 2, 0, 2);
+            this.sideloadingStatusLabel.Size = new System.Drawing.Size(225, 17);
+            this.sideloadingStatusLabel.AutoEllipsis = true;
+            this.sideloadingStatusLabel.TabIndex = 3;
+            this.sideloadingStatusLabel.Text = "Sideloading: Enabled";
+            // 
             // sidebarMediaPanel
             // 
             this.sidebarMediaPanel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(24)))), ((int)(((byte)(29)))));
@@ -1198,6 +1272,35 @@ namespace AndroidSideloader
             this.sidebarMediaPanel.Name = "sidebarMediaPanel";
             this.sidebarMediaPanel.Size = new System.Drawing.Size(233, 214);
             this.sidebarMediaPanel.TabIndex = 101;
+            // 
+            // downloadInstallGameButton
+            // 
+            this.downloadInstallGameButton.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(110)))), ((int)(((byte)(215)))), ((int)(((byte)(190)))));
+            this.downloadInstallGameButton.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(110)))), ((int)(((byte)(215)))), ((int)(((byte)(190)))));
+            this.downloadInstallGameButton.BackColor = System.Drawing.Color.Transparent;
+            this.downloadInstallGameButton.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.downloadInstallGameButton.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.downloadInstallGameButton.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(16)))), ((int)(((byte)(18)))), ((int)(((byte)(22)))));
+            this.downloadInstallGameButton.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(16)))), ((int)(((byte)(18)))), ((int)(((byte)(22)))));
+            this.downloadInstallGameButton.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
+            this.downloadInstallGameButton.Enabled = false;
+            this.downloadInstallGameButton.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this.downloadInstallGameButton.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(59)))), ((int)(((byte)(67)))), ((int)(((byte)(82)))));
+            this.downloadInstallGameButton.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.downloadInstallGameButton.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.downloadInstallGameButton.Location = new System.Drawing.Point(6, 177);
+            this.downloadInstallGameButton.Margin = new System.Windows.Forms.Padding(0);
+            this.downloadInstallGameButton.Name = "downloadInstallGameButton";
+            this.downloadInstallGameButton.Radius = 4;
+            this.downloadInstallGameButton.Size = new System.Drawing.Size(238, 30);
+            this.downloadInstallGameButton.Stroke = true;
+            this.downloadInstallGameButton.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.downloadInstallGameButton.TabIndex = 94;
+            this.downloadInstallGameButton.Text = "DOWNLOAD AND INSTALL";
+            this.downloadInstallGameButton.Transparency = false;
+            this.downloadInstallGameButton.Click += new System.EventHandler(this.downloadInstallGameButton_Click);
+            this.downloadInstallGameButton.DragDrop += new System.Windows.Forms.DragEventHandler(this.Form1_DragDrop);
+            this.downloadInstallGameButton.DragEnter += new System.Windows.Forms.DragEventHandler(this.Form1_DragEnter);
             // 
             // selectedGameLabel
             // 
@@ -1213,7 +1316,7 @@ namespace AndroidSideloader
             // 
             // tableLayoutPanel1
             // 
-            this.tableLayoutPanel1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            this.tableLayoutPanel1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.tableLayoutPanel1.BackColor = System.Drawing.Color.Transparent;
             this.tableLayoutPanel1.ColumnCount = 6;
@@ -1235,58 +1338,6 @@ namespace AndroidSideloader
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tableLayoutPanel1.Size = new System.Drawing.Size(984, 34);
             this.tableLayoutPanel1.TabIndex = 97;
-            // 
-            // webView21
-            // 
-            this.webView21.AllowExternalDrop = true;
-            this.webView21.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.webView21.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(24)))), ((int)(((byte)(26)))), ((int)(((byte)(30)))));
-            this.webView21.CreationProperties = null;
-            this.webView21.DefaultBackgroundColor = System.Drawing.Color.FromArgb(((int)(((byte)(24)))), ((int)(((byte)(26)))), ((int)(((byte)(30)))));
-            this.webView21.Location = new System.Drawing.Point(259, 496);
-            this.webView21.Name = "webView21";
-            this.webView21.Size = new System.Drawing.Size(384, 216);
-            this.webView21.TabIndex = 98;
-            this.webView21.ZoomFactor = 1D;
-            // 
-            // favoriteGame
-            // 
-            this.favoriteGame.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(42)))), ((int)(((byte)(48)))));
-            this.favoriteGame.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.favoriteButton});
-            this.favoriteGame.Name = "favoriteGame";
-            this.favoriteGame.ShowImageMargin = false;
-            this.favoriteGame.Size = new System.Drawing.Size(149, 26);
-            // 
-            // favoriteButton
-            // 
-            this.favoriteButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(42)))), ((int)(((byte)(48)))));
-            this.favoriteButton.ForeColor = System.Drawing.Color.White;
-            this.favoriteButton.Name = "favoriteButton";
-            this.favoriteButton.Size = new System.Drawing.Size(148, 22);
-            this.favoriteButton.Text = "★ Add to Favorites";
-            this.favoriteButton.Click += new System.EventHandler(this.favoriteButton_Click);
-            // 
-            // gamesGalleryView
-            // 
-            this.gamesGalleryView.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.gamesGalleryView.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(15)))), ((int)(((byte)(15)))), ((int)(((byte)(15)))));
-            this.gamesGalleryView.Location = new System.Drawing.Point(258, 44);
-            this.gamesGalleryView.Name = "gamesGalleryView";
-            this.gamesGalleryView.Size = new System.Drawing.Size(984, 409);
-            this.gamesGalleryView.TabIndex = 102;
-            // 
-            // webViewPlaceholderPanel
-            // 
-            this.webViewPlaceholderPanel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.webViewPlaceholderPanel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(24)))), ((int)(((byte)(26)))), ((int)(((byte)(30)))));
-            this.webViewPlaceholderPanel.Location = new System.Drawing.Point(259, 496);
-            this.webViewPlaceholderPanel.Name = "webViewPlaceholderPanel";
-            this.webViewPlaceholderPanel.Size = new System.Drawing.Size(384, 217);
-            this.webViewPlaceholderPanel.TabIndex = 103;
-            this.webViewPlaceholderPanel.Paint += new System.Windows.Forms.PaintEventHandler(this.webViewPlaceholderPanel_Paint);
             // 
             // searchPanel
             // 
@@ -1471,34 +1522,57 @@ namespace AndroidSideloader
             this.btnNewerThanList.Transparency = false;
             this.btnNewerThanList.Click += new System.EventHandler(this.btnNewerThanList_Click);
             // 
-            // downloadInstallGameButton
+            // webView21
             // 
-            this.downloadInstallGameButton.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(110)))), ((int)(((byte)(215)))), ((int)(((byte)(190)))));
-            this.downloadInstallGameButton.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(110)))), ((int)(((byte)(215)))), ((int)(((byte)(190)))));
-            this.downloadInstallGameButton.BackColor = System.Drawing.Color.Transparent;
-            this.downloadInstallGameButton.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.downloadInstallGameButton.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.downloadInstallGameButton.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(16)))), ((int)(((byte)(18)))), ((int)(((byte)(22)))));
-            this.downloadInstallGameButton.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(16)))), ((int)(((byte)(18)))), ((int)(((byte)(22)))));
-            this.downloadInstallGameButton.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
-            this.downloadInstallGameButton.Enabled = false;
-            this.downloadInstallGameButton.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
-            this.downloadInstallGameButton.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(59)))), ((int)(((byte)(67)))), ((int)(((byte)(82)))));
-            this.downloadInstallGameButton.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
-            this.downloadInstallGameButton.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
-            this.downloadInstallGameButton.Location = new System.Drawing.Point(6, 177);
-            this.downloadInstallGameButton.Margin = new System.Windows.Forms.Padding(0);
-            this.downloadInstallGameButton.Name = "downloadInstallGameButton";
-            this.downloadInstallGameButton.Radius = 4;
-            this.downloadInstallGameButton.Size = new System.Drawing.Size(238, 30);
-            this.downloadInstallGameButton.Stroke = true;
-            this.downloadInstallGameButton.StrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
-            this.downloadInstallGameButton.TabIndex = 94;
-            this.downloadInstallGameButton.Text = "DOWNLOAD AND INSTALL";
-            this.downloadInstallGameButton.Transparency = false;
-            this.downloadInstallGameButton.Click += new System.EventHandler(this.downloadInstallGameButton_Click);
-            this.downloadInstallGameButton.DragDrop += new System.Windows.Forms.DragEventHandler(this.Form1_DragDrop);
-            this.downloadInstallGameButton.DragEnter += new System.Windows.Forms.DragEventHandler(this.Form1_DragEnter);
+            this.webView21.AllowExternalDrop = true;
+            this.webView21.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.webView21.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(24)))), ((int)(((byte)(26)))), ((int)(((byte)(30)))));
+            this.webView21.CreationProperties = null;
+            this.webView21.DefaultBackgroundColor = System.Drawing.Color.FromArgb(((int)(((byte)(24)))), ((int)(((byte)(26)))), ((int)(((byte)(30)))));
+            this.webView21.Location = new System.Drawing.Point(259, 496);
+            this.webView21.Name = "webView21";
+            this.webView21.Size = new System.Drawing.Size(384, 216);
+            this.webView21.TabIndex = 98;
+            this.webView21.ZoomFactor = 1D;
+            // 
+            // favoriteGame
+            // 
+            this.favoriteGame.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(42)))), ((int)(((byte)(48)))));
+            this.favoriteGame.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.favoriteButton});
+            this.favoriteGame.Name = "favoriteGame";
+            this.favoriteGame.ShowImageMargin = false;
+            this.favoriteGame.Size = new System.Drawing.Size(149, 26);
+            // 
+            // favoriteButton
+            // 
+            this.favoriteButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(42)))), ((int)(((byte)(48)))));
+            this.favoriteButton.ForeColor = System.Drawing.Color.White;
+            this.favoriteButton.Name = "favoriteButton";
+            this.favoriteButton.Size = new System.Drawing.Size(148, 22);
+            this.favoriteButton.Text = "★ Add to Favorites";
+            this.favoriteButton.Click += new System.EventHandler(this.favoriteButton_Click);
+            // 
+            // gamesGalleryView
+            // 
+            this.gamesGalleryView.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.gamesGalleryView.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(15)))), ((int)(((byte)(15)))), ((int)(((byte)(15)))));
+            this.gamesGalleryView.Location = new System.Drawing.Point(258, 44);
+            this.gamesGalleryView.Name = "gamesGalleryView";
+            this.gamesGalleryView.Size = new System.Drawing.Size(984, 409);
+            this.gamesGalleryView.TabIndex = 102;
+            // 
+            // webViewPlaceholderPanel
+            // 
+            this.webViewPlaceholderPanel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.webViewPlaceholderPanel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(24)))), ((int)(((byte)(26)))), ((int)(((byte)(30)))));
+            this.webViewPlaceholderPanel.Location = new System.Drawing.Point(259, 496);
+            this.webViewPlaceholderPanel.Name = "webViewPlaceholderPanel";
+            this.webViewPlaceholderPanel.Size = new System.Drawing.Size(384, 217);
+            this.webViewPlaceholderPanel.TabIndex = 103;
+            this.webViewPlaceholderPanel.Paint += new System.Windows.Forms.PaintEventHandler(this.webViewPlaceholderPanel_Paint);
             // 
             // MainForm
             // 
@@ -1548,13 +1622,15 @@ namespace AndroidSideloader
             this.questInfoPanel.ResumeLayout(false);
             this.leftNavContainer.ResumeLayout(false);
             this.leftNavContainer.PerformLayout();
+            this.statusInfoPanel.ResumeLayout(false);
+            this.statusInfoPanel.PerformLayout();
             this.sidebarMediaPanel.ResumeLayout(false);
             this.tableLayoutPanel1.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.webView21)).EndInit();
-            this.favoriteGame.ResumeLayout(false);
             this.searchPanel.ResumeLayout(false);
             this.searchPanel.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.searchIconPictureBox)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.webView21)).EndInit();
+            this.favoriteGame.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -1662,6 +1738,11 @@ namespace AndroidSideloader
         private RoundButton searchPanel;
         private Panel notesPanel;
         private Panel queuePanel;
-        private System.Windows.Forms.Panel webViewPlaceholderPanel;
+        private Panel webViewPlaceholderPanel;
+        private Panel statusInfoPanel;
+        private Label deviceIdLabel;
+        private Label activeMirrorLabel;
+        private Label sideloadingStatusLabel;
+        private Label rookieStatusLabel;
     }
 }
