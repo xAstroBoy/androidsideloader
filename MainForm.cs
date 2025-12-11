@@ -2878,6 +2878,9 @@ namespace AndroidSideloader
         {
             string about = $@"Version: {Updater.LocalVersion}
 
+This software is free.
+{Updater.GitHubUrl}
+
 Credits & Acknowledgements
 -----------------------------------------
 • Software originally developed by: rookie.wtf
