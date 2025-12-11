@@ -5532,6 +5532,15 @@ function onYouTubeIframeAPIReady() {
                         bShowStatus = false;
                     }
 
+                    string firmware = ADB.RunAdbCommandToString("shell getprop ro.build.branch").Output.Trim(); // releases-oculus-14.0-v78
+                    if (string.IsNullOrEmpty(firmware))
+                    {
+                        firmware = string.Empty;
+                    } else {
+                        firmware = Utilities.StringUtilities.RemoveEverythingBeforeFirst(firmware, "-v");
+                        firmware = Utilities.StringUtilities.KeepOnlyNumbers(firmware);
+                    }
+
                     // Get storage info
                     string storageOutput = ADB.RunAdbCommandToString("shell df /sdcard").Output;
                     string[] lines = storageOutput.Split('\n');
@@ -5574,7 +5583,12 @@ function onYouTubeIframeAPIReady() {
                     // Update UI on main thread
                     questInfoPanel.Invoke(() =>
                     {
-                        questInfoLabel.Text = deviceModel;
+                        string qinfo = deviceModel;
+                        if (!string.IsNullOrEmpty(firmware))
+                        {
+                            qinfo = $"{qinfo} (v{firmware})";
+                        }
+                        questInfoLabel.Text = qinfo;
                         diskLabel.Text = freeSpaceText;
                         SetQuestStorageProgress(storagePercentUsed);
                     });
