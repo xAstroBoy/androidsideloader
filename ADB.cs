@@ -322,7 +322,7 @@ namespace AndroidSideloader
                 }
             }
 
-            Program.form.changeTitle(string.Empty);
+            Program.form.changeTitle("");
             return ret;
         }
 

@@ -1,4 +1,5 @@
-﻿using AndroidSideloader.Utilities;
+﻿using AndroidSideloader.Properties;
+using AndroidSideloader.Utilities;
 using JR.Utils.GUI.Forms;
 using System;
 using System.Diagnostics;
@@ -91,6 +92,7 @@ namespace AndroidSideloader
             if (Program.form != null)
             {
                 Program.form.SetTrailerVisibility(toggleTrailers.Checked);
+                Program.form.UpdateSideloadingUI();
             }
 
             if (_settings.AutoUpdateConfig)

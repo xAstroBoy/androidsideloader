@@ -303,8 +303,8 @@ namespace JR.Utils.GUI.Forms
                 Controls.Add(titlePanel);
                 Controls.Add(button3);
                 Controls.Add(button2);
-                Controls.Add(panel1);
                 Controls.Add(button1);
+                Controls.Add(panel1);
                 MaximizeBox = false;
                 MinimizeBox = false;
                 MinimumSize = new System.Drawing.Size(276, 120);
