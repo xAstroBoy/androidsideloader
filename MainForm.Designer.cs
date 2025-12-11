@@ -34,7 +34,7 @@ namespace AndroidSideloader
         {
             this.components = new System.ComponentModel.Container();
             this.m_combo = new SergeUtils.EasyCompletionComboBox();
-            this.progressBar = new System.Windows.Forms.ProgressBar();
+            this.progressBar = new AndroidSideloader.ModernProgressBar();
             this.speedLabel = new System.Windows.Forms.Label();
             this.etaLabel = new System.Windows.Forms.Label();
             this.freeDisclaimer = new System.Windows.Forms.Label();
@@ -117,9 +117,9 @@ namespace AndroidSideloader
             this.leftNavContainer = new System.Windows.Forms.Panel();
             this.statusInfoPanel = new System.Windows.Forms.Panel();
             this.sideloadingStatusLabel = new System.Windows.Forms.Label();
-            this.rookieStatusLabel = new System.Windows.Forms.Label();
             this.activeMirrorLabel = new System.Windows.Forms.Label();
             this.deviceIdLabel = new System.Windows.Forms.Label();
+            this.rookieStatusLabel = new System.Windows.Forms.Label();
             this.sidebarMediaPanel = new System.Windows.Forms.Panel();
             this.downloadInstallGameButton = new AndroidSideloader.RoundButton();
             this.selectedGameLabel = new System.Windows.Forms.Label();
@@ -176,14 +176,26 @@ namespace AndroidSideloader
             // 
             this.progressBar.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.progressBar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
+            this.progressBar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.progressBar.BackgroundColor = System.Drawing.Color.FromArgb(((int)(((byte)(28)))), ((int)(((byte)(32)))), ((int)(((byte)(38)))));
+            this.progressBar.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
             this.progressBar.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.progressBar.IndeterminateColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.progressBar.IsIndeterminate = false;
             this.progressBar.Location = new System.Drawing.Point(1, 18);
+            this.progressBar.Maximum = 100;
+            this.progressBar.Minimum = 0;
             this.progressBar.MinimumSize = new System.Drawing.Size(200, 13);
             this.progressBar.Name = "progressBar";
+            this.progressBar.OperationType = "";
+            this.progressBar.ProgressEndColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(160)))), ((int)(((byte)(130)))));
+            this.progressBar.ProgressStartColor = System.Drawing.Color.FromArgb(((int)(((byte)(120)))), ((int)(((byte)(220)))), ((int)(((byte)(190)))));
+            this.progressBar.Radius = 6;
             this.progressBar.Size = new System.Drawing.Size(983, 13);
-            this.progressBar.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
+            this.progressBar.StatusText = "";
             this.progressBar.TabIndex = 7;
+            this.progressBar.TextColor = System.Drawing.Color.FromArgb(((int)(((byte)(230)))), ((int)(((byte)(230)))), ((int)(((byte)(230)))));
+            this.progressBar.Value = 0;
             // 
             // speedLabel
             // 
@@ -1200,7 +1212,6 @@ namespace AndroidSideloader
             this.statusInfoPanel.Controls.Add(this.activeMirrorLabel);
             this.statusInfoPanel.Controls.Add(this.deviceIdLabel);
             this.statusInfoPanel.Controls.Add(this.rookieStatusLabel);
-            this.statusInfoPanel.AutoSize = false;
             this.statusInfoPanel.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.statusInfoPanel.Location = new System.Drawing.Point(0, 1019);
             this.statusInfoPanel.Name = "statusInfoPanel";
@@ -1208,57 +1219,53 @@ namespace AndroidSideloader
             this.statusInfoPanel.Size = new System.Drawing.Size(233, 81);
             this.statusInfoPanel.TabIndex = 102;
             // 
-            // rookieStatusLabel
-            // 
-            this.rookieStatusLabel.AutoSize = false;
-            this.rookieStatusLabel.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
-            this.rookieStatusLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
-            this.rookieStatusLabel.Location = new System.Drawing.Point(8, 4);
-            this.rookieStatusLabel.Name = "rookieStatusLabel";
-            this.rookieStatusLabel.Padding = new System.Windows.Forms.Padding(0, 2, 0, 2);
-            this.rookieStatusLabel.Size = new System.Drawing.Size(225, 17);
-            this.rookieStatusLabel.AutoEllipsis = true;
-            this.rookieStatusLabel.TabIndex = 0;
-            this.rookieStatusLabel.Text = "Status";
-            // 
-            // deviceIdLabel
-            // 
-            this.deviceIdLabel.AutoSize = false;
-            this.deviceIdLabel.Font = new System.Drawing.Font("Segoe UI", 8F);
-            this.deviceIdLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(145)))), ((int)(((byte)(150)))));
-            this.deviceIdLabel.Location = new System.Drawing.Point(8, 21);
-            this.deviceIdLabel.Name = "deviceIdLabel";
-            this.deviceIdLabel.Padding = new System.Windows.Forms.Padding(0, 2, 0, 2);
-            this.deviceIdLabel.Size = new System.Drawing.Size(225, 17);
-            this.deviceIdLabel.AutoEllipsis = true;
-            this.deviceIdLabel.TabIndex = 1;
-            this.deviceIdLabel.Text = "Device: Not connected";
-            // 
-            // activeMirrorLabel
-            // 
-            this.activeMirrorLabel.AutoSize = false;
-            this.activeMirrorLabel.Font = new System.Drawing.Font("Segoe UI", 8F);
-            this.activeMirrorLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(145)))), ((int)(((byte)(150)))));
-            this.activeMirrorLabel.Location = new System.Drawing.Point(8, 38);
-            this.activeMirrorLabel.Name = "activeMirrorLabel";
-            this.activeMirrorLabel.Padding = new System.Windows.Forms.Padding(0, 2, 0, 2);
-            this.activeMirrorLabel.Size = new System.Drawing.Size(225, 17);
-            this.activeMirrorLabel.AutoEllipsis = true;
-            this.activeMirrorLabel.TabIndex = 2;
-            this.activeMirrorLabel.Text = "Mirror: None";
-            // 
             // sideloadingStatusLabel
             // 
-            this.sideloadingStatusLabel.AutoSize = false;
+            this.sideloadingStatusLabel.AutoEllipsis = true;
             this.sideloadingStatusLabel.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
             this.sideloadingStatusLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
             this.sideloadingStatusLabel.Location = new System.Drawing.Point(8, 55);
             this.sideloadingStatusLabel.Name = "sideloadingStatusLabel";
             this.sideloadingStatusLabel.Padding = new System.Windows.Forms.Padding(0, 2, 0, 2);
             this.sideloadingStatusLabel.Size = new System.Drawing.Size(225, 17);
-            this.sideloadingStatusLabel.AutoEllipsis = true;
             this.sideloadingStatusLabel.TabIndex = 3;
             this.sideloadingStatusLabel.Text = "Sideloading: Enabled";
+            // 
+            // activeMirrorLabel
+            // 
+            this.activeMirrorLabel.AutoEllipsis = true;
+            this.activeMirrorLabel.Font = new System.Drawing.Font("Segoe UI", 8F);
+            this.activeMirrorLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(145)))), ((int)(((byte)(150)))));
+            this.activeMirrorLabel.Location = new System.Drawing.Point(8, 38);
+            this.activeMirrorLabel.Name = "activeMirrorLabel";
+            this.activeMirrorLabel.Padding = new System.Windows.Forms.Padding(0, 2, 0, 2);
+            this.activeMirrorLabel.Size = new System.Drawing.Size(225, 17);
+            this.activeMirrorLabel.TabIndex = 2;
+            this.activeMirrorLabel.Text = "Mirror: None";
+            // 
+            // deviceIdLabel
+            // 
+            this.deviceIdLabel.AutoEllipsis = true;
+            this.deviceIdLabel.Font = new System.Drawing.Font("Segoe UI", 8F);
+            this.deviceIdLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(145)))), ((int)(((byte)(150)))));
+            this.deviceIdLabel.Location = new System.Drawing.Point(8, 21);
+            this.deviceIdLabel.Name = "deviceIdLabel";
+            this.deviceIdLabel.Padding = new System.Windows.Forms.Padding(0, 2, 0, 2);
+            this.deviceIdLabel.Size = new System.Drawing.Size(225, 17);
+            this.deviceIdLabel.TabIndex = 1;
+            this.deviceIdLabel.Text = "Device: Not connected";
+            // 
+            // rookieStatusLabel
+            // 
+            this.rookieStatusLabel.AutoEllipsis = true;
+            this.rookieStatusLabel.Font = new System.Drawing.Font("Segoe UI", 8F, System.Drawing.FontStyle.Bold);
+            this.rookieStatusLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.rookieStatusLabel.Location = new System.Drawing.Point(8, 4);
+            this.rookieStatusLabel.Name = "rookieStatusLabel";
+            this.rookieStatusLabel.Padding = new System.Windows.Forms.Padding(0, 2, 0, 2);
+            this.rookieStatusLabel.Size = new System.Drawing.Size(225, 17);
+            this.rookieStatusLabel.TabIndex = 0;
+            this.rookieStatusLabel.Text = "Status";
             // 
             // sidebarMediaPanel
             // 
@@ -1600,7 +1607,6 @@ namespace AndroidSideloader
             this.HelpButton = true;
             this.MinimumSize = new System.Drawing.Size(1048, 760);
             this.Name = "MainForm";
-            this.ShowIcon = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Rookie Sideloader";
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Form1_FormClosing);
@@ -1623,7 +1629,6 @@ namespace AndroidSideloader
             this.leftNavContainer.ResumeLayout(false);
             this.leftNavContainer.PerformLayout();
             this.statusInfoPanel.ResumeLayout(false);
-            this.statusInfoPanel.PerformLayout();
             this.sidebarMediaPanel.ResumeLayout(false);
             this.tableLayoutPanel1.ResumeLayout(false);
             this.searchPanel.ResumeLayout(false);
@@ -1638,7 +1643,7 @@ namespace AndroidSideloader
 
         #endregion
         private SergeUtils.EasyCompletionComboBox m_combo;
-        private System.Windows.Forms.ProgressBar progressBar;
+        private ModernProgressBar progressBar;
         private System.Windows.Forms.Label etaLabel;
         private System.Windows.Forms.Label speedLabel;
         private System.Windows.Forms.Label freeDisclaimer;
