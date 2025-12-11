@@ -305,7 +305,9 @@ namespace AndroidSideloader
 
                 File.WriteAllText(blacklistPath, Newtonsoft.Json.JsonConvert.SerializeObject(existingBlacklist.ToArray(), Newtonsoft.Json.Formatting.Indented));
                 Logger.Log($"Added {appsToBlacklist.Count} apps to local blacklist");
-                MessageBox.Show($"{appsToBlacklist.Count} app(s) added to blacklist.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show($"{appsToBlacklist.Count} {(appsToBlacklist.Count == 1 ? "app" : "apps")} added to blacklist.", 
+                    "Success", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
                 Close();
             }
             catch (Exception ex)
