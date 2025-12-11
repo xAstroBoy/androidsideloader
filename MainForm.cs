@@ -807,7 +807,7 @@ namespace AndroidSideloader
                 this.Invoke(() => { 
                     Text = "Rookie Sideloader " + Updater.LocalVersion; 
                     rookieStatusLabel.Text = "";
-                   });
+                });
             }
             catch
             {
@@ -5409,19 +5409,28 @@ function onYouTubeIframeAPIReady() {
 
             if (currentStatus)
             {
-                // No Device Mode is currently On. Toggle it Off
                 settings.NodeviceMode = false;
                 btnNoDevice.Text = "DISABLE SIDELOADING";
+                UpdateStatusLabels();
+
+                // No Device Mode is currently On. Toggle it Off (enable sideloading)
+                // Ask user about delete after install preference
+                DialogResult deleteResult = FlexibleMessageBox.Show(Program.form,
+                    "Delete game files after install?",
+                    "Sideloading enabled",
+                    MessageBoxButtons.YesNo);
+
+                settings.DeleteAllAfterInstall = (deleteResult == DialogResult.Yes);
             }
             else
             {
                 settings.NodeviceMode = true;
                 settings.DeleteAllAfterInstall = false;
                 btnNoDevice.Text = "ENABLE SIDELOADING";
+                UpdateStatusLabels();
             }
 
             settings.Save();
-            UpdateStatusLabels();
         }
 
         private ListViewItem _rightClickedItem;
