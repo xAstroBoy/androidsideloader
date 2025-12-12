@@ -105,6 +105,9 @@ namespace AndroidSideloader
             rclone.StartInfo.RedirectStandardOutput = true;
             rclone.StartInfo.WorkingDirectory = Path.Combine(Environment.CurrentDirectory, "rclone");
             rclone.StartInfo.CreateNoWindow = true;
+
+            setRcloneProxy();
+
             // Display RCLONE Window if the binary is being run in Debug Mode.
             if (MainForm.debugMode)
             {
@@ -204,6 +207,9 @@ namespace AndroidSideloader
             rclone.StartInfo.RedirectStandardOutput = true;
             rclone.StartInfo.WorkingDirectory = Path.Combine(Environment.CurrentDirectory, "rclone");
             rclone.StartInfo.CreateNoWindow = true;
+
+            setRcloneProxy();
+
             // Display RCLONE Window if the binary is being run in Debug Mode.
             if (MainForm.debugMode)
             {
@@ -281,6 +287,9 @@ namespace AndroidSideloader
             rclone.StartInfo.RedirectStandardOutput = true;
             rclone.StartInfo.WorkingDirectory = Path.Combine(Environment.CurrentDirectory, "rclone");
             rclone.StartInfo.CreateNoWindow = true;
+
+            setRcloneProxy();
+
             // Display RCLONE Window if the binary is being run in Debug Mode.
             if (MainForm.debugMode)
             {
@@ -344,6 +353,31 @@ namespace AndroidSideloader
             }
 
             return prcoutput;
+        }
+
+        private static void setRcloneProxy()
+        {
+            if (settings.useProxy)
+            {
+                if (!rclone.StartInfo.EnvironmentVariables.ContainsKey("HTTP_PROXY")) {
+                    rclone.StartInfo.EnvironmentVariables.Add("HTTP_PROXY", $"http://{settings.ProxyAddress}:{settings.ProxyPort}");
+                }
+                if (!rclone.StartInfo.EnvironmentVariables.ContainsKey("HTTPS_PROXY"))
+                {
+                    rclone.StartInfo.EnvironmentVariables.Add("HTTPS_PROXY", $"http://{settings.ProxyAddress}:{settings.ProxyPort}");
+                }
+            }
+            else
+            {
+                if (rclone.StartInfo.EnvironmentVariables.ContainsKey("HTTP_PROXY"))
+                {
+                    rclone.StartInfo.EnvironmentVariables.Remove("HTTP_PROXY");
+                }
+                if (rclone.StartInfo.EnvironmentVariables.ContainsKey("HTTPS_PROXY"))
+                {
+                    rclone.StartInfo.EnvironmentVariables.Remove("HTTPS_PROXY");
+                }
+            }
         }
     }
 }

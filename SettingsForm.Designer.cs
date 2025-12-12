@@ -77,6 +77,12 @@
             this.btnUploadDebug = new AndroidSideloader.RoundButton();
             this.applyButton = new AndroidSideloader.RoundButton();
             this.resetSettingsButton = new AndroidSideloader.RoundButton();
+            this.toggleProxy = new AndroidSideloader.ToggleSwitch();
+            this.lblProxy = new System.Windows.Forms.Label();
+            this.lblProxyAddress = new System.Windows.Forms.Label();
+            this.proxyAddressTextBox = new System.Windows.Forms.TextBox();
+            this.lblProxyPort = new System.Windows.Forms.Label();
+            this.proxyPortTextBox = new System.Windows.Forms.TextBox();
             this.SuspendLayout();
             // 
             // downloadDirectorySetter
@@ -134,7 +140,7 @@
             this.lblDirectoriesSection.AutoSize = true;
             this.lblDirectoriesSection.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold);
             this.lblDirectoriesSection.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
-            this.lblDirectoriesSection.Location = new System.Drawing.Point(20, 370);
+            this.lblDirectoriesSection.Location = new System.Drawing.Point(20, 457);
             this.lblDirectoriesSection.Name = "lblDirectoriesSection";
             this.lblDirectoriesSection.Size = new System.Drawing.Size(85, 20);
             this.lblDirectoriesSection.TabIndex = 33;
@@ -145,7 +151,7 @@
             this.lblDebugSection.AutoSize = true;
             this.lblDebugSection.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold);
             this.lblDebugSection.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
-            this.lblDebugSection.Location = new System.Drawing.Point(20, 445);
+            this.lblDebugSection.Location = new System.Drawing.Point(20, 532);
             this.lblDebugSection.Name = "lblDebugSection";
             this.lblDebugSection.Size = new System.Drawing.Size(55, 20);
             this.lblDebugSection.TabIndex = 35;
@@ -224,7 +230,7 @@
             this.lblAutoReinstall.ForeColor = System.Drawing.Color.White;
             this.lblAutoReinstall.Location = new System.Drawing.Point(348, 184);
             this.lblAutoReinstall.Name = "lblAutoReinstall";
-            this.lblAutoReinstall.Size = new System.Drawing.Size(137, 15);
+            this.lblAutoReinstall.Size = new System.Drawing.Size(171, 15);
             this.lblAutoReinstall.TabIndex = 18;
             this.lblAutoReinstall.Text = "Auto-Reinstall on Install Failure";
             // 
@@ -235,7 +241,7 @@
             this.lblMessageBoxes.ForeColor = System.Drawing.Color.White;
             this.lblMessageBoxes.Location = new System.Drawing.Point(70, 79);
             this.lblMessageBoxes.Name = "lblMessageBoxes";
-            this.lblMessageBoxes.Size = new System.Drawing.Size(190, 15);
+            this.lblMessageBoxes.Size = new System.Drawing.Size(201, 15);
             this.lblMessageBoxes.TabIndex = 6;
             this.lblMessageBoxes.Text = "Show Message Boxes on Completion";
             // 
@@ -337,7 +343,7 @@
             // separator3
             // 
             this.separator3.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
-            this.separator3.Location = new System.Drawing.Point(20, 358);
+            this.separator3.Location = new System.Drawing.Point(20, 445);
             this.separator3.Name = "separator3";
             this.separator3.Size = new System.Drawing.Size(510, 1);
             this.separator3.TabIndex = 32;
@@ -345,7 +351,7 @@
             // separator4
             // 
             this.separator4.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
-            this.separator4.Location = new System.Drawing.Point(20, 433);
+            this.separator4.Location = new System.Drawing.Point(20, 520);
             this.separator4.Name = "separator4";
             this.separator4.Size = new System.Drawing.Size(510, 1);
             this.separator4.TabIndex = 34;
@@ -521,7 +527,7 @@
             this.setDownloadDirectory.ForeColor = System.Drawing.Color.White;
             this.setDownloadDirectory.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
             this.setDownloadDirectory.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
-            this.setDownloadDirectory.Location = new System.Drawing.Point(24, 398);
+            this.setDownloadDirectory.Location = new System.Drawing.Point(24, 485);
             this.setDownloadDirectory.Name = "setDownloadDirectory";
             this.setDownloadDirectory.Radius = 5;
             this.setDownloadDirectory.Size = new System.Drawing.Size(125, 28);
@@ -546,7 +552,7 @@
             this.openDownloadDirectory.ForeColor = System.Drawing.Color.White;
             this.openDownloadDirectory.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
             this.openDownloadDirectory.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
-            this.openDownloadDirectory.Location = new System.Drawing.Point(153, 398);
+            this.openDownloadDirectory.Location = new System.Drawing.Point(153, 485);
             this.openDownloadDirectory.Name = "openDownloadDirectory";
             this.openDownloadDirectory.Radius = 5;
             this.openDownloadDirectory.Size = new System.Drawing.Size(125, 28);
@@ -571,7 +577,7 @@
             this.setBackupDirectory.ForeColor = System.Drawing.Color.White;
             this.setBackupDirectory.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
             this.setBackupDirectory.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
-            this.setBackupDirectory.Location = new System.Drawing.Point(282, 398);
+            this.setBackupDirectory.Location = new System.Drawing.Point(282, 485);
             this.setBackupDirectory.Name = "setBackupDirectory";
             this.setBackupDirectory.Radius = 5;
             this.setBackupDirectory.Size = new System.Drawing.Size(120, 28);
@@ -596,7 +602,7 @@
             this.openBackupDirectory.ForeColor = System.Drawing.Color.White;
             this.openBackupDirectory.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
             this.openBackupDirectory.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
-            this.openBackupDirectory.Location = new System.Drawing.Point(406, 398);
+            this.openBackupDirectory.Location = new System.Drawing.Point(406, 485);
             this.openBackupDirectory.Name = "openBackupDirectory";
             this.openBackupDirectory.Radius = 5;
             this.openBackupDirectory.Size = new System.Drawing.Size(120, 28);
@@ -621,7 +627,7 @@
             this.btnOpenDebug.ForeColor = System.Drawing.Color.White;
             this.btnOpenDebug.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
             this.btnOpenDebug.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
-            this.btnOpenDebug.Location = new System.Drawing.Point(24, 473);
+            this.btnOpenDebug.Location = new System.Drawing.Point(24, 560);
             this.btnOpenDebug.Name = "btnOpenDebug";
             this.btnOpenDebug.Radius = 5;
             this.btnOpenDebug.Size = new System.Drawing.Size(90, 28);
@@ -646,7 +652,7 @@
             this.btnResetDebug.ForeColor = System.Drawing.Color.White;
             this.btnResetDebug.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
             this.btnResetDebug.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
-            this.btnResetDebug.Location = new System.Drawing.Point(120, 473);
+            this.btnResetDebug.Location = new System.Drawing.Point(120, 560);
             this.btnResetDebug.Name = "btnResetDebug";
             this.btnResetDebug.Radius = 5;
             this.btnResetDebug.Size = new System.Drawing.Size(90, 28);
@@ -671,7 +677,7 @@
             this.btnUploadDebug.ForeColor = System.Drawing.Color.White;
             this.btnUploadDebug.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
             this.btnUploadDebug.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
-            this.btnUploadDebug.Location = new System.Drawing.Point(216, 473);
+            this.btnUploadDebug.Location = new System.Drawing.Point(216, 560);
             this.btnUploadDebug.Name = "btnUploadDebug";
             this.btnUploadDebug.Radius = 5;
             this.btnUploadDebug.Size = new System.Drawing.Size(90, 28);
@@ -696,7 +702,7 @@
             this.applyButton.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(24)))), ((int)(((byte)(29)))));
             this.applyButton.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
             this.applyButton.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
-            this.applyButton.Location = new System.Drawing.Point(24, 520);
+            this.applyButton.Location = new System.Drawing.Point(24, 607);
             this.applyButton.Name = "applyButton";
             this.applyButton.Radius = 5;
             this.applyButton.Size = new System.Drawing.Size(245, 36);
@@ -721,7 +727,7 @@
             this.resetSettingsButton.ForeColor = System.Drawing.Color.White;
             this.resetSettingsButton.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
             this.resetSettingsButton.Inactive2 = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
-            this.resetSettingsButton.Location = new System.Drawing.Point(281, 520);
+            this.resetSettingsButton.Location = new System.Drawing.Point(281, 607);
             this.resetSettingsButton.Name = "resetSettingsButton";
             this.resetSettingsButton.Radius = 5;
             this.resetSettingsButton.Size = new System.Drawing.Size(245, 36);
@@ -732,12 +738,86 @@
             this.resetSettingsButton.Transparency = false;
             this.resetSettingsButton.Click += new System.EventHandler(this.resetSettingsButton_Click);
             // 
+            // toggleProxy
+            // 
+            this.toggleProxy.BackColor = System.Drawing.Color.Transparent;
+            this.toggleProxy.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.toggleProxy.Location = new System.Drawing.Point(28, 353);
+            this.toggleProxy.Name = "toggleProxy";
+            this.toggleProxy.OffColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(65)))), ((int)(((byte)(75)))));
+            this.toggleProxy.OnColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
+            this.toggleProxy.Size = new System.Drawing.Size(36, 18);
+            this.toggleProxy.TabIndex = 37;
+            this.toggleProxy.ThumbColor = System.Drawing.Color.White;
+            this.toggleProxy.CheckedChanged += new System.EventHandler(this.toggleProxy_CheckedChanged);
+            // 
+            // lblProxy
+            // 
+            this.lblProxy.AutoSize = true;
+            this.lblProxy.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.lblProxy.ForeColor = System.Drawing.Color.White;
+            this.lblProxy.Location = new System.Drawing.Point(70, 354);
+            this.lblProxy.Name = "lblProxy";
+            this.lblProxy.Size = new System.Drawing.Size(148, 15);
+            this.lblProxy.TabIndex = 38;
+            this.lblProxy.Text = "Use HTTP Proxy for Rclone";
+            // 
+            // lblProxyAddress
+            // 
+            this.lblProxyAddress.AutoSize = true;
+            this.lblProxyAddress.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.lblProxyAddress.ForeColor = System.Drawing.Color.White;
+            this.lblProxyAddress.Location = new System.Drawing.Point(25, 386);
+            this.lblProxyAddress.Name = "lblProxyAddress";
+            this.lblProxyAddress.Size = new System.Drawing.Size(84, 15);
+            this.lblProxyAddress.TabIndex = 39;
+            this.lblProxyAddress.Text = "Proxy Address:";
+            // 
+            // proxyAddressTextBox
+            // 
+            this.proxyAddressTextBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.proxyAddressTextBox.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.proxyAddressTextBox.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.proxyAddressTextBox.ForeColor = System.Drawing.Color.White;
+            this.proxyAddressTextBox.Location = new System.Drawing.Point(115, 384);
+            this.proxyAddressTextBox.Name = "proxyAddressTextBox";
+            this.proxyAddressTextBox.Size = new System.Drawing.Size(95, 23);
+            this.proxyAddressTextBox.TabIndex = 40;
+            // 
+            // lblProxyPort
+            // 
+            this.lblProxyPort.AutoSize = true;
+            this.lblProxyPort.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.lblProxyPort.ForeColor = System.Drawing.Color.White;
+            this.lblProxyPort.Location = new System.Drawing.Point(25, 415);
+            this.lblProxyPort.Name = "lblProxyPort";
+            this.lblProxyPort.Size = new System.Drawing.Size(64, 15);
+            this.lblProxyPort.TabIndex = 41;
+            this.lblProxyPort.Text = "Proxy Port:";
+            // 
+            // proxyPortTextBox
+            // 
+            this.proxyPortTextBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(44)))), ((int)(((byte)(52)))));
+            this.proxyPortTextBox.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.proxyPortTextBox.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.proxyPortTextBox.ForeColor = System.Drawing.Color.White;
+            this.proxyPortTextBox.Location = new System.Drawing.Point(115, 413);
+            this.proxyPortTextBox.Name = "proxyPortTextBox";
+            this.proxyPortTextBox.Size = new System.Drawing.Size(49, 23);
+            this.proxyPortTextBox.TabIndex = 42;
+            // 
             // SettingsForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(24)))), ((int)(((byte)(29)))));
-            this.ClientSize = new System.Drawing.Size(550, 575);
+            this.ClientSize = new System.Drawing.Size(550, 661);
+            this.Controls.Add(this.lblProxyPort);
+            this.Controls.Add(this.proxyPortTextBox);
+            this.Controls.Add(this.lblProxyAddress);
+            this.Controls.Add(this.proxyAddressTextBox);
+            this.Controls.Add(this.toggleProxy);
+            this.Controls.Add(this.lblProxy);
             this.Controls.Add(this.lblGeneralSection);
             this.Controls.Add(this.toggleCheckForUpdates);
             this.Controls.Add(this.lblCheckForUpdates);
@@ -866,5 +946,11 @@
         private System.Windows.Forms.Panel separator2;
         private System.Windows.Forms.Panel separator3;
         private System.Windows.Forms.Panel separator4;
+        private ToggleSwitch toggleProxy;
+        private System.Windows.Forms.Label lblProxy;
+        private System.Windows.Forms.Label lblProxyAddress;
+        private System.Windows.Forms.TextBox proxyAddressTextBox;
+        private System.Windows.Forms.Label lblProxyPort;
+        private System.Windows.Forms.TextBox proxyPortTextBox;
     }
 }

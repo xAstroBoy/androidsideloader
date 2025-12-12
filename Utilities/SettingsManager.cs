@@ -132,6 +132,9 @@ namespace AndroidSideloader.Utilities
         public bool UseDownloadedFiles { get; set; } = false;
         public float BandwidthLimit { get; set; } = 0f;
         public string[] FavoritedGames { get; set; } = new string[0];
+        public bool useProxy { get; set; } = false;
+        public string ProxyAddress { get; set; } = string.Empty;
+        public string ProxyPort { get; set; } = string.Empty;
         public bool TrailersEnabled { get; set; } = true;
         public bool UseGalleryView { get; set; } = true;
         private SettingsManager()
@@ -253,6 +256,9 @@ namespace AndroidSideloader.Utilities
             UseDownloadedFiles = false;
             BandwidthLimit = 0f;
             FavoritedGames = new string[0];
+            useProxy = false;
+            ProxyAddress = string.Empty;
+            ProxyPort = string.Empty;
             TrailersEnabled = true;
             UseGalleryView = true;
 

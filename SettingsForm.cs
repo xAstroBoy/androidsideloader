@@ -4,6 +4,7 @@ using JR.Utils.GUI.Forms;
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
@@ -49,6 +50,10 @@ namespace AndroidSideloader
                 toggleDeleteAfterInstall.Enabled = false;
                 lblDeleteAfterInstall.ForeColor = System.Drawing.Color.FromArgb(100, 100, 100);
             }
+
+            toggleProxy.Checked = _settings.useProxy;
+            proxyAddressTextBox.Text = _settings.ProxyAddress;
+            proxyPortTextBox.Text = _settings.ProxyPort;
         }
 
         private void initToolTips()
@@ -88,6 +93,7 @@ namespace AndroidSideloader
             _settings.VirtualFilesystemCompatibility = toggleVirtualFilesystem.Checked;
             _settings.UseDownloadedFiles = toggleUseDownloadedFiles.Checked;
             _settings.TrailersEnabled = toggleTrailers.Checked;
+            _settings.useProxy = toggleProxy.Checked;
 
             if (Program.form != null)
             {
@@ -133,13 +139,52 @@ namespace AndroidSideloader
 
         private void applyButton_Click(object sender, EventArgs e)
         {
-            string input = bandwidthLimitTextBox.Text;
+            //parsing bandwidth value
+            var bandwidthInput = bandwidthLimitTextBox.Text;
             Regex regex = new Regex(@"^\d+(\.\d+)?$");
 
-            if (!regex.IsMatch(input) || !float.TryParse(input, out _))
+            if (regex.IsMatch(bandwidthInput) && float.TryParse(bandwidthInput, out float bandwidthLimit))
+            {
+                _settings.BandwidthLimit = bandwidthLimit;
+            }
+            else
             {
                 MessageBox.Show("Please enter a valid number for the bandwidth limit.");
                 return;
+            }
+
+            //parsing proxy address
+            var proxyAddressInput = proxyAddressTextBox.Text;
+
+            if (proxyAddressInput.StartsWith("http://"))
+            {
+                proxyAddressInput = proxyAddressInput.Substring("http://".Length);
+            }
+            else if (proxyAddressInput.StartsWith("https://"))
+            {
+                proxyAddressInput = proxyAddressInput.Substring("https://".Length);
+            }
+
+            if (proxyAddressInput.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+                IPAddress.TryParse(proxyAddressInput, out _))
+            {
+                _settings.ProxyAddress = proxyAddressInput;
+            }
+            else
+            {
+                MessageBox.Show("Please enter a valid address for the proxy.");
+            }
+
+            //parsing proxy port
+            var proxyPortInput = proxyPortTextBox.Text;
+
+            if (ushort.TryParse(proxyPortInput, out _))
+            {
+                _settings.ProxyPort = proxyPortInput;
+            }
+            else
+            {
+                MessageBox.Show("Please enter a valid port for the proxy.");
             }
 
             SaveAllSettings();
@@ -327,6 +372,11 @@ namespace AndroidSideloader
             {
                 e.Handled = true;
             }
+        }
+
+        private void toggleProxy_CheckedChanged(object sender, EventArgs e)
+        {
+            // Settings saved on form close
         }
     }
 }
