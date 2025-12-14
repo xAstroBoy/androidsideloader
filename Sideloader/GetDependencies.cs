@@ -103,7 +103,7 @@ namespace AndroidSideloader
             }
             catch (Exception ex)
             {
-                _ = FlexibleMessageBox.Show($"You are unable to access raw.githubusercontent.com with the Exception:\n{ex.Message}\n\nSome files may be missing (Offline/Cleanup Script, Launcher)");
+                _ = FlexibleMessageBox.Show(Program.form, $"You are unable to access raw.githubusercontent.com with the Exception:\n{ex.Message}\n\nSome files may be missing (Offline/Cleanup Script, Launcher)");
             }
 
             string adbPath = Path.Combine(Environment.CurrentDirectory, "platform-tools", "adb.exe");
@@ -128,8 +128,8 @@ namespace AndroidSideloader
             }
             catch (Exception ex)
             {
-                _ = FlexibleMessageBox.Show($"You are unable to access raw.githubusercontent.com page with the Exception:\n{ex.Message}\n\nSome files may be missing (ADB)");
-                _ = FlexibleMessageBox.Show("ADB was unable to be downloaded\nRookie will now close.");
+                _ = FlexibleMessageBox.Show(Program.form, $"You are unable to access raw.githubusercontent.com page with the Exception:\n{ex.Message}\n\nSome files may be missing (ADB)");
+                _ = FlexibleMessageBox.Show(Program.form, "ADB was unable to be downloaded\nRookie will now close.");
                 Application.Exit();
             }
 
@@ -142,7 +142,7 @@ namespace AndroidSideloader
             }
             if (!rcloneSuccess) {
                 _ = Logger.Log($"Unable to download rclone", LogLevel.ERROR);
-                _ = FlexibleMessageBox.Show("Rclone was unable to be downloaded\nRookie will now close, please use Offline Mode for manual sideloading if needed");
+                _ = FlexibleMessageBox.Show(Program.form, "Rclone was unable to be downloaded\nRookie will now close, please use Offline Mode for manual sideloading if needed");
                 Application.Exit();
             }
         }
