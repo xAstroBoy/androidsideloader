@@ -1,4 +1,5 @@
-﻿using JR.Utils.GUI.Forms;
+﻿using AndroidSideloader.Utilities;
+using JR.Utils.GUI.Forms;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -30,7 +31,7 @@ namespace AndroidSideloader
                 string resultString;
 
                 // Try fetching raw JSON data from the provided link
-                HttpWebRequest getUrl = (HttpWebRequest)WebRequest.Create(configUrl);
+                HttpWebRequest getUrl = DnsHelper.CreateWebRequest(configUrl);
                 using (StreamReader responseReader = new StreamReader(getUrl.GetResponse().GetResponseStream()))
                 {
                     resultString = responseReader.ReadToEnd();
@@ -44,7 +45,7 @@ namespace AndroidSideloader
                 _ = Logger.Log($"Failed to update public config from main: {mainException.Message}, trying fallback.", LogLevel.ERROR);
                 try
                 {
-                    HttpWebRequest getUrl = (HttpWebRequest)WebRequest.Create(fallbackUrl);
+                    HttpWebRequest getUrl = DnsHelper.CreateWebRequest(fallbackUrl);
                     using (StreamReader responseReader = new StreamReader(getUrl.GetResponse().GetResponseStream()))
                     {
                         string resultString = responseReader.ReadToEnd();
@@ -63,6 +64,9 @@ namespace AndroidSideloader
         // Download required dependencies.
         public static void downloadFiles()
         {
+            // Initialize DNS helper early to detect and configure fallback if needed
+            DnsHelper.Initialize();
+
             WebClient client = new WebClient();
             ServicePointManager.Expect100Continue = true;
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
@@ -73,7 +77,7 @@ namespace AndroidSideloader
                 {
                     currentAccessedWebsite = "github";
                     _ = Logger.Log($"Missing 'Sideloader Launcher.exe'. Attempting to download from {currentAccessedWebsite}");
-                    client.DownloadFile("https://github.com/VRPirates/rookie/raw/master/Sideloader%20Launcher.exe", "Sideloader Launcher.exe");
+                    DownloadFileWithDnsFallback(client, "https://github.com/VRPirates/rookie/raw/master/Sideloader%20Launcher.exe", "Sideloader Launcher.exe");
                     _ = Logger.Log($"'Sideloader Launcher.exe' download successful");
                 }
 
@@ -81,7 +85,7 @@ namespace AndroidSideloader
                 {
                     currentAccessedWebsite = "github";
                     _ = Logger.Log($"Missing 'Rookie Offline.cmd'. Attempting to download from {currentAccessedWebsite}");
-                    client.DownloadFile("https://github.com/VRPirates/rookie/raw/master/Rookie%20Offline.cmd", "Rookie Offline.cmd");
+                    DownloadFileWithDnsFallback(client, "https://github.com/VRPirates/rookie/raw/master/Rookie%20Offline.cmd", "Rookie Offline.cmd");
                     _ = Logger.Log($"'Rookie Offline.cmd' download successful");
                 }
 
@@ -89,7 +93,7 @@ namespace AndroidSideloader
                 {
                     currentAccessedWebsite = "github";
                     _ = Logger.Log($"Missing 'CleanupInstall.cmd'. Attempting to download from {currentAccessedWebsite}");
-                    client.DownloadFile("https://github.com/VRPirates/rookie/raw/master/CleanupInstall.cmd", "CleanupInstall.cmd");
+                    DownloadFileWithDnsFallback(client, "https://github.com/VRPirates/rookie/raw/master/CleanupInstall.cmd", "CleanupInstall.cmd");
                     _ = Logger.Log($"'CleanupInstall.cmd' download successful");
                 }
 
@@ -97,7 +101,7 @@ namespace AndroidSideloader
                 {
                     currentAccessedWebsite = "github";
                     _ = Logger.Log($"Missing 'AddDefenderExceptions.ps1'. Attempting to download from {currentAccessedWebsite}");
-                    client.DownloadFile("https://github.com/VRPirates/rookie/raw/master/AddDefenderExceptions.ps1", "AddDefenderExceptions.ps1");
+                    DownloadFileWithDnsFallback(client, "https://github.com/VRPirates/rookie/raw/master/AddDefenderExceptions.ps1", "AddDefenderExceptions.ps1");
                     _ = Logger.Log($"'AddDefenderExceptions.ps1' download successful");
                 }
             }
@@ -120,7 +124,7 @@ namespace AndroidSideloader
 
                     currentAccessedWebsite = "github";
                     _ = Logger.Log($"Missing adb within {platformToolsDir}. Attempting to download from {currentAccessedWebsite}");
-                    client.DownloadFile("https://github.com/VRPirates/rookie/raw/master/dependencies.7z", "dependencies.7z");
+                    DownloadFileWithDnsFallback(client, "https://github.com/VRPirates/rookie/raw/master/dependencies.7z", "dependencies.7z");
                     Utilities.Zip.ExtractFile(Path.Combine(Environment.CurrentDirectory, "dependencies.7z"), platformToolsDir);
                     File.Delete("dependencies.7z");
                     _ = Logger.Log($"adb download successful");
@@ -137,16 +141,43 @@ namespace AndroidSideloader
             bool rcloneSuccess = false;
 
             rcloneSuccess = downloadRclone(wantedRcloneVersion, false);
-            if (!rcloneSuccess) {
+            if (!rcloneSuccess)
+            {
                 rcloneSuccess = downloadRclone(wantedRcloneVersion, true);
             }
-            if (!rcloneSuccess) {
+            if (!rcloneSuccess)
+            {
                 _ = Logger.Log($"Unable to download rclone", LogLevel.ERROR);
                 _ = FlexibleMessageBox.Show(Program.form, "Rclone was unable to be downloaded\nRookie will now close, please use Offline Mode for manual sideloading if needed");
                 Application.Exit();
             }
         }
 
+        // Downloads a file with DNS fallback support
+        private static void DownloadFileWithDnsFallback(WebClient client, string url, string localPath)
+        {
+            try
+            {
+                client.DownloadFile(url, localPath);
+            }
+            catch when (DnsHelper.UseFallbackDns)
+            {
+                // Try with fallback DNS
+                var uri = new Uri(url);
+                var ip = DnsHelper.ResolveHostname(uri.Host);
+                if (ip != null)
+                {
+                    var builder = new UriBuilder(uri) { Host = ip.ToString() };
+                    client.Headers["Host"] = uri.Host;
+                    client.DownloadFile(builder.Uri, localPath);
+                    client.Headers.Remove("Host");
+                }
+                else
+                {
+                    throw;
+                }
+            }
+        }
 
         public static bool downloadRclone(string wantedRcloneVersion, bool useFallback = false)
         {
@@ -175,12 +206,15 @@ namespace AndroidSideloader
                             _ = Logger.Log($"RCLONE Version does not match ({currentRcloneVersion})! Downloading required version ({wantedRcloneVersion})");
                         }
                     }
-                } else {
+                }
+                else
+                {
                     updateRclone = true;
                     _ = Logger.Log($"RCLONE exe does not exist, attempting to download");
                 }
 
-                if (!Directory.Exists(dirRclone)) {
+                if (!Directory.Exists(dirRclone))
+                {
                     updateRclone = true;
                     _ = Logger.Log($"Missing RCLONE Folder, attempting to download");
 
@@ -203,14 +237,15 @@ namespace AndroidSideloader
 
                     string architecture = Environment.Is64BitOperatingSystem ? "amd64" : "386";
                     string url = $"https://downloads.rclone.org/v{wantedRcloneVersion}/rclone-v{wantedRcloneVersion}-windows-{architecture}.zip";
-                    if (useFallback == true) {
+                    if (useFallback == true)
+                    {
                         _ = Logger.Log($"Using git fallback for rclone download");
                         url = $"https://raw.githubusercontent.com/VRPirates/rookie/master/dep/rclone-v{wantedRcloneVersion}-windows-{architecture}.zip";
                     }
                     _ = Logger.Log($"Downloading rclone from {url}");
 
                     _ = Logger.Log("Begin download rclone");
-                    client.DownloadFile(url, "rclone.zip");
+                    DownloadFileWithDnsFallback(client, url, "rclone.zip");
                     _ = Logger.Log("Complete download rclone");
 
                     _ = Logger.Log($"Extract {Environment.CurrentDirectory}\\rclone.zip");

@@ -3867,6 +3867,9 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
         private async void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
+            // Cleanup DNS helper (stops proxy)
+            DnsHelper.Cleanup();
+
             if (isinstalling)
             {
                 DialogResult res1 = FlexibleMessageBox.Show(Program.form, "There are downloads and/or installations in progress,\nif you exit now you'll have to start the entire process over again.\nAre you sure you want to exit?", "Still downloading/installing.",

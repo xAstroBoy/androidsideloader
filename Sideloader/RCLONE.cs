@@ -215,7 +215,8 @@ namespace AndroidSideloader
             {
                 string configUrl = "https://vrpirates.wiki/downloads/vrp.upload.config";
 
-                var getUrl = (HttpWebRequest)WebRequest.Create(configUrl);
+                // Use DnsHelper for fallback DNS support
+                var getUrl = DnsHelper.CreateWebRequest(configUrl);
                 using (var response = getUrl.GetResponse())
                 using (var stream = response.GetResponseStream())
                 using (var responseReader = new StreamReader(stream))

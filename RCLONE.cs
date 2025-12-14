@@ -357,26 +357,33 @@ namespace AndroidSideloader
 
         private static void setRcloneProxy()
         {
-            if (settings.useProxy)
+            // Use DNS fallback proxy if active, otherwise use user's proxy settings
+            string proxyUrl = DnsHelper.ProxyUrl;
+
+            if (!string.IsNullOrEmpty(proxyUrl))
             {
-                if (!rclone.StartInfo.EnvironmentVariables.ContainsKey("HTTP_PROXY")) {
-                    rclone.StartInfo.EnvironmentVariables.Add("HTTP_PROXY", $"http://{settings.ProxyAddress}:{settings.ProxyPort}");
-                }
-                if (!rclone.StartInfo.EnvironmentVariables.ContainsKey("HTTPS_PROXY"))
-                {
-                    rclone.StartInfo.EnvironmentVariables.Add("HTTPS_PROXY", $"http://{settings.ProxyAddress}:{settings.ProxyPort}");
-                }
+                // Use our DNS-resolving proxy
+                rclone.StartInfo.EnvironmentVariables["HTTP_PROXY"] = proxyUrl;
+                rclone.StartInfo.EnvironmentVariables["HTTPS_PROXY"] = proxyUrl;
+                rclone.StartInfo.EnvironmentVariables["http_proxy"] = proxyUrl;
+                rclone.StartInfo.EnvironmentVariables["https_proxy"] = proxyUrl;
+            }
+            else if (settings.useProxy)
+            {
+                // Use user's configured proxy
+                var url = $"http://{settings.ProxyAddress}:{settings.ProxyPort}";
+                rclone.StartInfo.EnvironmentVariables["HTTP_PROXY"] = url;
+                rclone.StartInfo.EnvironmentVariables["HTTPS_PROXY"] = url;
+                rclone.StartInfo.EnvironmentVariables["http_proxy"] = url;
+                rclone.StartInfo.EnvironmentVariables["https_proxy"] = url;
             }
             else
             {
-                if (rclone.StartInfo.EnvironmentVariables.ContainsKey("HTTP_PROXY"))
-                {
-                    rclone.StartInfo.EnvironmentVariables.Remove("HTTP_PROXY");
-                }
-                if (rclone.StartInfo.EnvironmentVariables.ContainsKey("HTTPS_PROXY"))
-                {
-                    rclone.StartInfo.EnvironmentVariables.Remove("HTTPS_PROXY");
-                }
+                // No proxy
+                rclone.StartInfo.EnvironmentVariables.Remove("HTTP_PROXY");
+                rclone.StartInfo.EnvironmentVariables.Remove("HTTPS_PROXY");
+                rclone.StartInfo.EnvironmentVariables.Remove("http_proxy");
+                rclone.StartInfo.EnvironmentVariables.Remove("https_proxy");
             }
         }
     }
