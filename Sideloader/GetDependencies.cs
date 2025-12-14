@@ -61,7 +61,7 @@ namespace AndroidSideloader
             }
         }
 
-        // Download required dependencies.
+        // Download required dependencies
         public static void downloadFiles()
         {
             // Initialize DNS helper early to detect and configure fallback if needed
@@ -151,30 +151,75 @@ namespace AndroidSideloader
                 _ = FlexibleMessageBox.Show(Program.form, "Rclone was unable to be downloaded\nRookie will now close, please use Offline Mode for manual sideloading if needed");
                 Application.Exit();
             }
+
+            // Download WebView2 runtime if needed
+            downloadWebView2Runtime();
         }
 
-        // Downloads a file with DNS fallback support
-        private static void DownloadFileWithDnsFallback(WebClient client, string url, string localPath)
+        // Downloads a file using the DNS fallback proxy if active
+        public static void DownloadFileWithDnsFallback(WebClient client, string url, string localPath)
         {
             try
             {
+                // Use DNS fallback proxy if active
+                if (DnsHelper.UseFallbackDns && !string.IsNullOrEmpty(DnsHelper.ProxyUrl))
+                {
+                    client.Proxy = new WebProxy(DnsHelper.ProxyUrl);
+                }
+
                 client.DownloadFile(url, localPath);
             }
-            catch when (DnsHelper.UseFallbackDns)
+            catch (Exception ex)
             {
-                // Try with fallback DNS
-                var uri = new Uri(url);
-                var ip = DnsHelper.ResolveHostname(uri.Host);
-                if (ip != null)
+                _ = Logger.Log($"Download failed for {url}: {ex.Message}", LogLevel.ERROR);
+                throw;
+            }
+            finally
+            {
+                // Reset proxy to avoid affecting other operations
+                client.Proxy = null;
+            }
+        }
+
+        // Overload that creates its own WebClient for convenience
+        public static void DownloadFileWithDnsFallback(string url, string localPath)
+        {
+            using (var client = new WebClient())
+            {
+                ServicePointManager.Expect100Continue = true;
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                DownloadFileWithDnsFallback(client, url, localPath);
+            }
+        }
+
+        // Downloads WebView2 runtime if not present
+        private static void downloadWebView2Runtime()
+        {
+            string runtimesPath = Path.Combine(Environment.CurrentDirectory, "runtimes");
+            string webView2LoaderArm64 = Path.Combine(runtimesPath, "win-arm64", "native", "WebView2Loader.dll");
+            string webView2LoaderX86 = Path.Combine(runtimesPath, "win-x86", "native", "WebView2Loader.dll");
+            string webView2LoaderX64 = Path.Combine(runtimesPath, "win-x64", "native", "WebView2Loader.dll");
+
+            bool runtimeExists = File.Exists(webView2LoaderX86) || File.Exists(webView2LoaderX64) || File.Exists(webView2LoaderArm64);
+
+            if (!runtimeExists)
+            {
+                try
                 {
-                    var builder = new UriBuilder(uri) { Host = ip.ToString() };
-                    client.Headers["Host"] = uri.Host;
-                    client.DownloadFile(builder.Uri, localPath);
-                    client.Headers.Remove("Host");
+                    _ = Logger.Log("Missing WebView2 runtime. Attempting to download...");
+                    string archivePath = Path.Combine(Environment.CurrentDirectory, "runtimes.7z");
+
+                    DownloadFileWithDnsFallback("https://vrpirates.wiki/downloads/runtimes.7z", archivePath);
+
+                    _ = Logger.Log("Extracting WebView2 runtime...");
+                    Utilities.Zip.ExtractFile(archivePath, Environment.CurrentDirectory);
+                    File.Delete(archivePath);
+                    _ = Logger.Log("WebView2 runtime download successful");
                 }
-                else
+                catch (Exception ex)
                 {
-                    throw;
+                    _ = Logger.Log($"Failed to download WebView2 runtime: {ex.Message}", LogLevel.ERROR);
+                    // Don't show message box here - let CreateEnvironment handle the UI feedback
                 }
             }
         }
