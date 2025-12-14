@@ -2989,19 +2989,6 @@ Additional Thanks & Resources
                 quotaTries++;
                 remotesList.Invoke((MethodInvoker)delegate
                 {
-                    if (quotaTries > remotesList.Items.Count)
-                    {
-                        ShowError_QuotaExceeded();
-
-                        if (System.Windows.Forms.Application.MessageLoop)
-                        {
-                            // Process.GetCurrentProcess().Kill();
-                            isOffline = true;
-                            success = false;
-                            return;
-                        }
-                    }
-
                     if (remotesList.SelectedIndex + 1 == remotesList.Items.Count)
                     {
                         reset = true;
@@ -3026,20 +3013,35 @@ Additional Thanks & Resources
                 success = false;
             }
 
+            // If we've tried all remotes and failed, show quota exceeded error
+            if (quotaTries > remotesList.Items.Count)
+            {
+                ShowError_QuotaExceeded();
+
+                if (Application.MessageLoop)
+                {
+                    isOffline = true;
+                    success = false;
+                    return success;
+                }
+            }
+
             return success;
         }
 
         private static void ShowError_QuotaExceeded()
         {
             string errorMessage =
-$@"Unable to connect to Remote Server. Rookie is unable to connect to our Servers.
+$@"Rookie cannot reach our servers.
 
-First time launching Rookie? Please relaunch and try again.
+If this is your first time launching Rookie, please relaunch and try again.
 
-Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.gg/tBKMZy7QDA) for Troubleshooting steps!
-";
+If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.gg/tBKMZy7QDA) for troubleshooting steps.";
 
-            _ = FlexibleMessageBox.Show(Program.form, errorMessage, "Unable to connect to Remote Server");
+            FlexibleMessageBox.Show(Program.form, errorMessage, "Unable to connect to remote server");
+
+            // Close application after showing the message
+            Application.Exit();
         }
 
         public async void cleanupActiveDownloadStatus()
