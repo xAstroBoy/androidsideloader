@@ -1266,6 +1266,7 @@ namespace AndroidSideloader
             this.rookieStatusLabel.Size = new System.Drawing.Size(225, 17);
             this.rookieStatusLabel.TabIndex = 0;
             this.rookieStatusLabel.Text = "Status";
+            this.rookieStatusLabel.UseMnemonic = false;
             // 
             // sidebarMediaPanel
             // 
@@ -1320,6 +1321,7 @@ namespace AndroidSideloader
             this.selectedGameLabel.Size = new System.Drawing.Size(217, 20);
             this.selectedGameLabel.TabIndex = 99;
             this.selectedGameLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.selectedGameLabel.UseMnemonic = false;
             // 
             // tableLayoutPanel1
             // 
