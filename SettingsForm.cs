@@ -139,7 +139,7 @@ namespace AndroidSideloader
 
         private void applyButton_Click(object sender, EventArgs e)
         {
-            //parsing bandwidth value
+            // Parse bandwidth value
             var bandwidthInput = bandwidthLimitTextBox.Text;
             Regex regex = new Regex(@"^\d+(\.\d+)?$");
 
@@ -153,38 +153,42 @@ namespace AndroidSideloader
                 return;
             }
 
-            //parsing proxy address
-            var proxyAddressInput = proxyAddressTextBox.Text;
+            // Parse proxy values if proxy is enabled
+            if (toggleProxy.Checked)
+            {
+                // Parse proxy address
+                var proxyAddressInput = proxyAddressTextBox.Text;
 
-            if (proxyAddressInput.StartsWith("http://"))
-            {
-                proxyAddressInput = proxyAddressInput.Substring("http://".Length);
-            }
-            else if (proxyAddressInput.StartsWith("https://"))
-            {
-                proxyAddressInput = proxyAddressInput.Substring("https://".Length);
-            }
+                if (proxyAddressInput.StartsWith("http://"))
+                {
+                    proxyAddressInput = proxyAddressInput.Substring("http://".Length);
+                }
+                else if (proxyAddressInput.StartsWith("https://"))
+                {
+                    proxyAddressInput = proxyAddressInput.Substring("https://".Length);
+                }
 
-            if (proxyAddressInput.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-                IPAddress.TryParse(proxyAddressInput, out _))
-            {
-                _settings.ProxyAddress = proxyAddressInput;
-            }
-            else
-            {
-                MessageBox.Show("Please enter a valid address for the proxy.");
-            }
+                if (proxyAddressInput.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+                    IPAddress.TryParse(proxyAddressInput, out _))
+                {
+                    _settings.ProxyAddress = proxyAddressInput;
+                }
+                else
+                {
+                    MessageBox.Show("Please enter a valid address for the proxy.");
+                }
 
-            //parsing proxy port
-            var proxyPortInput = proxyPortTextBox.Text;
+                // Parse proxy port
+                var proxyPortInput = proxyPortTextBox.Text;
 
-            if (ushort.TryParse(proxyPortInput, out _))
-            {
-                _settings.ProxyPort = proxyPortInput;
-            }
-            else
-            {
-                MessageBox.Show("Please enter a valid port for the proxy.");
+                if (ushort.TryParse(proxyPortInput, out _))
+                {
+                    _settings.ProxyPort = proxyPortInput;
+                }
+                else
+                {
+                    MessageBox.Show("Please enter a valid port for the proxy.");
+                }
             }
 
             SaveAllSettings();

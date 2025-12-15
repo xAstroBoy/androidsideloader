@@ -2989,19 +2989,6 @@ Additional Thanks & Resources
                 quotaTries++;
                 remotesList.Invoke((MethodInvoker)delegate
                 {
-                    if (quotaTries > remotesList.Items.Count)
-                    {
-                        ShowError_QuotaExceeded();
-
-                        if (System.Windows.Forms.Application.MessageLoop)
-                        {
-                            // Process.GetCurrentProcess().Kill();
-                            isOffline = true;
-                            success = false;
-                            return;
-                        }
-                    }
-
                     if (remotesList.SelectedIndex + 1 == remotesList.Items.Count)
                     {
                         reset = true;
@@ -3026,20 +3013,35 @@ Additional Thanks & Resources
                 success = false;
             }
 
+            // If we've tried all remotes and failed, show quota exceeded error
+            if (quotaTries > remotesList.Items.Count)
+            {
+                ShowError_QuotaExceeded();
+
+                if (Application.MessageLoop)
+                {
+                    isOffline = true;
+                    success = false;
+                    return success;
+                }
+            }
+
             return success;
         }
 
         private static void ShowError_QuotaExceeded()
         {
             string errorMessage =
-$@"Unable to connect to Remote Server. Rookie is unable to connect to our Servers.
+$@"Rookie cannot reach our servers.
 
-First time launching Rookie? Please relaunch and try again.
+If this is your first time launching Rookie, please relaunch and try again.
 
-Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.gg/tBKMZy7QDA) for Troubleshooting steps!
-";
+If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.gg/tBKMZy7QDA) for troubleshooting steps.";
 
-            _ = FlexibleMessageBox.Show(Program.form, errorMessage, "Unable to connect to Remote Server");
+            FlexibleMessageBox.Show(Program.form, errorMessage, "Unable to connect to remote server");
+
+            // Close application after showing the message
+            Application.Exit();
         }
 
         public async void cleanupActiveDownloadStatus()
@@ -3865,6 +3867,9 @@ Please visit our Telegram (https://t.me/VRPirates) or Discord (https://discord.g
 
         private async void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
+            // Cleanup DNS helper (stops proxy)
+            DnsHelper.Cleanup();
+
             if (isinstalling)
             {
                 DialogResult res1 = FlexibleMessageBox.Show(Program.form, "There are downloads and/or installations in progress,\nif you exit now you'll have to start the entire process over again.\nAre you sure you want to exit?", "Still downloading/installing.",
@@ -4649,6 +4654,7 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
             if (webView21.CoreWebView2 != null) return;
 
             // Check if WebView2 runtime DLLs are present
+            // (downloadFiles() should have already downloaded them, but check anyway)
             string runtimesPath = Path.Combine(Environment.CurrentDirectory, "runtimes");
             string webView2LoaderArm64 = Path.Combine(runtimesPath, "win-arm64", "native", "WebView2Loader.dll");
             string webView2LoaderX86 = Path.Combine(runtimesPath, "win-x86", "native", "WebView2Loader.dll");
@@ -4658,32 +4664,11 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
 
             if (!runtimeExists)
             {
-                try
-                {
-                    changeTitle("Downloading Runtime...");
-                    string archivePath = Path.Combine(Environment.CurrentDirectory, "runtimes.7z");
-
-                    using (var client = new WebClient())
-                    {
-                        ServicePointManager.Expect100Continue = true;
-                        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-                        await Task.Run(() => client.DownloadFile("https://vrpirates.wiki/downloads/runtimes.7z", archivePath));
-                    }
-
-                    changeTitle("Extracting Runtime...");
-                    await Task.Run(() => Utilities.Zip.ExtractFile(archivePath, Environment.CurrentDirectory));
-                    File.Delete(archivePath);
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"Failed to download WebView2 runtime: {ex.Message}", LogLevel.ERROR);
-                    _ = FlexibleMessageBox.Show(Program.form,
-                        $"Unable to download WebView2 runtime: {ex.Message}\n\nTrailer playback will be disabled.",
-                        "WebView2 Download Failed");
-                    enviromentCreated = true;
-                    webView21.Hide();
-                    return;
-                }
+                // Runtime wasn't downloaded during startup - disable trailers
+                Logger.Log("WebView2 runtime not found, disabling trailer playback", LogLevel.WARNING);
+                enviromentCreated = true;
+                webView21.Hide();
+                return;
             }
 
             try
@@ -4708,14 +4693,6 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
             }
             catch (Exception /* ex */)
             {
-                /*
-                Logger.Log($"Failed to initialize WebView2: {ex.Message}", LogLevel.ERROR);
-                _ = FlexibleMessageBox.Show(Program.form,
-                    $"WebView2 Runtime is not installed on this system.\n\n" +
-                    "Please download from: https://go.microsoft.com/fwlink/p/?LinkId=2124703\n\n" +
-                    "Trailer playback will be disabled.",
-                    "WebView2 Runtime Required");
-                */
                 enviromentCreated = true;
                 webView21.Hide();
             }

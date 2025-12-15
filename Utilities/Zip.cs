@@ -38,17 +38,17 @@ namespace AndroidSideloader.Utilities
             if (!File.Exists(Path.Combine(Environment.CurrentDirectory, "7z.exe")) || !File.Exists(Path.Combine(Environment.CurrentDirectory, "7z.dll")))
             {
                 _ = Logger.Log("Begin download 7-zip");
-                WebClient client = new WebClient();
                 string architecture = Environment.Is64BitOperatingSystem ? "64" : "";
                 try
                 {
-                    client.DownloadFile($"https://github.com/VRPirates/rookie/raw/master/7z{architecture}.exe", $"7z.exe");
-                    client.DownloadFile($"https://github.com/VRPirates/rookie/raw/master/7z{architecture}.dll", $"7z.dll");
+                    // Use DNS fallback download method from GetDependencies
+                    GetDependencies.DownloadFileWithDnsFallback($"https://github.com/VRPirates/rookie/raw/master/7z{architecture}.exe", "7z.exe");
+                    GetDependencies.DownloadFileWithDnsFallback($"https://github.com/VRPirates/rookie/raw/master/7z{architecture}.dll", "7z.dll");
                 }
                 catch (Exception ex)
                 {
-                    _ = FlexibleMessageBox.Show($"You are unable to access the GitHub page with the Exception: {ex.Message}\nSome files may be missing (7z)");
-                    _ = FlexibleMessageBox.Show("7z was unable to be downloaded\nRookie will now close");
+                    _ = FlexibleMessageBox.Show(Program.form, $"You are unable to access the GitHub page with the Exception: {ex.Message}\nSome files may be missing (7z)");
+                    _ = FlexibleMessageBox.Show(Program.form, "7z was unable to be downloaded\nRookie will now close");
                     Application.Exit();
                 }
                 _ = Logger.Log("Complete download 7-zip");
@@ -127,7 +127,6 @@ namespace AndroidSideloader.Utilities
                     extractionError = null; // Reset the error message
                     throw new ExtractionException(errorMessage);
                 }
-
             }
         }
     }

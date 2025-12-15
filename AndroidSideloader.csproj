@@ -239,6 +239,7 @@
     <Compile Include="Sideloader\ProcessOutput.cs" />
     <Compile Include="Sideloader\RCLONE.cs" />
     <Compile Include="Sideloader\Utilities.cs" />
+    <Compile Include="Utilities\DnsHelper.cs" />
     <Compile Include="Utilities\Logger.cs" />
     <Compile Include="QuestForm.cs">
       <SubType>Form</SubType>
