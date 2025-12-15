@@ -357,18 +357,10 @@ namespace AndroidSideloader
 
         private static void setRcloneProxy()
         {
-            // Use DNS fallback proxy if active, otherwise use user's proxy settings
+            // Use the user's proxy settings if set, otherwise fallback to DNS fallback proxy if active
             string proxyUrl = DnsHelper.ProxyUrl;
 
-            if (!string.IsNullOrEmpty(proxyUrl))
-            {
-                // Use our DNS-resolving proxy
-                rclone.StartInfo.EnvironmentVariables["HTTP_PROXY"] = proxyUrl;
-                rclone.StartInfo.EnvironmentVariables["HTTPS_PROXY"] = proxyUrl;
-                rclone.StartInfo.EnvironmentVariables["http_proxy"] = proxyUrl;
-                rclone.StartInfo.EnvironmentVariables["https_proxy"] = proxyUrl;
-            }
-            else if (settings.useProxy)
+            if (settings.useProxy)
             {
                 // Use user's configured proxy
                 var url = $"http://{settings.ProxyAddress}:{settings.ProxyPort}";
@@ -376,6 +368,14 @@ namespace AndroidSideloader
                 rclone.StartInfo.EnvironmentVariables["HTTPS_PROXY"] = url;
                 rclone.StartInfo.EnvironmentVariables["http_proxy"] = url;
                 rclone.StartInfo.EnvironmentVariables["https_proxy"] = url;
+            }
+            else if (!string.IsNullOrEmpty(proxyUrl))
+            {
+                // Use our DNS-resolving proxy
+                rclone.StartInfo.EnvironmentVariables["HTTP_PROXY"] = proxyUrl;
+                rclone.StartInfo.EnvironmentVariables["HTTPS_PROXY"] = proxyUrl;
+                rclone.StartInfo.EnvironmentVariables["http_proxy"] = proxyUrl;
+                rclone.StartInfo.EnvironmentVariables["https_proxy"] = proxyUrl;
             }
             else
             {
@@ -388,3 +388,4 @@ namespace AndroidSideloader
         }
     }
 }
+
