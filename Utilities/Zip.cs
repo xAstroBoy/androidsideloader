@@ -19,6 +19,11 @@ namespace AndroidSideloader.Utilities
     internal class Zip
     {
         private static readonly SettingsManager settings = SettingsManager.Instance;
+
+        // Progress callback: (percent, eta)
+        public static Action<int, TimeSpan?> ExtractionProgressCallback { get; set; }
+        public static Action<string> ExtractionStatusCallback { get; set; }
+
         public static void ExtractFile(string sourceArchive, string destination)
         {
             string args = $"x \"{sourceArchive}\" -y -o\"{destination}\" -bsp1";
@@ -68,6 +73,16 @@ namespace AndroidSideloader.Utilities
 
             _ = Logger.Log($"Extract: 7z {string.Join(" ", args.Split(' ').Where(a => !a.StartsWith("-p")))}");
 
+            // ETA tracking
+            DateTime extractStart = DateTime.UtcNow;
+            int etaLastPercent = 0;
+            DateTime etaLastPercentTime = DateTime.UtcNow;
+            double smoothedSecondsPerPercent = 0;
+            TimeSpan? lastReportedEta = null;
+            int lastReportedPercent = -1;
+            const double SmoothingAlpha = 0.15;
+            const double EtaChangeThreshold = 0.10;
+
             using (Process x = new Process())
             {
                 x.StartInfo = pro;
@@ -78,14 +93,76 @@ namespace AndroidSideloader.Utilities
                     {
                         if (e.Data != null)
                         {
-                            var match = Regex.Match(e.Data, @"(\d+)%");
-                            if (match.Success)
+                            // Parse 7-Zip progress output (e.g., " 45% - filename")
+                            var match = Regex.Match(e.Data, @"^\s*(\d+)%");
+                            if (match.Success && int.TryParse(match.Groups[1].Value, out int percent))
                             {
-                                int progress = int.Parse(match.Groups[1].Value);
-                                MainForm mainForm = (MainForm)Application.OpenForms[0];
-                                if (mainForm != null)
+                                TimeSpan? eta = null;
+
+                                // Calculate ETA
+                                if (percent > etaLastPercent && percent < 100)
                                 {
-                                    mainForm.Invoke((Action)(() => mainForm.SetProgress(progress)));
+                                    var now = DateTime.UtcNow;
+                                    double secondsForThisChunk = (now - etaLastPercentTime).TotalSeconds;
+                                    int percentGained = percent - etaLastPercent;
+
+                                    if (percentGained > 0 && secondsForThisChunk > 0)
+                                    {
+                                        double secondsPerPercent = secondsForThisChunk / percentGained;
+
+                                        if (smoothedSecondsPerPercent == 0)
+                                            smoothedSecondsPerPercent = secondsPerPercent;
+                                        else
+                                            smoothedSecondsPerPercent = SmoothingAlpha * secondsPerPercent + (1 - SmoothingAlpha) * smoothedSecondsPerPercent;
+
+                                        int remainingPercent = 100 - percent;
+                                        double etaSeconds = remainingPercent * smoothedSecondsPerPercent;
+                                        var newEta = TimeSpan.FromSeconds(Math.Max(0, etaSeconds));
+
+                                        // Only update if significant change
+                                        if (!lastReportedEta.HasValue ||
+                                            Math.Abs(newEta.TotalSeconds - lastReportedEta.Value.TotalSeconds) / Math.Max(1, lastReportedEta.Value.TotalSeconds) > EtaChangeThreshold)
+                                        {
+                                            eta = newEta;
+                                            lastReportedEta = eta;
+                                        }
+                                        else
+                                        {
+                                            eta = lastReportedEta;
+                                        }
+
+                                        etaLastPercent = percent;
+                                        etaLastPercentTime = now;
+                                    }
+                                }
+                                else
+                                {
+                                    eta = lastReportedEta;
+                                }
+
+                                // Only report if percent changed
+                                if (percent != lastReportedPercent)
+                                {
+                                    lastReportedPercent = percent;
+
+                                    MainForm mainForm = (MainForm)Application.OpenForms[0];
+                                    if (mainForm != null)
+                                    {
+                                        mainForm.Invoke((Action)(() => mainForm.SetProgress(percent)));
+                                    }
+
+                                    ExtractionProgressCallback?.Invoke(percent, eta);
+                                }
+                            }
+
+                            // Extract filename from output
+                            var fileMatch = Regex.Match(e.Data, @"- (.+)$");
+                            if (fileMatch.Success)
+                            {
+                                string fileName = Path.GetFileName(fileMatch.Groups[1].Value.Trim());
+                                if (!string.IsNullOrEmpty(fileName))
+                                {
+                                    ExtractionStatusCallback?.Invoke(fileName);
                                 }
                             }
                         }
@@ -119,6 +196,11 @@ namespace AndroidSideloader.Utilities
                 x.BeginOutputReadLine();
                 x.BeginErrorReadLine();
                 x.WaitForExit();
+
+                // Clear callbacks
+                ExtractionProgressCallback?.Invoke(100, null);
+                ExtractionStatusCallback?.Invoke("");
+
                 errorMessageShown = false;
 
                 if (!string.IsNullOrEmpty(extractionError))
