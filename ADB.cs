@@ -175,34 +175,53 @@ namespace AndroidSideloader
 
                 statusCallback?.Invoke("Installing APK...");
 
+                // Throttle UI updates to prevent lag
+                DateTime lastProgressUpdate = DateTime.MinValue;
+                int lastReportedPercent = -1;
+                const int ThrottleMs = 100; // Update UI at most every 100ms
+
                 // Create install progress handler
                 Action<InstallProgressEventArgs> installProgress = (args) =>
                 {
-                    // Map PackageInstallProgressState to percentage
                     int percent = 0;
+                    string status = null;
+
                     switch (args.State)
                     {
                         case PackageInstallProgressState.Preparing:
                             percent = 0;
-                            statusCallback?.Invoke("Preparing...");
+                            status = "Preparing...";
                             break;
                         case PackageInstallProgressState.Uploading:
                             percent = (int)Math.Round(args.UploadProgress);
-                            statusCallback?.Invoke($"Installing · {args.UploadProgress:F0}%");
+                            status = $"Installing · {args.UploadProgress:F0}%";
                             break;
                         case PackageInstallProgressState.Installing:
                             percent = 100;
-                            statusCallback?.Invoke("Completing Installation...");
+                            status = "Completing Installation...";
                             break;
                         case PackageInstallProgressState.Finished:
                             percent = 100;
-                            statusCallback?.Invoke("");
+                            status = "";
                             break;
                         default:
                             percent = 50;
                             break;
                     }
-                    progressCallback?.Invoke(percent);
+
+                    // Throttle updates: only update if enough time passed or percent changed
+                    var now = DateTime.UtcNow;
+                    bool shouldUpdate = (now - lastProgressUpdate).TotalMilliseconds >= ThrottleMs
+                                        || percent != lastReportedPercent
+                                        || args.State != PackageInstallProgressState.Uploading;
+
+                    if (shouldUpdate)
+                    {
+                        lastProgressUpdate = now;
+                        lastReportedPercent = percent;
+                        progressCallback?.Invoke(percent);
+                        if (status != null) statusCallback?.Invoke(status);
+                    }
                 };
 
                 // Install the package with progress
@@ -329,6 +348,11 @@ namespace AndroidSideloader
                 long totalBytes = files.Sum(f => new FileInfo(f).Length);
                 long transferredBytes = 0;
 
+                // Throttle UI updates to prevent lag
+                DateTime lastProgressUpdate = DateTime.MinValue;
+                int lastReportedPercent = -1;
+                const int ThrottleMs = 100; // Update UI at most every 100ms
+
                 statusCallback?.Invoke($"Copying: {folderName}");
 
                 using (var syncService = new SyncService(client, device))
@@ -341,9 +365,6 @@ namespace AndroidSideloader
                         string remoteFilePath = $"{remotePath}/{relativePath}";
                         string fileName = Path.GetFileName(file);
 
-                        // Let UI know which file we're currently on
-                        statusCallback?.Invoke(fileName);
-
                         // Ensure remote directory exists
                         string remoteDir = remoteFilePath.Substring(0, remoteFilePath.LastIndexOf('/'));
                         ExecuteShellCommand(client, device, $"mkdir -p \"{remoteDir}\"");
@@ -352,7 +373,7 @@ namespace AndroidSideloader
                         long fileSize = fileInfo.Length;
                         long capturedTransferredBytes = transferredBytes;
 
-                        // Progress handler for this file
+                        // Progress handler for this file with throttling
                         Action<SyncProgressChangedEventArgs> progressHandler = (args) =>
                         {
                             long totalProgressBytes = capturedTransferredBytes + args.ReceivedBytesSize;
@@ -364,8 +385,18 @@ namespace AndroidSideloader
                             int overallPercentInt = (int)Math.Round(overallPercent);
                             overallPercentInt = Math.Max(0, Math.Min(100, overallPercentInt));
 
-                            // Single source of truth for UI (bar + label + text)
-                            progressCallback?.Invoke(overallPercentInt);
+                            // Throttle updates: only update if enough time passed or percent changed
+                            var now = DateTime.UtcNow;
+                            bool shouldUpdate = (now - lastProgressUpdate).TotalMilliseconds >= ThrottleMs
+                                                || overallPercentInt != lastReportedPercent;
+
+                            if (shouldUpdate)
+                            {
+                                lastProgressUpdate = now;
+                                lastReportedPercent = overallPercentInt;
+                                progressCallback?.Invoke(overallPercentInt);
+                                statusCallback?.Invoke(fileName);
+                            }
                         };
 
                         // Push the file with progress
