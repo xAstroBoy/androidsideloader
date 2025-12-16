@@ -3667,15 +3667,9 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                 {
                     changeTitle("Refreshing games list, please wait...\n");
                     showAvailableSpace();
-                    listAppsBtn();
 
-                    if (!updateAvailableClicked && !upToDate_Clicked && !NeedsDonation_Clicked && !settings.NodeviceMode && !gamesQueueList.Any())
-                    {
-                        // Reset the initialized flag so initListView rebuilds _allItems with current install status
-                        _allItemsInitialized = false;
-                        _galleryDataSource = null;
-                        initListView(false);
-                    }
+                    await RefreshGameListAsync();
+
                     if (settings.EnableMessageBoxes)
                     {
                         ShowPrcOutput(output);
@@ -3789,13 +3783,8 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             showAvailableSpace();
             listAppsBtn();
 
-            if (!updateAvailableClicked && !upToDate_Clicked && !NeedsDonation_Clicked && !settings.NodeviceMode && !gamesQueueList.Any())
-            {
-                // Reset the initialized flag so initListView rebuilds _allItems with current install status
-                _allItemsInitialized = false;
-                _galleryDataSource = null;
-                initListView(false);
-            }
+            await RefreshGameListAsync();
+
             if (settings.EnableMessageBoxes)
             {
                 ShowPrcOutput(output);
