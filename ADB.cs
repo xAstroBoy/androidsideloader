@@ -252,9 +252,7 @@ namespace AndroidSideloader
                                 eta = lastReportedEta;
                             }
 
-                            status = eta.HasValue && eta.Value.TotalSeconds > 0
-                                ? $"Installing · {percent}% · ETA: {eta.Value:mm\\:ss}"
-                                : $"Installing · {percent}%";
+                            status = $"Installing · {percent}%";
                             break;
                         case PackageInstallProgressState.Installing:
                             percent = 100;

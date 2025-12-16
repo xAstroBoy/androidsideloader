@@ -3,10 +3,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Windows.Forms;
 
 namespace AndroidSideloader.Utilities
@@ -152,17 +149,6 @@ namespace AndroidSideloader.Utilities
                                     }
 
                                     ExtractionProgressCallback?.Invoke(percent, eta);
-                                }
-                            }
-
-                            // Extract filename from output
-                            var fileMatch = Regex.Match(e.Data, @"- (.+)$");
-                            if (fileMatch.Success)
-                            {
-                                string fileName = Path.GetFileName(fileMatch.Groups[1].Value.Trim());
-                                if (!string.IsNullOrEmpty(fileName))
-                                {
-                                    ExtractionStatusCallback?.Invoke(fileName);
                                 }
                             }
                         }

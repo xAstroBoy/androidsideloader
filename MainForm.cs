@@ -3423,7 +3423,6 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                         {
                             // ETA tracking for extraction
                             DateTime extractStart = DateTime.UtcNow;
-                            string currentExtractFile = "";
 
                             Thread extractionThread = new Thread(() =>
                             {
@@ -3436,7 +3435,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                     isInDownloadExtract = true;
                                 }));
 
-                                // Set up extraction callbacks
+                                // Set up extraction callback
                                 Zip.ExtractionProgressCallback = (percent, eta) =>
                                 {
                                     this.Invoke(() =>
@@ -3444,15 +3443,8 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                         progressBar.Value = percent;
                                         UpdateProgressStatus("Extracting", percent: percent, eta: eta);
 
-                                        progressBar.StatusText = !string.IsNullOrEmpty(currentExtractFile)
-                                            ? $"{currentExtractFile} · {percent}%"
-                                            : $"{percent}%";
+                                        progressBar.StatusText = $"Extracting · {percent}%";
                                     });
-                                };
-
-                                Zip.ExtractionStatusCallback = (fileName) =>
-                                {
-                                    currentExtractFile = fileName ?? "";
                                 };
 
                                 try
@@ -4718,7 +4710,7 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
                 await webView21.EnsureCoreWebView2Async(env);
 
                 // Map local folder to a trusted origin (https://app.local)
-                var webroot = Path.Combine(Environment.CurrentDirectory, "webroot");
+                var webroot = Path.Combine(Environment.CurrentDirectory, "trailer");
                 Directory.CreateDirectory(webroot);
                 webView21.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     "app.local", webroot, CoreWebView2HostResourceAccessKind.Allow);
@@ -4741,7 +4733,7 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
         {
             if (!settings.TrailersEnabled) return;
             if (_trailerPlayerInitialized) return;
-            string webroot = Path.Combine(Environment.CurrentDirectory, "webroot");
+            string webroot = Path.Combine(Environment.CurrentDirectory, "trailer");
             Directory.CreateDirectory(webroot);
             string playerHtml = Path.Combine(webroot, "player.html");
 
@@ -4760,22 +4752,18 @@ html,body { margin:0; background:#181A1E; height:100%; overflow:hidden; }
 <script>
 let player;
 let pendingId = null;
-// Youtube trailer player
 function onYouTubeIframeAPIReady() {
-    // Initialize without video
     player = new YT.Player('player', {
         playerVars: {
-            autoplay: 0,         // prevent autoplay at initialization
-            mute: 1,             // keep muted so subsequent loads can play instantly if desired
-            playsinline: 1,
+            autoplay: 0,
+            mute: 1,
             rel: 0,
-            modestbranding: 1
+            iv_load_policy: 3,
+            fs: 0
         },
         events: {
             'onReady': () => {
-                // Do nothing by default. Only play after we receive a video id message.
                 if (pendingId) {
-                    // If we received a message before ready, load now.
                     player.loadVideoById(pendingId);
                     pendingId = null;
                 }
@@ -4783,7 +4771,6 @@ function onYouTubeIframeAPIReady() {
         }
     });
 }
-// WebView2 message hook: app posts the 11-char video id.
 (function(){
     if (window.chrome && window.chrome.webview) {
         window.chrome.webview.addEventListener('message', e => {
