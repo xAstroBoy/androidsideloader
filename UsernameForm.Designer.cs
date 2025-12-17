@@ -28,28 +28,30 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(UsernameForm));
             this.textBox1 = new System.Windows.Forms.TextBox();
             this.button1 = new AndroidSideloader.RoundButton();
             this.SuspendLayout();
-            //
+            // 
             // textBox1
-            //
+            // 
             this.textBox1.BackColor = global::AndroidSideloader.Properties.Settings.Default.TextBoxColor;
             this.textBox1.Font = global::AndroidSideloader.Properties.Settings.Default.FontStyle;
             this.textBox1.ForeColor = System.Drawing.Color.White;
             this.textBox1.Location = new System.Drawing.Point(13, 13);
             this.textBox1.Name = "textBox1";
-            this.textBox1.Size = new System.Drawing.Size(418, 24);
+            this.textBox1.Size = new System.Drawing.Size(418, 23);
             this.textBox1.TabIndex = 0;
             this.textBox1.Text = "Enter your username here";
-            //
+            // 
             // button1
-            //
+            // 
             this.button1.Active1 = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
             this.button1.Active2 = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
             this.button1.BackColor = System.Drawing.Color.Transparent;
             this.button1.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.button1.Disabled1 = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(35)))), ((int)(((byte)(45)))));
+            this.button1.Disabled2 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(28)))), ((int)(((byte)(35)))));
+            this.button1.DisabledStrokeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(55)))), ((int)(((byte)(65)))));
             this.button1.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F);
             this.button1.ForeColor = System.Drawing.Color.White;
             this.button1.Inactive1 = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
@@ -64,9 +66,9 @@
             this.button1.Text = "Create User.Json";
             this.button1.Transparency = false;
             this.button1.Click += new System.EventHandler(this.button1_Click);
-            //
+            // 
             // UsernameForm
-            //
+            // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = global::AndroidSideloader.Properties.Settings.Default.BackColor;
@@ -74,11 +76,9 @@
             this.Controls.Add(this.button1);
             this.Controls.Add(this.textBox1);
             this.ForeColor = System.Drawing.Color.White;
-            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MaximumSize = new System.Drawing.Size(459, 139);
             this.MinimumSize = new System.Drawing.Size(459, 139);
             this.Name = "UsernameForm";
-            this.ShowIcon = false;
             this.Text = "USER.JSON";
             this.Load += new System.EventHandler(this.usernameForm_Load);
             this.ResumeLayout(false);

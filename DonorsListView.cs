@@ -42,6 +42,10 @@ namespace AndroidSideloader
         public DonorsListViewForm()
         {
             InitializeComponent();
+
+            // Use same icon as the executable
+            this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+
             ApplyModernTheme();
             CenterToScreen();
 

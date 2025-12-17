@@ -13,6 +13,10 @@ namespace AndroidSideloader
         public AdbCommandForm()
         {
             InitializeComponent();
+
+            // Use same icon as the executable
+            this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            this.ShowIcon = true; // Enable icon
         }
 
         private void InitializeComponent()
