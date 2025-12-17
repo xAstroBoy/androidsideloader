@@ -154,7 +154,7 @@ namespace AndroidSideloader
         // Copies and installs an APK with real-time progress reporting using AdvancedSharpAdbClient
         public static async Task<ProcessOutput> SideloadWithProgressAsync(
             string path,
-            Action<int, TimeSpan?> progressCallback = null,  // Now includes ETA
+            Action<float, TimeSpan?> progressCallback = null,
             Action<string> statusCallback = null,
             string packagename = "",
             string gameName = "")
@@ -177,112 +177,79 @@ namespace AndroidSideloader
 
                 // Throttle UI updates to prevent lag
                 DateTime lastProgressUpdate = DateTime.MinValue;
-                int lastReportedPercent = -1;
-                const int ThrottleMs = 100; // Update UI at most every 100ms
+                float lastReportedPercent = -1;
+                const int ThrottleMs = 100; // Update UI every 100ms
 
-                // ETA tracking with smoothing
-                DateTime installStart = DateTime.UtcNow;
-                int etaLastPercent = 0;
-                DateTime etaLastPercentTime = DateTime.UtcNow;
-                double smoothedSecondsPerPercent = 0;
-                TimeSpan? lastReportedEta = null;
-                const double SmoothingAlpha = 0.15; // Lower = smoother, less responsive
-                const double EtaChangeThreshold = 0.10; // Only update if ETA changes by >10%
+                // Shared ETA engine (percent-units)
+                var eta = new EtaEstimator(alpha: 0.05, reanchorThreshold: 0.20);
 
                 // Create install progress handler
                 Action<InstallProgressEventArgs> installProgress = (args) =>
                 {
-                    int percent = 0;
+                    float percent = 0;
                     string status = null;
-                    TimeSpan? eta = null;
+                    TimeSpan? displayEta = null;
 
                     switch (args.State)
                     {
                         case PackageInstallProgressState.Preparing:
                             percent = 0;
                             status = "Preparing...";
-                            installStart = DateTime.UtcNow;
-                            etaLastPercent = 0;
-                            etaLastPercentTime = installStart;
-                            smoothedSecondsPerPercent = 0;
-                            lastReportedEta = null;
+                            eta.Reset();
                             break;
+
                         case PackageInstallProgressState.Uploading:
-                            percent = (int)Math.Round(args.UploadProgress);
+                            percent = (float)args.UploadProgress;
 
-                            // Calculate ETA with smoothing
-                            if (percent > etaLastPercent && percent < 100)
+                            // Update ETA engine using percent as units (0..100)
+                            if (percent > 0 && percent < 100)
                             {
-                                var now = DateTime.UtcNow;
-                                double secondsForThisChunk = (now - etaLastPercentTime).TotalSeconds;
-                                int percentGained = percent - etaLastPercent;
-
-                                if (percentGained > 0 && secondsForThisChunk > 0)
-                                {
-                                    double secondsPerPercent = secondsForThisChunk / percentGained;
-
-                                    // Exponential smoothing
-                                    if (smoothedSecondsPerPercent == 0)
-                                        smoothedSecondsPerPercent = secondsPerPercent;
-                                    else
-                                        smoothedSecondsPerPercent = SmoothingAlpha * secondsPerPercent + (1 - SmoothingAlpha) * smoothedSecondsPerPercent;
-
-                                    int remainingPercent = 100 - percent;
-                                    double etaSeconds = remainingPercent * smoothedSecondsPerPercent;
-                                    var newEta = TimeSpan.FromSeconds(Math.Max(0, etaSeconds));
-
-                                    // Only update if significant change
-                                    if (!lastReportedEta.HasValue ||
-                                        Math.Abs(newEta.TotalSeconds - lastReportedEta.Value.TotalSeconds) / Math.Max(1, lastReportedEta.Value.TotalSeconds) > EtaChangeThreshold)
-                                    {
-                                        eta = newEta;
-                                        lastReportedEta = eta;
-                                    }
-                                    else
-                                    {
-                                        eta = lastReportedEta; // Keep previous ETA
-                                    }
-
-                                    etaLastPercent = percent;
-                                    etaLastPercentTime = now;
-                                }
+                                eta.Update(totalUnits: 100, doneUnits: (long)Math.Round(percent));
+                                displayEta = eta.GetDisplayEta();
                             }
                             else
                             {
-                                eta = lastReportedEta;
+                                displayEta = eta.GetDisplayEta();
                             }
 
-                            status = $"Installing · {percent}%";
+                            status = $"Installing · {percent:0.0}%";
                             break;
+
                         case PackageInstallProgressState.Installing:
                             percent = 100;
                             status = "Completing Installation...";
+                            displayEta = null;
                             break;
+
                         case PackageInstallProgressState.Finished:
                             percent = 100;
                             status = "";
+                            displayEta = null;
                             break;
+
                         default:
-                            percent = 50;
+                            percent = 100;
+                            status = "";
+                            displayEta = null;
                             break;
                     }
 
-                    // Throttle updates
                     var updateNow = DateTime.UtcNow;
                     bool shouldUpdate = (updateNow - lastProgressUpdate).TotalMilliseconds >= ThrottleMs
-                                        || percent != lastReportedPercent
+                                        || Math.Abs(percent - lastReportedPercent) >= 0.1f
                                         || args.State != PackageInstallProgressState.Uploading;
 
                     if (shouldUpdate)
                     {
                         lastProgressUpdate = updateNow;
                         lastReportedPercent = percent;
-                        progressCallback?.Invoke(percent, eta);
+
+                        // ETA goes back via progress callback (label); status remains percent-only string for inner bar
+                        progressCallback?.Invoke(percent, displayEta);
                         if (status != null) statusCallback?.Invoke(status);
                     }
                 };
 
-                // Install the package with progress
                 await Task.Run(() =>
                 {
                     packageManager.InstallPackage(path, installProgress);
@@ -297,7 +264,6 @@ namespace AndroidSideloader
             {
                 Logger.Log($"SideloadWithProgressAsync error: {ex.Message}", LogLevel.ERROR);
 
-                // Check for signature mismatch errors
                 if (ex.Message.Contains("INSTALL_FAILED") ||
                     ex.Message.Contains("signatures do not match"))
                 {
@@ -318,7 +284,6 @@ namespace AndroidSideloader
                     if (cancelClicked)
                         return new ProcessOutput("", "Installation cancelled by user");
 
-                    // Perform reinstall
                     statusCallback?.Invoke("Performing reinstall...");
 
                     try
@@ -338,7 +303,7 @@ namespace AndroidSideloader
                         {
                             if (args.State == PackageInstallProgressState.Uploading)
                             {
-                                progressCallback?.Invoke((int)Math.Round(args.UploadProgress), null);
+                                progressCallback?.Invoke((float)args.UploadProgress, null);
                             }
                         };
                         packageManager.InstallPackage(path, reinstallProgress);
@@ -368,7 +333,7 @@ namespace AndroidSideloader
         // Copies OBB folder with real-time progress reporting using AdvancedSharpAdbClient
         public static async Task<ProcessOutput> CopyOBBWithProgressAsync(
             string localPath,
-            Action<int, TimeSpan?> progressCallback = null,  // Now includes ETA
+            Action<float, TimeSpan?> progressCallback = null,
             Action<string> statusCallback = null,
             string gameName = "")
         {
@@ -404,18 +369,11 @@ namespace AndroidSideloader
 
                 // Throttle UI updates to prevent lag
                 DateTime lastProgressUpdate = DateTime.MinValue;
-                int lastReportedPercent = -1;
-                const int ThrottleMs = 100; // Update UI at most every 100ms
+                float lastReportedPercent = -1;
+                const int ThrottleMs = 100; // Update UI every 100ms
 
-                // ETA tracking with smoothing
-                DateTime copyStart = DateTime.UtcNow;
-                int etaLastPercent = 0;
-                DateTime etaLastPercentTime = DateTime.UtcNow;
-                double smoothedSecondsPerPercent = 0;
-                TimeSpan? lastReportedEta = null;
-                TimeSpan? currentEta = null;
-                const double SmoothingAlpha = 0.15; // Lower = smoother, less responsive
-                const double EtaChangeThreshold = 0.10; // 10% change threshold
+                // Shared ETA engine (bytes-units)
+                var eta = new EtaEstimator(alpha: 0.10, reanchorThreshold: 0.20);
 
                 statusCallback?.Invoke($"Copying: {folderName}");
 
@@ -437,71 +395,37 @@ namespace AndroidSideloader
                         long fileSize = fileInfo.Length;
                         long capturedTransferredBytes = transferredBytes;
 
-                        // Progress handler for this file with throttling
                         Action<SyncProgressChangedEventArgs> progressHandler = (args) =>
                         {
                             long totalProgressBytes = capturedTransferredBytes + args.ReceivedBytesSize;
 
-                            double overallPercent = totalBytes > 0
-                                ? (totalProgressBytes * 100.0) / totalBytes
-                                : 0.0;
+                            float overallPercent = totalBytes > 0
+                                ? (float)(totalProgressBytes * 100.0 / totalBytes)
+                                : 0f;
 
-                            int overallPercentInt = (int)Math.Round(overallPercent);
-                            overallPercentInt = Math.Max(0, Math.Min(100, overallPercentInt));
+                            overallPercent = Math.Max(0, Math.Min(100, overallPercent));
 
-                            // Calculate ETA with smoothing
-                            if (overallPercentInt > etaLastPercent && overallPercentInt < 100)
+                            // Update ETA engine in bytes
+                            if (totalBytes > 0 && totalProgressBytes > 0 && overallPercent < 100)
                             {
-                                var now = DateTime.UtcNow;
-                                double secondsForThisChunk = (now - etaLastPercentTime).TotalSeconds;
-                                int percentGained = overallPercentInt - etaLastPercent;
-
-                                if (percentGained > 0 && secondsForThisChunk > 0)
-                                {
-                                    double secondsPerPercent = secondsForThisChunk / percentGained;
-
-                                    // Exponential smoothing
-                                    if (smoothedSecondsPerPercent == 0)
-                                        smoothedSecondsPerPercent = secondsPerPercent;
-                                    else
-                                        smoothedSecondsPerPercent = SmoothingAlpha * secondsPerPercent + (1 - SmoothingAlpha) * smoothedSecondsPerPercent;
-
-                                    int remainingPercent = 100 - overallPercentInt;
-                                    double etaSeconds = remainingPercent * smoothedSecondsPerPercent;
-                                    var newEta = TimeSpan.FromSeconds(Math.Max(0, etaSeconds));
-
-                                    // Only update if significant change
-                                    if (!lastReportedEta.HasValue ||
-                                        Math.Abs(newEta.TotalSeconds - lastReportedEta.Value.TotalSeconds) / Math.Max(1, lastReportedEta.Value.TotalSeconds) > EtaChangeThreshold)
-                                    {
-                                        currentEta = newEta;
-                                        lastReportedEta = currentEta;
-                                    }
-                                    else
-                                    {
-                                        currentEta = lastReportedEta;
-                                    }
-
-                                    etaLastPercent = overallPercentInt;
-                                    etaLastPercentTime = now;
-                                }
+                                eta.Update(totalUnits: totalBytes, doneUnits: totalProgressBytes);
                             }
 
-                            // Throttle updates
+                            TimeSpan? displayEta = eta.GetDisplayEta();
+
                             var now2 = DateTime.UtcNow;
                             bool shouldUpdate = (now2 - lastProgressUpdate).TotalMilliseconds >= ThrottleMs
-                                                || overallPercentInt != lastReportedPercent;
+                                                || Math.Abs(overallPercent - lastReportedPercent) >= 0.1f;
 
                             if (shouldUpdate)
                             {
                                 lastProgressUpdate = now2;
-                                lastReportedPercent = overallPercentInt;
-                                progressCallback?.Invoke(overallPercentInt, currentEta);
+                                lastReportedPercent = overallPercent;
+                                progressCallback?.Invoke(overallPercent, displayEta);
                                 statusCallback?.Invoke(fileName);
                             }
                         };
 
-                        // Push the file with progress
                         using (var stream = File.OpenRead(file))
                         {
                             await Task.Run(() =>
@@ -784,6 +708,104 @@ namespace AndroidSideloader
             return folder.Contains(".")
                 ? RunAdbCommandToString($"shell rm -rf \"/sdcard/Android/obb/{lastFolder}\" && mkdir \"/sdcard/Android/obb/{lastFolder}\"") + RunAdbCommandToString($"push \"{path}\" \"/sdcard/Android/obb\"")
                 : new ProcessOutput("No OBB Folder found");
+        }
+    }
+
+    internal class EtaEstimator
+    {
+        private readonly double _alpha;                  // EWMA smoothing
+        private readonly double _reanchorThreshold;      // % difference required to re-anchor
+        private readonly double _minSampleSeconds;       // ignore too-short dt
+
+        private DateTime _lastSampleTimeUtc;
+        private long _lastSampleDoneUnits;
+        private double _smoothedUnitsPerSecond;
+
+        private TimeSpan? _etaAnchorValue;
+        private DateTime _etaAnchorTimeUtc;
+
+        public EtaEstimator(double alpha, double reanchorThreshold, double minSampleSeconds = 0.15)
+        {
+            _alpha = alpha;
+            _reanchorThreshold = reanchorThreshold;
+            _minSampleSeconds = minSampleSeconds;
+            Reset();
+        }
+
+        public void Reset()
+        {
+            _lastSampleTimeUtc = DateTime.UtcNow;
+            _lastSampleDoneUnits = 0;
+            _smoothedUnitsPerSecond = 0;
+            _etaAnchorValue = null;
+            _etaAnchorTimeUtc = DateTime.UtcNow;
+        }
+
+        // Updates internal rate estimate and re-anchors ETA
+        // totalUnits: total work units (e.g., 100 for percent, or totalBytes for bytes)
+        // doneUnits:  completed work units so far (e.g., percent, or bytes transferred)
+        public void Update(long totalUnits, long doneUnits)
+        {
+            var now = DateTime.UtcNow;
+            if (totalUnits <= 0) return;
+
+            doneUnits = Math.Max(0, Math.Min(totalUnits, doneUnits));
+
+            long remainingUnits = Math.Max(0, totalUnits - doneUnits);
+
+            double dt = (now - _lastSampleTimeUtc).TotalSeconds;
+            long dUnits = doneUnits - _lastSampleDoneUnits;
+
+            if (dt >= _minSampleSeconds && dUnits > 0)
+            {
+                double instUnitsPerSecond = dUnits / dt;
+
+                if (_smoothedUnitsPerSecond <= 0)
+                    _smoothedUnitsPerSecond = instUnitsPerSecond;
+                else
+                    _smoothedUnitsPerSecond = _alpha * instUnitsPerSecond + (1 - _alpha) * _smoothedUnitsPerSecond;
+
+                _lastSampleTimeUtc = now;
+                _lastSampleDoneUnits = doneUnits;
+            }
+
+            if (_smoothedUnitsPerSecond > 1e-6 && remainingUnits > 0)
+            {
+                var newEta = TimeSpan.FromSeconds(remainingUnits / _smoothedUnitsPerSecond);
+                if (newEta < TimeSpan.Zero) newEta = TimeSpan.Zero;
+
+                if (!_etaAnchorValue.HasValue)
+                {
+                    _etaAnchorValue = newEta;
+                    _etaAnchorTimeUtc = now;
+                }
+                else
+                {
+                    // What countdown would currently show
+                    var predictedNow = _etaAnchorValue.Value - (now - _etaAnchorTimeUtc);
+                    if (predictedNow < TimeSpan.Zero) predictedNow = TimeSpan.Zero;
+
+                    double baseSeconds = Math.Max(1, predictedNow.TotalSeconds);
+                    double diffRatio = Math.Abs(newEta.TotalSeconds - predictedNow.TotalSeconds) / baseSeconds;
+
+                    if (diffRatio > _reanchorThreshold)
+                    {
+                        _etaAnchorValue = newEta;
+                        _etaAnchorTimeUtc = now;
+                    }
+                }
+            }
+        }
+
+        // Returns a countdown ETA for UI display
+        public TimeSpan? GetDisplayEta()
+        {
+            if (!_etaAnchorValue.HasValue) return null;
+
+            var remaining = _etaAnchorValue.Value - (DateTime.UtcNow - _etaAnchorTimeUtc);
+            if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+
+            return TimeSpan.FromSeconds(Math.Ceiling(remaining.TotalSeconds));
         }
     }
 }

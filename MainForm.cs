@@ -3052,7 +3052,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             gamesQueueList.RemoveAt(0);
         }
 
-        public void SetProgress(int progress)
+        public void SetProgress(float progress)
         {
             if (progressBar.InvokeRequired)
             {
@@ -3264,7 +3264,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                     speedLabel.Text = "Starting download...";
 
                     // Track the highest valid progress to prevent brief progress bar flashes during multi-file transfers
-                    int highestValidPercent = 0;
+                    float highestValidPercent = 0;
 
                     // Download
                     while (t1.IsAlive)
@@ -3311,10 +3311,10 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
                                 progressBar.IsIndeterminate = false;
 
-                                int percent = 0;
+                                float percent = 0;
                                 if (totalSize > 0)
                                 {
-                                    percent = Convert.ToInt32((downloadedSize / totalSize) * 100);
+                                    percent = (float)(downloadedSize / totalSize * 100);
                                 }
 
                                 // Clamp to 0-99 while download is in progress to prevent brief 100% flashes
@@ -3339,7 +3339,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                     "Downloading",
                                     (int)transfersComplete + 1,
                                     (int)fileCount,
-                                    percent,
+                                    (int)Math.Round(percent),
                                     time,
                                     downloadSpeed);
                             }
@@ -3441,9 +3441,9 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                     this.Invoke(() =>
                                     {
                                         progressBar.Value = percent;
-                                        UpdateProgressStatus("Extracting", percent: percent, eta: eta);
+                                        UpdateProgressStatus("Extracting", percent: (int)Math.Round(percent), eta: eta);
 
-                                        progressBar.StatusText = $"Extracting · {percent}%";
+                                        progressBar.StatusText = $"Extracting · {percent:0.0}%";
                                     });
                                 };
 
@@ -3570,14 +3570,17 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                                     progressBar.IsIndeterminate = false;
                                                     progressBar.Value = progress;
                                                 }
-                                                UpdateProgressStatus("Installing APK", percent: progress, eta: eta);
-                                                progressBar.StatusText = $"Installing · {progress}%";
+                                                UpdateProgressStatus("Installing", percent: (int)Math.Round(progress), eta: eta);
+                                                progressBar.StatusText = $"Installing · {progress:0.0}%";
                                             }),
                                             status => this.Invoke(() => {
                                                 if (!string.IsNullOrEmpty(status))
                                                 {
-                                                    // "Completing Installation..."
-                                                    speedLabel.Text = status; 
+                                                    if (status.Contains("Completing Installation"))
+                                                    { 
+                                                        // "Completing Installation..."
+                                                        speedLabel.Text = status;
+                                                    }
                                                     progressBar.StatusText = status;
                                                 }
                                             }),
@@ -3605,15 +3608,15 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                                 (progress, eta) => this.Invoke(() =>
                                                 {
                                                     progressBar.Value = progress;
-                                                    UpdateProgressStatus("Copying OBB", percent: progress, eta: eta);
+                                                    UpdateProgressStatus("Copying OBB", percent: (int)Math.Round(progress), eta: eta);
 
                                                     if (!string.IsNullOrEmpty(currentObbStatusBase))
                                                     {
-                                                        progressBar.StatusText = $"{currentObbStatusBase} · {progress}%";
+                                                        progressBar.StatusText = $"{currentObbStatusBase} · {progress:0.0}%";
                                                     }
                                                     else
                                                     {
-                                                        progressBar.StatusText = $"{progress}%";
+                                                        progressBar.StatusText = $"{progress:0.0}%";
                                                     }
                                                 }),
                                                 status => this.Invoke(() =>
@@ -4743,6 +4746,8 @@ let player;
 let pendingId = null;
 function onYouTubeIframeAPIReady() {
     player = new YT.Player('player', {
+        width: '100%',
+        height: '100%',
         playerVars: {
             autoplay: 0,
             mute: 1,

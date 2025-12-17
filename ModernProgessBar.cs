@@ -13,9 +13,9 @@ namespace AndroidSideloader
     {
         #region Fields
 
-        private int _value;
-        private int _minimum;
-        private int _maximum = 100;
+        private float _value;
+        private float _minimum;
+        private float _maximum = 100f;
         private int _radius = 8;
         private bool _isIndeterminate;
         private string _statusText = string.Empty;
@@ -66,7 +66,7 @@ namespace AndroidSideloader
 
         [Category("Progress")]
         [Description("The current value of the progress bar.")]
-        public int Value
+        public float Value
         {
             get => _value;
             set
@@ -78,7 +78,7 @@ namespace AndroidSideloader
 
         [Category("Progress")]
         [Description("The minimum value of the progress bar.")]
-        public int Minimum
+        public float Minimum
         {
             get => _minimum;
             set
@@ -91,7 +91,7 @@ namespace AndroidSideloader
 
         [Category("Progress")]
         [Description("The maximum value of the progress bar.")]
-        public int Maximum
+        public float Maximum
         {
             get => _maximum;
             set
@@ -122,7 +122,7 @@ namespace AndroidSideloader
             set
             {
                 // If there is no change, do nothing
-                if (_isIndeterminate == value) 
+                if (_isIndeterminate == value)
                     return;
 
                 _isIndeterminate = value;
@@ -205,7 +205,7 @@ namespace AndroidSideloader
 
         // Gets the progress as a percentage (0-100)
         public float ProgressPercent =>
-            _maximum > _minimum ? (float)(_value - _minimum) / (_maximum - _minimum) * 100f : 0f;
+            _maximum > _minimum ? (_value - _minimum) / (_maximum - _minimum) * 100f : 0f;
 
         #endregion
 
@@ -250,7 +250,7 @@ namespace AndroidSideloader
         private void DrawProgress(Graphics g, Rectangle outerRect)
         {
             float percent = (_maximum > _minimum)
-                ? (float)(_value - _minimum) / (_maximum - _minimum)
+                ? (_value - _minimum) / (_maximum - _minimum)
                 : 0f;
 
             if (percent <= 0f) return;
@@ -363,10 +363,11 @@ namespace AndroidSideloader
 
             if (!_isIndeterminate && _value > _minimum)
             {
-                string percentText = $"{(int)ProgressPercent}%";
+                // Show one decimal place for sub-percent precision
+                string percentText = $"{ProgressPercent:0.0}%";
                 if (!string.IsNullOrEmpty(_operationType))
                 {
-                    // E.g. "Downloading · 73%"
+                    // E.g. "Downloading · 73.5%"
                     return $"{_operationType} · {percentText}";
                 }
                 return percentText;
