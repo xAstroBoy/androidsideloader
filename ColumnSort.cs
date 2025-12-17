@@ -42,7 +42,7 @@ public class ListViewColumnSorter : IComparer
         ListViewItem listviewY = (ListViewItem)y;
 
         // Determine if the column requires numeric comparison
-        if (SortColumn == 3 || SortColumn == 5 || SortColumn == 7) // Numeric columns: VersionCodeIndex, VersionNameIndex, InstalledVersion
+        if (SortColumn == 3 || SortColumn == 5) // Numeric columns: VersionCodeIndex, VersionNameIndex
         {
             try
             {

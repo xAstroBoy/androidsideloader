@@ -2232,7 +2232,10 @@ namespace AndroidSideloader
                         }
 
                         // Add the installed version to the ListView item
-                        item.SubItems[7].Text = installedVersion.ToString();
+                        if (installedVersion != 0)
+                        {
+                            item.SubItems[3].Text = $"{item.SubItems[3].Text} ({installedVersion})";
+                        }
 
                         if (favoriteView)
                         {

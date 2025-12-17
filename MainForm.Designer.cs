@@ -47,7 +47,6 @@ namespace AndroidSideloader
             this.ReleaseAPKPathIndex = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.VersionNameIndex = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.DownloadsIndex = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.InstalledVersion = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.gamesQueueLabel = new System.Windows.Forms.Label();
             this.notesRichTextBox = new System.Windows.Forms.RichTextBox();
             this.DragDropLbl = new System.Windows.Forms.Label();
@@ -266,8 +265,7 @@ namespace AndroidSideloader
             this.VersionCodeIndex,
             this.ReleaseAPKPathIndex,
             this.VersionNameIndex,
-            this.DownloadsIndex,
-            this.InstalledVersion});
+            this.DownloadsIndex});
             this.gamesListView.Font = new System.Drawing.Font("Segoe UI", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.gamesListView.ForeColor = System.Drawing.Color.White;
             this.gamesListView.HideSelection = false;
@@ -294,39 +292,34 @@ namespace AndroidSideloader
             // ReleaseNameIndex
             // 
             this.ReleaseNameIndex.Text = "Release Name";
-            this.ReleaseNameIndex.Width = 244;
+            this.ReleaseNameIndex.Width = 220;
             // 
             // PackageNameIndex
             // 
             this.PackageNameIndex.Text = "Package Name";
-            this.PackageNameIndex.Width = 87;
+            this.PackageNameIndex.Width = 140;
             // 
             // VersionCodeIndex
             // 
-            this.VersionCodeIndex.Text = "Version";
-            this.VersionCodeIndex.Width = 75;
+            this.VersionCodeIndex.Text = "Version (vs Installed)";
+            this.VersionCodeIndex.Width = 140;
             // 
             // ReleaseAPKPathIndex
             // 
             this.ReleaseAPKPathIndex.Text = "Last Updated";
-            this.ReleaseAPKPathIndex.Width = 145;
+            this.ReleaseAPKPathIndex.Width = 120;
             // 
             // VersionNameIndex
             // 
             this.VersionNameIndex.Text = "Size (MB)";
             this.VersionNameIndex.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            this.VersionNameIndex.Width = 66;
+            this.VersionNameIndex.Width = 80;
             // 
             // DownloadsIndex
             // 
             this.DownloadsIndex.Text = "Popularity";
             this.DownloadsIndex.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             this.DownloadsIndex.Width = 80;
-            // 
-            // InstalledVersion
-            // 
-            this.InstalledVersion.Text = "Installed";
-            this.InstalledVersion.Width = 75;
             // 
             // gamesQueueLabel
             // 
@@ -1655,7 +1648,6 @@ namespace AndroidSideloader
         private System.Windows.Forms.ColumnHeader ReleaseAPKPathIndex;
         public System.Windows.Forms.ColumnHeader VersionNameIndex;
         public System.Windows.Forms.ColumnHeader DownloadsIndex;
-        private ColumnHeader InstalledVersion;
         private RoundButton downloadInstallGameButton;
         private RoundButton btnViewToggle;
         private ToolTip startsideloadbutton_Tooltip;
