@@ -4737,7 +4737,7 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
 <meta name=""viewport"" content=""width=device-width,initial-scale=1""/>
 <title>Trailer Player</title>
 <style>
-html,body { margin:0; background:#181A1E; height:100%; overflow:hidden; }
+html,body { margin:0; background:#000; height:100%; overflow:hidden; }
 #player { width:100vw; height:100vh; }
 </style>
 <script src=""https://www.youtube.com/iframe_api""></script>
