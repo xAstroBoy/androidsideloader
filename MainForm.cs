@@ -2179,9 +2179,13 @@ namespace AndroidSideloader
 
                         var item = new ListViewItem(release);
 
+                        // Add installed version as additional column
+                        ulong installedVersion = 0;
+
                         if (installedVersions.TryGetValue(packagename, out ulong installedVersionInt))
                         {
                             item.ForeColor = ColorInstalled;
+                            installedVersion = installedVersionInt;
 
                             try
                             {
@@ -2226,6 +2230,9 @@ namespace AndroidSideloader
                                 Logger.Log($"ExMsg: {ex.Message}", LogLevel.ERROR);
                             }
                         }
+
+                        // Add the installed version to the ListView item
+                        item.SubItems[7].Text = installedVersion.ToString();
 
                         if (favoriteView)
                         {

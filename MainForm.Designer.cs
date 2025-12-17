@@ -47,6 +47,7 @@ namespace AndroidSideloader
             this.ReleaseAPKPathIndex = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.VersionNameIndex = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.DownloadsIndex = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.InstalledVersion = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.gamesQueueLabel = new System.Windows.Forms.Label();
             this.notesRichTextBox = new System.Windows.Forms.RichTextBox();
             this.DragDropLbl = new System.Windows.Forms.Label();
@@ -265,7 +266,8 @@ namespace AndroidSideloader
             this.VersionCodeIndex,
             this.ReleaseAPKPathIndex,
             this.VersionNameIndex,
-            this.DownloadsIndex});
+            this.DownloadsIndex,
+            this.InstalledVersion});
             this.gamesListView.Font = new System.Drawing.Font("Segoe UI", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.gamesListView.ForeColor = System.Drawing.Color.White;
             this.gamesListView.HideSelection = false;
@@ -320,6 +322,11 @@ namespace AndroidSideloader
             this.DownloadsIndex.Text = "Popularity";
             this.DownloadsIndex.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             this.DownloadsIndex.Width = 80;
+            // 
+            // InstalledVersion
+            // 
+            this.InstalledVersion.Text = "Installed";
+            this.InstalledVersion.Width = 75;
             // 
             // gamesQueueLabel
             // 
@@ -1522,8 +1529,8 @@ namespace AndroidSideloader
             this.progressBar.IndeterminateColor = System.Drawing.Color.FromArgb(((int)(((byte)(93)))), ((int)(((byte)(203)))), ((int)(((byte)(173)))));
             this.progressBar.IsIndeterminate = false;
             this.progressBar.Location = new System.Drawing.Point(1, 23);
-            this.progressBar.Maximum = 100;
-            this.progressBar.Minimum = 0;
+            this.progressBar.Maximum = 100F;
+            this.progressBar.Minimum = 0F;
             this.progressBar.MinimumSize = new System.Drawing.Size(200, 13);
             this.progressBar.Name = "progressBar";
             this.progressBar.OperationType = "";
@@ -1534,7 +1541,7 @@ namespace AndroidSideloader
             this.progressBar.StatusText = "";
             this.progressBar.TabIndex = 7;
             this.progressBar.TextColor = System.Drawing.Color.FromArgb(((int)(((byte)(230)))), ((int)(((byte)(230)))), ((int)(((byte)(230)))));
-            this.progressBar.Value = 0;
+            this.progressBar.Value = 0F;
             // 
             // downloadInstallGameButton
             // 
@@ -1648,6 +1655,7 @@ namespace AndroidSideloader
         private System.Windows.Forms.ColumnHeader ReleaseAPKPathIndex;
         public System.Windows.Forms.ColumnHeader VersionNameIndex;
         public System.Windows.Forms.ColumnHeader DownloadsIndex;
+        private ColumnHeader InstalledVersion;
         private RoundButton downloadInstallGameButton;
         private RoundButton btnViewToggle;
         private ToolTip startsideloadbutton_Tooltip;
