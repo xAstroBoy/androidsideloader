@@ -802,6 +802,17 @@ public class FastGalleryPanel : Control
             thumbHeight
         );
 
+        // Base (non-scaled) thumbnail size for stable placeholder text layout
+        int baseThumbW = _tileWidth - (thumbPadding * 2);
+        int baseThumbH = _tileHeight - (thumbPadding * 2);
+
+        var baseThumbRect = new Rectangle(
+            thumbRect.X + (thumbRect.Width - baseThumbW) / 2,
+            thumbRect.Y + (thumbRect.Height - baseThumbH) / 2,
+            baseThumbW,
+            baseThumbH
+        );
+
         string packageName = item.SubItems.Count > 2 ? item.SubItems[2].Text : "";
         var thumbnail = GetCachedImage(packageName);
 
@@ -825,7 +836,7 @@ public class FastGalleryPanel : Control
                     g.FillPath(brush, thumbPath);
 
                 // Show game name when thumbnail is missing, centered
-                var nameRect = new Rectangle(thumbRect.X + 10, thumbRect.Y, thumbRect.Width - 20, thumbRect.Height);
+                var nameRect = new Rectangle(baseThumbRect.X + 10, baseThumbRect.Y, baseThumbRect.Width - 20, baseThumbRect.Height);
 
                 using (var font = new Font("Segoe UI", 10f, FontStyle.Bold))
                 {
