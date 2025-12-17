@@ -64,7 +64,7 @@ public class FastGalleryPanel : Control
 
     // Visual constants
     private const int CORNER_RADIUS = 10;
-    private const int THUMB_CORNER_RADIUS = 6;
+    private const int THUMB_CORNER_RADIUS = 8;
     private const float HOVER_SCALE = 1.07f;
     private const float ANIMATION_SPEED = 0.25f;
     private const float SCROLL_SMOOTHING = 0.3f;
@@ -500,12 +500,12 @@ public class FastGalleryPanel : Control
         int y = baseY - (scaledH - _tileHeight) / 2;
 
         // Calculate thumbnail area
-        int thumbPadding = 4;
-        int thumbHeight = scaledH - 26; // Same as in DrawTile
+        int thumbPadding = 2;
+        int thumbHeight = scaledH - (thumbPadding * 2);
 
         // Position delete button in bottom-right corner of thumbnail
         int btnX = x + scaledW - DELETE_BUTTON_SIZE - thumbPadding - DELETE_BUTTON_MARGIN;
-        int btnY = y + thumbPadding + thumbHeight - DELETE_BUTTON_SIZE - DELETE_BUTTON_MARGIN;
+        int btnY = y + thumbPadding + thumbHeight - DELETE_BUTTON_SIZE - DELETE_BUTTON_MARGIN - 20;
 
         return new Rectangle(btnX, btnY, DELETE_BUTTON_SIZE, DELETE_BUTTON_SIZE);
     }
@@ -792,9 +792,15 @@ public class FastGalleryPanel : Control
         }
 
         // Thumbnail
-        int thumbPadding = 4;
-        int thumbHeight = scaledH - 26;
-        var thumbRect = new Rectangle(x + thumbPadding, y + thumbPadding, scaledW - thumbPadding * 2, thumbHeight);
+        int thumbPadding = 2;
+        int thumbHeight = scaledH - (thumbPadding * 2);
+
+        var thumbRect = new Rectangle(
+            x + thumbPadding,
+            y + thumbPadding,
+            scaledW - (thumbPadding * 2),
+            thumbHeight
+        );
 
         string packageName = item.SubItems.Count > 2 ? item.SubItems[2].Text : "";
         var thumbnail = GetCachedImage(packageName);
@@ -817,12 +823,24 @@ public class FastGalleryPanel : Control
             {
                 using (var brush = new SolidBrush(Color.FromArgb(35, 35, 40)))
                     g.FillPath(brush, thumbPath);
-                using (var textBrush = new SolidBrush(Color.FromArgb(70, 70, 80)))
+
+                // Show game name when thumbnail is missing, centered
+                var nameRect = new Rectangle(thumbRect.X + 10, thumbRect.Y, thumbRect.Width - 20, thumbRect.Height);
+
+                using (var font = new Font("Segoe UI", 10f, FontStyle.Bold))
                 {
-                    var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-                    g.DrawString("🎮", new Font("Segoe UI Emoji", 18f), textBrush, thumbRect, sf);
+                    var sfName = new StringFormat
+                    {
+                        Alignment = StringAlignment.Center,
+                        LineAlignment = StringAlignment.Center,
+                        Trimming = StringTrimming.EllipsisCharacter
+                    };
+
+                    using (var text = new SolidBrush(Color.FromArgb(110, 110, 120)))
+                        g.DrawString(item.Text, font, text, nameRect, sfName);
                 }
             }
+
             g.Clip = oldClip;
         }
 
@@ -887,12 +905,40 @@ public class FastGalleryPanel : Control
         }
 
         // Game name
-        var nameRect = new Rectangle(x + 6, y + thumbHeight + thumbPadding, scaledW - 12, 20);
-        using (var font = new Font("Segoe UI Semibold", 8f))
-        using (var brush = new SolidBrush(TextColor))
+        if (state.TooltipOpacity > 0.01f)
         {
-            var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
-            g.DrawString(item.Text, font, brush, nameRect, sf);
+            int overlayH = 20;
+            var overlayRect = new Rectangle(thumbRect.X, thumbRect.Bottom - overlayH, thumbRect.Width, overlayH);
+
+            // Clip to the exact rounded thumbnail so the overlay corners match perfectly
+            Region oldClip = g.Clip;
+            using (var clipPath = CreateRoundedRectangle(thumbRect, THUMB_CORNER_RADIUS))
+            {
+                g.SetClip(clipPath, CombineMode.Intersect);
+
+                // Slightly overdraw to avoid 1px seams from AA / integer rounding
+                var fillRect = new Rectangle(overlayRect.X - 1, overlayRect.Y, overlayRect.Width + 2, overlayRect.Height + 1);
+
+                using (var overlayBrush = new SolidBrush(Color.FromArgb((int)(180 * state.TooltipOpacity), 0, 0, 0)))
+                    g.FillRectangle(overlayBrush, fillRect);
+
+                g.Clip = oldClip;
+            }
+
+            using (var font = new Font("Segoe UI", 8f, FontStyle.Bold))
+            using (var brush = new SolidBrush(Color.FromArgb((int)(TextColor.A * state.TooltipOpacity), TextColor.R, TextColor.G, TextColor.B)))
+            {
+                var sf = new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center,
+                    Trimming = StringTrimming.EllipsisCharacter,
+                    FormatFlags = StringFormatFlags.NoWrap
+                };
+
+                var textRect = new Rectangle(overlayRect.X, overlayRect.Y + 1, overlayRect.Width, overlayRect.Height);
+                g.DrawString(item.Text, font, brush, textRect, sf);
+            }
         }
     }
 
@@ -900,7 +946,7 @@ public class FastGalleryPanel : Control
     {
         // Position in bottom-right corner of thumbnail
         int btnX = tileX + tileWidth - DELETE_BUTTON_SIZE - thumbPadding - DELETE_BUTTON_MARGIN;
-        int btnY = tileY + thumbPadding + thumbHeight - DELETE_BUTTON_SIZE - DELETE_BUTTON_MARGIN;
+        int btnY = tileY + thumbPadding + thumbHeight - DELETE_BUTTON_SIZE - DELETE_BUTTON_MARGIN - 20;
         var btnRect = new Rectangle(btnX, btnY, DELETE_BUTTON_SIZE, DELETE_BUTTON_SIZE);
 
         int bgAlpha = (int)(opacity * 255);
