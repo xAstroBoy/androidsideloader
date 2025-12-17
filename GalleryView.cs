@@ -430,10 +430,17 @@ public class FastGalleryPanel : Control
     private DateTime ParseDate(string dateStr)
     {
         if (string.IsNullOrEmpty(dateStr)) return DateTime.MinValue;
-        return DateTime.TryParseExact(dateStr.Replace(" UTC", ""), "yyyy-MM-dd HH:mm",
+
+        string[] formats = { "yyyy-MM-dd HH:mm 'UTC'", "yyyy-MM-dd HH:mm" };
+
+        return DateTime.TryParseExact(
+            dateStr,
+            formats,
             System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.None, out DateTime date)
-            ? date : DateTime.MinValue;
+            System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+            out DateTime date)
+            ? date
+            : DateTime.MinValue;
     }
 
     private double ParseSize(string sizeStr)
