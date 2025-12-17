@@ -137,7 +137,7 @@ namespace AndroidSideloader
                 Application.Exit();
             }
 
-            string wantedRcloneVersion = "1.68.2";
+            string wantedRcloneVersion = "1.72.1";
             bool rcloneSuccess = false;
 
             rcloneSuccess = downloadRclone(wantedRcloneVersion, false);
