@@ -401,7 +401,6 @@ namespace AndroidSideloader
             gamesListView.View = View.Details;
             gamesListView.FullRowSelect = true;
             gamesListView.GridLines = false;
-            etaLabel.Text = String.Empty;
             speedLabel.Text = String.Empty;
             diskLabel.Text = String.Empty;
 
@@ -965,24 +964,26 @@ namespace AndroidSideloader
 
                 output = await ADB.CopyOBBWithProgressAsync(
                     path,
-                    progress => this.Invoke(() => {
+                    (progress, eta) => this.Invoke(() => {
                         progressBar.Value = progress;
-                        speedLabel.Text = $"Progress: {progress}%";
+                        string etaStr = eta.HasValue && eta.Value.TotalSeconds > 0
+                            ? $" · ETA: {eta.Value:mm\\:ss}"
+                            : "";
+                        speedLabel.Text = $"Progress: {progress}%{etaStr}";
                     }),
                     status => this.Invoke(() => {
                         progressBar.StatusText = status;
-                        etaLabel.Text = status;
                     }),
                     folderName);
 
                 progressBar.Value = 100;
+                progressBar.StatusText = "";
                 changeTitle("Done.");
                 showAvailableSpace();
 
                 ShowPrcOutput(output);
                 changeTitle("");
                 speedLabel.Text = "";
-                etaLabel.Text = "";
             }
         }
 
@@ -2178,9 +2179,13 @@ namespace AndroidSideloader
 
                         var item = new ListViewItem(release);
 
+                        // Add installed version as additional column
+                        ulong installedVersion = 0;
+
                         if (installedVersions.TryGetValue(packagename, out ulong installedVersionInt))
                         {
                             item.ForeColor = ColorInstalled;
+                            installedVersion = installedVersionInt;
 
                             try
                             {
@@ -2224,6 +2229,12 @@ namespace AndroidSideloader
                                 Logger.Log($"An error occurred while rendering game {release[SideloaderRCLONE.GameNameIndex]} in ListView", LogLevel.ERROR);
                                 Logger.Log($"ExMsg: {ex.Message}", LogLevel.ERROR);
                             }
+                        }
+
+                        // Add the installed version to the ListView item
+                        if (installedVersion != 0)
+                        {
+                            item.SubItems[3].Text = $"{item.SubItems[3].Text} ({installedVersion})";
                         }
 
                         if (favoriteView)
@@ -3047,12 +3058,11 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
         public async void cleanupActiveDownloadStatus()
         {
             speedLabel.Text = String.Empty;
-            etaLabel.Text = String.Empty;
             progressBar.Value = 0;
             gamesQueueList.RemoveAt(0);
         }
 
-        public void SetProgress(int progress)
+        public void SetProgress(float progress)
         {
             if (progressBar.InvokeRequired)
             {
@@ -3262,16 +3272,17 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
                     changeTitle("Downloading game " + gameName);
                     speedLabel.Text = "Starting download...";
-                    etaLabel.Text = "Please wait...";
 
-                    //Download
+                    // Track the highest valid progress to prevent brief progress bar flashes during multi-file transfers
+                    float highestValidPercent = 0;
+
+                    // Download
                     while (t1.IsAlive)
                     {
                         try
                         {
                             HttpResponseMessage response = await client.PostAsync("http://127.0.0.1:5572/core/stats", null);
                             string foo = await response.Content.ReadAsStringAsync();
-                            //Debug.WriteLine("RESP CONTENT " + foo);
                             dynamic results = JsonConvert.DeserializeObject<dynamic>(foo);
 
                             if (results["transferring"] != null)
@@ -3308,24 +3319,45 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                 totalSize /= 1000000;
                                 downloadedSize /= 1000000;
 
-                                // Logger.Log("Files: " + transfersComplete.ToString() + "/" + fileCount.ToString() + " (" + Convert.ToInt32((downloadedSize / totalSize) * 100).ToString() + "% Complete)");
-                                // Logger.Log("Downloaded: " + downloadedSize.ToString() + " of " + totalSize.ToString());
-
                                 progressBar.IsIndeterminate = false;
-                                progressBar.Value = Convert.ToInt32((downloadedSize / totalSize) * 100);
+
+                                float percent = 0;
+                                if (totalSize > 0)
+                                {
+                                    percent = (float)(downloadedSize / totalSize * 100);
+                                }
+
+                                // Clamp to 0-99 while download is in progress to prevent brief 100% flashes
+                                percent = Math.Max(0, Math.Min(99, percent));
+
+                                // Only allow progress to increase
+                                if (percent >= highestValidPercent)
+                                {
+                                    highestValidPercent = percent;
+                                }
+                                else
+                                {
+                                    // Progress went backwards? Keep showing the highest valid percent we've seen
+                                    percent = highestValidPercent;
+                                }
+
+                                progressBar.Value = percent;
 
                                 TimeSpan time = TimeSpan.FromSeconds(globalEta);
-                                etaLabel.Text = etaLabel.Text = "ETA: " + time.ToString(@"hh\:mm\:ss") + " left";
 
-                                speedLabel.Text = "DLS: " + transfersComplete.ToString() + "/" + fileCount.ToString() + " files - " + string.Format("{0:0.00}", downloadSpeed) + " MB/s";
+                                UpdateProgressStatus(
+                                    "Downloading",
+                                    (int)transfersComplete + 1,
+                                    (int)fileCount,
+                                    (int)Math.Round(percent),
+                                    time,
+                                    downloadSpeed);
                             }
                         }
                         catch
                         {
                         }
-
                         await Task.Delay(100);
-
                     }
 
                     if (removedownloading)
@@ -3399,18 +3431,34 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
                         if (UsingPublicConfig && otherError == false && gameDownloadOutput.Output != "Download skipped.")
                         {
+                            // ETA tracking for extraction
+                            DateTime extractStart = DateTime.UtcNow;
+
                             Thread extractionThread = new Thread(() =>
                             {
                                 Invoke(new Action(() =>
                                 {
-                                    speedLabel.Text = "Extracting..."; etaLabel.Text = "Please wait...";
+                                    speedLabel.Text = "Extracting...";
                                     progressBar.IsIndeterminate = false;
                                     progressBar.Value = 0;
+                                    progressBar.OperationType = "Extracting";
                                     isInDownloadExtract = true;
                                 }));
+
+                                // Set up extraction callback
+                                Zip.ExtractionProgressCallback = (percent, eta) =>
+                                {
+                                    this.Invoke(() =>
+                                    {
+                                        progressBar.Value = percent;
+                                        UpdateProgressStatus("Extracting", percent: (int)Math.Round(percent), eta: eta);
+
+                                        progressBar.StatusText = $"Extracting · {percent:0.0}%";
+                                    });
+                                };
+
                                 try
                                 {
-                                    progressBar.OperationType = "Extracting";
                                     changeTitle("Extracting " + gameName);
                                     Zip.ExtractFile($"{settings.DownloadDir}\\{gameNameHash}\\{gameNameHash}.7z.001", $"{settings.DownloadDir}", PublicConfigFile.Password);
                                     changeTitle("");
@@ -3425,6 +3473,12 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                     this.Invoke(() => _ = FlexibleMessageBox.Show(Program.form, $"7zip error: {ex.Message}"));
                                     output += new ProcessOutput("", "Extract Failed");
                                 }
+                                finally
+                                {
+                                    // Clear callbacks
+                                    Zip.ExtractionProgressCallback = null;
+                                    Zip.ExtractionStatusCallback = null;
+                                }
                             })
                             {
                                 IsBackground = true
@@ -3435,6 +3489,8 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                             {
                                 await Task.Delay(100);
                             }
+
+                            progressBar.StatusText = ""; // Clear status after extraction
 
                             if (Directory.Exists($"{settings.DownloadDir}\\{gameNameHash}"))
                             {
@@ -3449,8 +3505,6 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                             progressBar.Value = 0;
                             progressBar.IsIndeterminate = false;
                             changeTitle("Installing game APK " + gameName);
-                            etaLabel.Text = "ETA: Wait for install...";
-                            speedLabel.Text = "DLS: Finished";
                             if (File.Exists(Path.Combine(settings.DownloadDir, gameName, "install.txt")))
                             {
                                 isinstalltxt = true;
@@ -3508,7 +3562,6 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                         t.Start();
 
                                         changeTitle($"Sideloading APK...");
-                                        etaLabel.Text = "Installing APK...";
                                         progressBar.IsIndeterminate = false;
                                         progressBar.OperationType = "Installing";
                                         progressBar.Value = 0;
@@ -3516,7 +3569,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                         // Use async method with progress
                                         output += await ADB.SideloadWithProgressAsync(
                                             apkFile,
-                                            progress => this.Invoke(() => {
+                                            (progress, eta) => this.Invoke(() => {
                                                 if (progress == 0)
                                                 {
                                                     progressBar.IsIndeterminate = true;
@@ -3527,16 +3580,26 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                                     progressBar.IsIndeterminate = false;
                                                     progressBar.Value = progress;
                                                 }
+                                                UpdateProgressStatus("Installing", percent: (int)Math.Round(progress), eta: eta);
+                                                progressBar.StatusText = $"Installing · {progress:0.0}%";
                                             }),
                                             status => this.Invoke(() => {
-                                                progressBar.StatusText = status;
-                                                etaLabel.Text = status;
+                                                if (!string.IsNullOrEmpty(status))
+                                                {
+                                                    if (status.Contains("Completing Installation"))
+                                                    { 
+                                                        // "Completing Installation..."
+                                                        speedLabel.Text = status;
+                                                    }
+                                                    progressBar.StatusText = status;
+                                                }
                                             }),
                                             packagename,
                                             Sideloader.gameNameToSimpleName(gameName));
 
                                         t.Stop();
                                         progressBar.IsIndeterminate = false;
+                                        progressBar.StatusText = ""; // Clear status after APK install
 
                                         Debug.WriteLine(wrDelimiter);
                                         if (Directory.Exists($"{settings.DownloadDir}\\{gameName}\\{packagename}"))
@@ -3544,7 +3607,6 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                             deleteOBB(packagename);
 
                                             changeTitle($"Copying {packagename} OBB to device...");
-                                            etaLabel.Text = "Copying OBB...";
                                             progressBar.Value = 0;
                                             progressBar.OperationType = "Copying OBB";
 
@@ -3553,41 +3615,27 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
                                             output += await ADB.CopyOBBWithProgressAsync(
                                                 $"{settings.DownloadDir}\\{gameName}\\{packagename}",
-                                                progress => this.Invoke(() =>
+                                                (progress, eta) => this.Invoke(() =>
                                                 {
                                                     progressBar.Value = progress;
-                                                    speedLabel.Text = $"OBB: {progress}%";
+                                                    UpdateProgressStatus("Copying OBB", percent: (int)Math.Round(progress), eta: eta);
 
                                                     if (!string.IsNullOrEmpty(currentObbStatusBase))
                                                     {
-                                                        if (currentObbStatusBase.StartsWith("Preparing:", StringComparison.OrdinalIgnoreCase) ||
-                                                            currentObbStatusBase.StartsWith("Copying:", StringComparison.OrdinalIgnoreCase))
-                                                        {
-                                                            progressBar.StatusText = currentObbStatusBase;
-                                                        }
-                                                        else
-                                                        {
-                                                            // "filename · 73%"
-                                                            progressBar.StatusText = $"{currentObbStatusBase} · {progress}%";
-                                                        }
+                                                        progressBar.StatusText = $"{currentObbStatusBase} · {progress:0.0}%";
                                                     }
                                                     else
                                                     {
-                                                        // Fallback: just show the numeric percent in the bar
-                                                        progressBar.StatusText = $"{progress}%";
+                                                        progressBar.StatusText = $"{progress:0.0}%";
                                                     }
                                                 }),
                                                 status => this.Invoke(() =>
                                                 {
                                                     currentObbStatusBase = status ?? string.Empty;
-                                                    if (currentObbStatusBase.StartsWith("Preparing:", StringComparison.OrdinalIgnoreCase) ||
-                                                        currentObbStatusBase.StartsWith("Copying:", StringComparison.OrdinalIgnoreCase))
-                                                    {
-                                                        progressBar.StatusText = currentObbStatusBase;
-                                                    }
                                                 }),
                                                 Sideloader.gameNameToSimpleName(gameName));
 
+                                            progressBar.StatusText = ""; // Clear status after OBB copy
                                             changeTitle("");
 
                                             if (!nodeviceonstart | DeviceConnected)
@@ -3632,22 +3680,14 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                 {
                     changeTitle("Refreshing games list, please wait...\n");
                     showAvailableSpace();
-                    listAppsBtn();
 
-                    if (!updateAvailableClicked && !upToDate_Clicked && !NeedsDonation_Clicked && !settings.NodeviceMode && !gamesQueueList.Any())
-                    {
-                        // Reset the initialized flag so initListView rebuilds _allItems with current install status
-                        _allItemsInitialized = false;
-                        _galleryDataSource = null;
-                        initListView(false);
-                    }
+                    await RefreshGameListAsync();
+
                     if (settings.EnableMessageBoxes)
                     {
                         ShowPrcOutput(output);
                     }
                     progressBar.IsIndeterminate = false;
-                    etaLabel.Text = "ETA: Finished Queue";
-                    speedLabel.Text = "DLS: Finished Queue";
                     gamesAreDownloading = false;
                     isinstalling = false;
 
@@ -3756,20 +3796,13 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             showAvailableSpace();
             listAppsBtn();
 
-            if (!updateAvailableClicked && !upToDate_Clicked && !NeedsDonation_Clicked && !settings.NodeviceMode && !gamesQueueList.Any())
-            {
-                // Reset the initialized flag so initListView rebuilds _allItems with current install status
-                _allItemsInitialized = false;
-                _galleryDataSource = null;
-                initListView(false);
-            }
+            await RefreshGameListAsync();
+
             if (settings.EnableMessageBoxes)
             {
                 ShowPrcOutput(output);
             }
             progressBar.IsIndeterminate = false;
-            etaLabel.Text = "ETA: Finished Queue";
-            speedLabel.Text = "DLS: Finished Queue";
             gamesAreDownloading = false;
             isinstalling = false;
 
@@ -4679,7 +4712,7 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
                 await webView21.EnsureCoreWebView2Async(env);
 
                 // Map local folder to a trusted origin (https://app.local)
-                var webroot = Path.Combine(Environment.CurrentDirectory, "webroot");
+                var webroot = Path.Combine(Environment.CurrentDirectory, "trailer");
                 Directory.CreateDirectory(webroot);
                 webView21.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     "app.local", webroot, CoreWebView2HostResourceAccessKind.Allow);
@@ -4702,7 +4735,7 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
         {
             if (!settings.TrailersEnabled) return;
             if (_trailerPlayerInitialized) return;
-            string webroot = Path.Combine(Environment.CurrentDirectory, "webroot");
+            string webroot = Path.Combine(Environment.CurrentDirectory, "trailer");
             Directory.CreateDirectory(webroot);
             string playerHtml = Path.Combine(webroot, "player.html");
 
@@ -4714,29 +4747,27 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
 <meta name=""viewport"" content=""width=device-width,initial-scale=1""/>
 <title>Trailer Player</title>
 <style>
-html,body { margin:0; background:#181A1E; height:100%; overflow:hidden; }
+html,body { margin:0; background:#000; height:100%; overflow:hidden; }
 #player { width:100vw; height:100vh; }
 </style>
 <script src=""https://www.youtube.com/iframe_api""></script>
 <script>
 let player;
 let pendingId = null;
-// Youtube trailer player
 function onYouTubeIframeAPIReady() {
-    // Initialize without video
     player = new YT.Player('player', {
+        width: '100%',
+        height: '100%',
         playerVars: {
-            autoplay: 0,         // prevent autoplay at initialization
-            mute: 1,             // keep muted so subsequent loads can play instantly if desired
-            playsinline: 1,
+            autoplay: 0,
+            mute: 1,
             rel: 0,
-            modestbranding: 1
+            iv_load_policy: 3,
+            fs: 0
         },
         events: {
             'onReady': () => {
-                // Do nothing by default. Only play after we receive a video id message.
                 if (pendingId) {
-                    // If we received a message before ready, load now.
                     player.loadVideoById(pendingId);
                     pendingId = null;
                 }
@@ -4744,7 +4775,6 @@ function onYouTubeIframeAPIReady() {
         }
     });
 }
-// WebView2 message hook: app posts the 11-char video id.
 (function(){
     if (window.chrome && window.chrome.webview) {
         window.chrome.webview.addEventListener('message', e => {
@@ -7148,6 +7178,65 @@ function onYouTubeIframeAPIReady() {
                 sideloadingStatusLabel.Text = "Sideloading: Enabled";
                 sideloadingStatusLabel.ForeColor = Color.FromArgb(93, 203, 173); // Accent green for enabled
             }
+        }
+
+        public void UpdateProgressStatus(string operation,
+            int current = 0,
+            int total = 0,
+            int percent = 0,
+            TimeSpan? eta = null,
+            double? speedMBps = null)
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(() => UpdateProgressStatus(operation, current, total, percent, eta, speedMBps));
+                return;
+            }
+
+            // Sync the progress bar's operation type to the current operation
+            progressBar.OperationType = operation;
+
+            var sb = new StringBuilder();
+
+            // Operation name
+            sb.Append(operation);
+
+            // Percentage
+            if (percent > 0)
+            {
+                sb.Append($" ({percent}%)");
+            }
+
+            // Speed
+            if (speedMBps.HasValue && speedMBps.Value > 0)
+            {
+                sb.Append($" @ {speedMBps.Value:F1} MB/s");
+            }
+
+            // File count if applicable
+            if (total > 1)
+            {
+                sb.Append($" ({current}/{total})");
+            }
+
+            // ETA
+            if (eta.HasValue && eta.Value.TotalSeconds > 0)
+            {
+                sb.Append($" • ETA: {eta.Value:hh\\:mm\\:ss}");
+            }
+
+            speedLabel.Text = sb.ToString();
+        }
+
+        public void ClearProgressStatus()
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(ClearProgressStatus);
+                return;
+            }
+
+            speedLabel.Text = "";
         }
     }
 

@@ -154,13 +154,13 @@ namespace AndroidSideloader
         // Copies and installs an APK with real-time progress reporting using AdvancedSharpAdbClient
         public static async Task<ProcessOutput> SideloadWithProgressAsync(
             string path,
-            Action<int> progressCallback = null,
+            Action<float, TimeSpan?> progressCallback = null,
             Action<string> statusCallback = null,
             string packagename = "",
             string gameName = "")
         {
             statusCallback?.Invoke("Installing APK...");
-            progressCallback?.Invoke(0);
+            progressCallback?.Invoke(0, null);
 
             try
             {
@@ -175,43 +175,87 @@ namespace AndroidSideloader
 
                 statusCallback?.Invoke("Installing APK...");
 
+                // Throttle UI updates to prevent lag
+                DateTime lastProgressUpdate = DateTime.MinValue;
+                float lastReportedPercent = -1;
+                const int ThrottleMs = 100; // Update UI every 100ms
+
+                // Shared ETA engine (percent-units)
+                var eta = new EtaEstimator(alpha: 0.05, reanchorThreshold: 0.20);
+
                 // Create install progress handler
                 Action<InstallProgressEventArgs> installProgress = (args) =>
                 {
-                    // Map PackageInstallProgressState to percentage
-                    int percent = 0;
+                    float percent = 0;
+                    string status = null;
+                    TimeSpan? displayEta = null;
+
                     switch (args.State)
                     {
                         case PackageInstallProgressState.Preparing:
                             percent = 0;
-                            statusCallback?.Invoke("Preparing...");
+                            status = "Preparing...";
+                            eta.Reset();
                             break;
+
                         case PackageInstallProgressState.Uploading:
-                            percent = (int)Math.Round(args.UploadProgress);
-                            statusCallback?.Invoke($"Installing · {args.UploadProgress:F0}%");
+                            percent = (float)args.UploadProgress;
+
+                            // Update ETA engine using percent as units (0..100)
+                            if (percent > 0 && percent < 100)
+                            {
+                                eta.Update(totalUnits: 100, doneUnits: (long)Math.Round(percent));
+                                displayEta = eta.GetDisplayEta();
+                            }
+                            else
+                            {
+                                displayEta = eta.GetDisplayEta();
+                            }
+
+                            status = $"Installing · {percent:0.0}%";
                             break;
+
                         case PackageInstallProgressState.Installing:
                             percent = 100;
-                            statusCallback?.Invoke("Completing Installation...");
+                            status = "Completing Installation...";
+                            displayEta = null;
                             break;
+
                         case PackageInstallProgressState.Finished:
                             percent = 100;
-                            statusCallback?.Invoke("");
+                            status = "";
+                            displayEta = null;
                             break;
+
                         default:
-                            percent = 50;
+                            percent = 100;
+                            status = "";
+                            displayEta = null;
                             break;
                     }
-                    progressCallback?.Invoke(percent);
+
+                    var updateNow = DateTime.UtcNow;
+                    bool shouldUpdate = (updateNow - lastProgressUpdate).TotalMilliseconds >= ThrottleMs
+                                        || Math.Abs(percent - lastReportedPercent) >= 0.1f
+                                        || args.State != PackageInstallProgressState.Uploading;
+
+                    if (shouldUpdate)
+                    {
+                        lastProgressUpdate = updateNow;
+                        lastReportedPercent = percent;
+
+                        // ETA goes back via progress callback (label); status remains percent-only string for inner bar
+                        progressCallback?.Invoke(percent, displayEta);
+                        if (status != null) statusCallback?.Invoke(status);
+                    }
                 };
 
-                // Install the package with progress
                 await Task.Run(() =>
                 {
                     packageManager.InstallPackage(path, installProgress);
                 });
 
-                progressCallback?.Invoke(100);
+                progressCallback?.Invoke(100, null);
                 statusCallback?.Invoke("");
 
                 return new ProcessOutput($"{gameName}: Success\n");
@@ -220,7 +264,6 @@ namespace AndroidSideloader
             {
                 Logger.Log($"SideloadWithProgressAsync error: {ex.Message}", LogLevel.ERROR);
 
-                // Check for signature mismatch errors
                 if (ex.Message.Contains("INSTALL_FAILED") ||
                     ex.Message.Contains("signatures do not match"))
                 {
@@ -241,7 +284,6 @@ namespace AndroidSideloader
                     if (cancelClicked)
                         return new ProcessOutput("", "Installation cancelled by user");
 
-                    // Perform reinstall
                     statusCallback?.Invoke("Performing reinstall...");
 
                     try
@@ -250,26 +292,22 @@ namespace AndroidSideloader
                         var client = GetAdbClient();
                         var packageManager = new PackageManager(client, device);
 
-                        // Backup save data
                         statusCallback?.Invoke("Backing up save data...");
                         _ = RunAdbCommandToString($"pull \"/sdcard/Android/data/{MainForm.CurrPCKG}\" \"{Environment.CurrentDirectory}\"");
 
-                        // Uninstall
                         statusCallback?.Invoke("Uninstalling old version...");
                         packageManager.UninstallPackage(packagename);
 
-                        // Reinstall with progress
                         statusCallback?.Invoke("Reinstalling game...");
                         Action<InstallProgressEventArgs> reinstallProgress = (args) =>
                         {
                             if (args.State == PackageInstallProgressState.Uploading)
                             {
-                                progressCallback?.Invoke((int)Math.Round(args.UploadProgress));
+                                progressCallback?.Invoke((float)args.UploadProgress, null);
                             }
                         };
                         packageManager.InstallPackage(path, reinstallProgress);
 
-                        // Restore save data
                         statusCallback?.Invoke("Restoring save data...");
                         _ = RunAdbCommandToString($"push \"{Environment.CurrentDirectory}\\{MainForm.CurrPCKG}\" /sdcard/Android/data/");
 
@@ -279,7 +317,7 @@ namespace AndroidSideloader
                             Directory.Delete(directoryToDelete, true);
                         }
 
-                        progressCallback?.Invoke(100);
+                        progressCallback?.Invoke(100, null);
                         return new ProcessOutput($"{gameName}: Reinstall: Success\n", "");
                     }
                     catch (Exception reinstallEx)
@@ -295,7 +333,7 @@ namespace AndroidSideloader
         // Copies OBB folder with real-time progress reporting using AdvancedSharpAdbClient
         public static async Task<ProcessOutput> CopyOBBWithProgressAsync(
             string localPath,
-            Action<int> progressCallback = null,
+            Action<float, TimeSpan?> progressCallback = null,
             Action<string> statusCallback = null,
             string gameName = "")
         {
@@ -318,7 +356,7 @@ namespace AndroidSideloader
                 string remotePath = $"/sdcard/Android/obb/{folderName}";
 
                 statusCallback?.Invoke($"Preparing: {folderName}");
-                progressCallback?.Invoke(0);
+                progressCallback?.Invoke(0, null);
 
                 // Delete existing OBB folder and create new one
                 ExecuteShellCommand(client, device, $"rm -rf \"{remotePath}\"");
@@ -328,6 +366,14 @@ namespace AndroidSideloader
                 var files = Directory.GetFiles(localPath, "*", SearchOption.AllDirectories);
                 long totalBytes = files.Sum(f => new FileInfo(f).Length);
                 long transferredBytes = 0;
+
+                // Throttle UI updates to prevent lag
+                DateTime lastProgressUpdate = DateTime.MinValue;
+                float lastReportedPercent = -1;
+                const int ThrottleMs = 100; // Update UI every 100ms
+
+                // Shared ETA engine (bytes-units)
+                var eta = new EtaEstimator(alpha: 0.10, reanchorThreshold: 0.20);
 
                 statusCallback?.Invoke($"Copying: {folderName}");
 
@@ -341,9 +387,6 @@ namespace AndroidSideloader
                         string remoteFilePath = $"{remotePath}/{relativePath}";
                         string fileName = Path.GetFileName(file);
 
-                        // Let UI know which file we're currently on
-                        statusCallback?.Invoke(fileName);
-
                         // Ensure remote directory exists
                         string remoteDir = remoteFilePath.Substring(0, remoteFilePath.LastIndexOf('/'));
                         ExecuteShellCommand(client, device, $"mkdir -p \"{remoteDir}\"");
@@ -352,23 +395,37 @@ namespace AndroidSideloader
                         long fileSize = fileInfo.Length;
                         long capturedTransferredBytes = transferredBytes;
 
-                        // Progress handler for this file
                         Action<SyncProgressChangedEventArgs> progressHandler = (args) =>
                         {
                             long totalProgressBytes = capturedTransferredBytes + args.ReceivedBytesSize;
 
-                            double overallPercent = totalBytes > 0
-                                ? (totalProgressBytes * 100.0) / totalBytes
-                                : 0.0;
+                            float overallPercent = totalBytes > 0
+                                ? (float)(totalProgressBytes * 100.0 / totalBytes)
+                                : 0f;
 
-                            int overallPercentInt = (int)Math.Round(overallPercent);
-                            overallPercentInt = Math.Max(0, Math.Min(100, overallPercentInt));
+                            overallPercent = Math.Max(0, Math.Min(100, overallPercent));
 
-                            // Single source of truth for UI (bar + label + text)
-                            progressCallback?.Invoke(overallPercentInt);
+                            // Update ETA engine in bytes
+                            if (totalBytes > 0 && totalProgressBytes > 0 && overallPercent < 100)
+                            {
+                                eta.Update(totalUnits: totalBytes, doneUnits: totalProgressBytes);
+                            }
+
+                            TimeSpan? displayEta = eta.GetDisplayEta();
+
+                            var now2 = DateTime.UtcNow;
+                            bool shouldUpdate = (now2 - lastProgressUpdate).TotalMilliseconds >= ThrottleMs
+                                                || Math.Abs(overallPercent - lastReportedPercent) >= 0.1f;
+
+                            if (shouldUpdate)
+                            {
+                                lastProgressUpdate = now2;
+                                lastReportedPercent = overallPercent;
+                                progressCallback?.Invoke(overallPercent, displayEta);
+                                statusCallback?.Invoke(fileName);
+                            }
                         };
 
-                        // Push the file with progress
                         using (var stream = File.OpenRead(file))
                         {
                             await Task.Run(() =>
@@ -383,13 +440,11 @@ namespace AndroidSideloader
                             });
                         }
 
-                        // Mark this file as fully transferred
                         transferredBytes += fileSize;
                     }
                 }
 
-                // Ensure final 100% and clear status
-                progressCallback?.Invoke(100);
+                progressCallback?.Invoke(100, null);
                 statusCallback?.Invoke("");
 
                 return new ProcessOutput($"{gameName}: OBB transfer: Success\n", "");
@@ -397,7 +452,6 @@ namespace AndroidSideloader
             catch (Exception ex)
             {
                 Logger.Log($"CopyOBBWithProgressAsync error: {ex.Message}", LogLevel.ERROR);
-
                 return new ProcessOutput("", $"{gameName}: OBB transfer: Failed: {ex.Message}\n");
             }
         }
@@ -654,6 +708,104 @@ namespace AndroidSideloader
             return folder.Contains(".")
                 ? RunAdbCommandToString($"shell rm -rf \"/sdcard/Android/obb/{lastFolder}\" && mkdir \"/sdcard/Android/obb/{lastFolder}\"") + RunAdbCommandToString($"push \"{path}\" \"/sdcard/Android/obb\"")
                 : new ProcessOutput("No OBB Folder found");
+        }
+    }
+
+    internal class EtaEstimator
+    {
+        private readonly double _alpha;                  // EWMA smoothing
+        private readonly double _reanchorThreshold;      // % difference required to re-anchor
+        private readonly double _minSampleSeconds;       // ignore too-short dt
+
+        private DateTime _lastSampleTimeUtc;
+        private long _lastSampleDoneUnits;
+        private double _smoothedUnitsPerSecond;
+
+        private TimeSpan? _etaAnchorValue;
+        private DateTime _etaAnchorTimeUtc;
+
+        public EtaEstimator(double alpha, double reanchorThreshold, double minSampleSeconds = 0.15)
+        {
+            _alpha = alpha;
+            _reanchorThreshold = reanchorThreshold;
+            _minSampleSeconds = minSampleSeconds;
+            Reset();
+        }
+
+        public void Reset()
+        {
+            _lastSampleTimeUtc = DateTime.UtcNow;
+            _lastSampleDoneUnits = 0;
+            _smoothedUnitsPerSecond = 0;
+            _etaAnchorValue = null;
+            _etaAnchorTimeUtc = DateTime.UtcNow;
+        }
+
+        // Updates internal rate estimate and re-anchors ETA
+        // totalUnits: total work units (e.g., 100 for percent, or totalBytes for bytes)
+        // doneUnits:  completed work units so far (e.g., percent, or bytes transferred)
+        public void Update(long totalUnits, long doneUnits)
+        {
+            var now = DateTime.UtcNow;
+            if (totalUnits <= 0) return;
+
+            doneUnits = Math.Max(0, Math.Min(totalUnits, doneUnits));
+
+            long remainingUnits = Math.Max(0, totalUnits - doneUnits);
+
+            double dt = (now - _lastSampleTimeUtc).TotalSeconds;
+            long dUnits = doneUnits - _lastSampleDoneUnits;
+
+            if (dt >= _minSampleSeconds && dUnits > 0)
+            {
+                double instUnitsPerSecond = dUnits / dt;
+
+                if (_smoothedUnitsPerSecond <= 0)
+                    _smoothedUnitsPerSecond = instUnitsPerSecond;
+                else
+                    _smoothedUnitsPerSecond = _alpha * instUnitsPerSecond + (1 - _alpha) * _smoothedUnitsPerSecond;
+
+                _lastSampleTimeUtc = now;
+                _lastSampleDoneUnits = doneUnits;
+            }
+
+            if (_smoothedUnitsPerSecond > 1e-6 && remainingUnits > 0)
+            {
+                var newEta = TimeSpan.FromSeconds(remainingUnits / _smoothedUnitsPerSecond);
+                if (newEta < TimeSpan.Zero) newEta = TimeSpan.Zero;
+
+                if (!_etaAnchorValue.HasValue)
+                {
+                    _etaAnchorValue = newEta;
+                    _etaAnchorTimeUtc = now;
+                }
+                else
+                {
+                    // What countdown would currently show
+                    var predictedNow = _etaAnchorValue.Value - (now - _etaAnchorTimeUtc);
+                    if (predictedNow < TimeSpan.Zero) predictedNow = TimeSpan.Zero;
+
+                    double baseSeconds = Math.Max(1, predictedNow.TotalSeconds);
+                    double diffRatio = Math.Abs(newEta.TotalSeconds - predictedNow.TotalSeconds) / baseSeconds;
+
+                    if (diffRatio > _reanchorThreshold)
+                    {
+                        _etaAnchorValue = newEta;
+                        _etaAnchorTimeUtc = now;
+                    }
+                }
+            }
+        }
+
+        // Returns a countdown ETA for UI display
+        public TimeSpan? GetDisplayEta()
+        {
+            if (!_etaAnchorValue.HasValue) return null;
+
+            var remaining = _etaAnchorValue.Value - (DateTime.UtcNow - _etaAnchorTimeUtc);
+            if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+
+            return TimeSpan.FromSeconds(Math.Ceiling(remaining.TotalSeconds));
         }
     }
 }
