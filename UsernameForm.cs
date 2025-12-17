@@ -12,6 +12,9 @@ namespace AndroidSideloader
         public UsernameForm()
         {
             InitializeComponent();
+
+            // Use same icon as the executable
+            this.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         }
 
         private string defaultText;

@@ -17,6 +17,9 @@ namespace AndroidSideloader
         public SettingsForm()
         {
             InitializeComponent();
+
+            // Use same icon as the executable
+            this.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         }
 
         private void SettingsForm_Load(object sender, EventArgs e)
