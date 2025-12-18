@@ -2207,21 +2207,20 @@ namespace AndroidSideloader
 
                 // Build MR-Fix lookup. map base game name to whether an MR-Fix exists
                 var mrFixGames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                const string MrFixTag = "(MR-Fix)";
 
                 foreach (string[] release in SideloaderRCLONE.games)
                 {
                     string gameName = release[SideloaderRCLONE.GameNameIndex];
+
                     // Check if game name contains "(MR-Fix)" using IndexOf for case-insensitive search
-                    if (gameName.IndexOf("(MR-Fix)", StringComparison.OrdinalIgnoreCase) >= 0)
+                    int mrFixIndex = gameName.IndexOf(MrFixTag, StringComparison.OrdinalIgnoreCase);
+                    if (mrFixIndex >= 0)
                     {
-                        // Extract base game name by removing "(MR-Fix)" suffix
-                        int mrFixIndex = gameName.IndexOf("(MR-Fix)", StringComparison.OrdinalIgnoreCase);
-                        string baseGameName = gameName.Substring(0, mrFixIndex).Trim();
-                        if (gameName.Length > mrFixIndex + 8)
-                        {
-                            baseGameName += gameName.Substring(mrFixIndex + 8);
-                        }
-                        baseGameName = baseGameName.Trim();
+                        string baseGameName =
+                            (gameName.Substring(0, mrFixIndex) +
+                             gameName.Substring(mrFixIndex + MrFixTag.Length)).Trim();
+
                         mrFixGames.Add(baseGameName);
                     }
                 }
@@ -2256,7 +2255,6 @@ namespace AndroidSideloader
                                 if (mrFixGames.Contains(gameName))
                                 {
                                     shouldSkip = true;
-                                    //Logger.Log($"Skipping 0 MB entry for '{gameName}' - MR-Fix version exists");
                                 }
                             }
                         }
@@ -2346,7 +2344,7 @@ namespace AndroidSideloader
                             }
                         }
 
-                        // STEP 4: Replace popularity score with ranking
+                        // Replace popularity score with ranking
                         if (rankedPackages.TryGetValue(packagename, out int rank))
                         {
                             item.SubItems[6].Text = $"#{rank}";

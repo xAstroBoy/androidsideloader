@@ -657,6 +657,7 @@ namespace AndroidSideloader
             if (isActiveSortedColumn) drawOrder = _columnSorter.Order;
             else if (showDefaultSort) drawOrder = DefaultSortOrder;
 
+            // Invert sort arrow for "Popularity" column
             if (e.ColumnIndex == 6 && drawOrder != SortOrder.None)
                 drawOrder = (drawOrder == SortOrder.Ascending) ? SortOrder.Descending : SortOrder.Ascending;
 
