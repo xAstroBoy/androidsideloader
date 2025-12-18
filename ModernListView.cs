@@ -70,27 +70,21 @@ namespace AndroidSideloader
         private readonly HeaderCursorWindow _headerCursor;
         private readonly Timer _columnResizeDebounce = new Timer { Interval = 150 };
 
-        public int DefaultSortColumn { get; set; } = 0;
-        public SortOrder DefaultSortOrder { get; set; } = SortOrder.Ascending;
+        private int DefaultSortColumn = 0;
+        private SortOrder DefaultSortOrder = SortOrder.Ascending;
 
-        public enum ColumnFillMode { StretchLastColumn, Proportional }
+        private enum ColumnFillMode { StretchLastColumn, Proportional }
         private ColumnFillMode _fillMode = ColumnFillMode.Proportional;
-        public ColumnFillMode FillMode
-        {
-            get => _fillMode;
-            set { _fillMode = value; AutoFitColumnsToWidth(); RecalcMarqueeForSelection(); }
-        }
 
-        public bool MarqueeEnabled { get; set; } = true;
-        public bool MarqueeOnlyWhenFocused { get; set; } = false;
-        public int MarqueeStartDelayMs { get; set; } = 250;
-        public int MarqueePauseMs { get; set; } = 500;
-        public float MarqueeSpeedPxPerSecond { get; set; } = 32f;
-        public bool MarqueeFadeEdges { get; set; } = true;
-        public int MarqueeFadeWidthPx { get; set; } = 8;
-        public int MarqueeOvershootPx { get; set; } = 2;
-        public int MinOverflowForMarqueePx { get; set; } = 2;
-        public float MarqueeMinProgressPerSecond { get; set; } = 0.20f;
+        private bool MarqueeEnabled = true;
+        private bool MarqueeOnlyWhenFocused = false;
+        private int MarqueeStartDelayMs = 250;
+        private int MarqueePauseMs = 500;
+        private float MarqueeSpeedPxPerSecond = 30f;
+        private int MarqueeFadeWidthPx = 8;
+        private int MarqueeOvershootPx = 2;
+        private int MinOverflowForMarqueePx = 2;
+        private float MarqueeMinProgressPerSecond = 0.15f;
 
         private readonly Timer _marqueeTimer = new Timer { Interval = 8 }; // ~120 FPS
         private readonly Stopwatch _marqueeSw = Stopwatch.StartNew();
@@ -106,28 +100,12 @@ namespace AndroidSideloader
         private long _marqueeStartAtMs;
 
         private int _hoveredItemIndex = -1;
-        private Rectangle _lastIconBounds = Rectangle.Empty;
         private bool _inPostPaintOverlay;
         private bool _inAutoFit;
         private bool _userIsResizingColumns;
         private float[] _columnRatios = new float[0];
 
         private IntPtr _headerHfont = IntPtr.Zero;
-
-        public int HoveredItemIndex => _hoveredItemIndex;
-        public Rectangle LastIconBounds
-        {
-            get => _lastIconBounds;
-            set
-            {
-                if (_lastIconBounds != value)
-                {
-                    if (!_lastIconBounds.IsEmpty)
-                        _listView.Invalidate(Rectangle.Inflate(_lastIconBounds, 2, 2));
-                    _lastIconBounds = value;
-                }
-            }
-        }
 
         [DllImport("uxtheme.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
@@ -364,7 +342,6 @@ namespace AndroidSideloader
 
         private void OnScrollDetected()
         {
-            _lastIconBounds = Rectangle.Empty;
             _listView.Invalidate();
         }
 
@@ -579,8 +556,7 @@ namespace AndroidSideloader
         private int GetEffectiveOvershootPx()
         {
             int o = Math.Max(0, MarqueeOvershootPx);
-            if (MarqueeFadeEdges)
-                o = Math.Max(o, Math.Max(0, MarqueeFadeWidthPx));
+            o = Math.Max(o, Math.Max(0, MarqueeFadeWidthPx));
             return o;
         }
 
@@ -718,9 +694,7 @@ namespace AndroidSideloader
             if (ShouldDrawMarquee(e.ItemIndex, e.ColumnIndex, isSelected, textBounds, text))
             {
                 DrawMarqueeText(g, textBounds, e.Bounds, text, font, textColor, _marqueeOffsets[e.ColumnIndex]);
-
-                if (MarqueeFadeEdges)
-                    DrawFadeEdgesOverlay(g, textBounds, GetRowColor(e.ItemIndex, isSelected, isHovered), MarqueeFadeWidthPx);
+                DrawFadeEdgesOverlay(g, textBounds, GetRowColor(e.ItemIndex, isSelected, isHovered), MarqueeFadeWidthPx);
 
                 e.DrawDefault = false;
                 return;
