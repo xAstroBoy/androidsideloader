@@ -190,6 +190,7 @@
     <Compile Include="GalleryView.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="ModernListView.cs" />
     <Compile Include="ModernProgessBar.cs">
       <SubType>Component</SubType>
     </Compile>

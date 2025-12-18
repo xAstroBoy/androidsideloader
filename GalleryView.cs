@@ -6,6 +6,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 public enum SortField { Name, LastUpdated, Size, Popularity }
@@ -90,6 +91,24 @@ public class FastGalleryPanel : Control
     public event EventHandler<int> TileRightClicked;
     public event EventHandler<SortField> SortChanged;
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+    private static extern int SetWindowTheme(IntPtr hwnd, string pszSubAppName, string pszSubIdList);
+
+    private void ApplyModernScrollbars()
+    {
+        if (_scrollBar == null || !_scrollBar.IsHandleCreated) return;
+
+        int dark = 1;
+        int hr = DwmSetWindowAttribute(_scrollBar.Handle, 20, ref dark, sizeof(int));
+        if (hr != 0)
+            DwmSetWindowAttribute(_scrollBar.Handle, 19, ref dark, sizeof(int));
+
+        if (SetWindowTheme(_scrollBar.Handle, "DarkMode_Explorer", null) != 0)
+            SetWindowTheme(_scrollBar.Handle, "Explorer", null);
+    }
     private class TileAnimationState
     {
         public float Scale = 1.0f;
@@ -155,6 +174,8 @@ public class FastGalleryPanel : Control
             _isScrolling = false;
             Invalidate();
         };
+
+        _scrollBar.HandleCreated += (s, e) => ApplyModernScrollbars();
         Controls.Add(_scrollBar);
 
         // Animation timer (~120fps)
@@ -353,10 +374,10 @@ public class FastGalleryPanel : Control
 
             case SortField.Popularity:
                 if (_currentSortDirection == SortDirection.Ascending)
-                    _items = _items.OrderBy(i => ParsePopularity(i.SubItems.Count > 6 ? i.SubItems[6].Text : "0"))
+                    _items = _items.OrderByDescending(i => ParsePopularity(i.SubItems.Count > 6 ? i.SubItems[6].Text : "-"))
                                    .ThenBy(i => i.Text, new GameNameComparer()).ToList();
                 else
-                    _items = _items.OrderByDescending(i => ParsePopularity(i.SubItems.Count > 6 ? i.SubItems[6].Text : "0"))
+                    _items = _items.OrderBy(i => ParsePopularity(i.SubItems.Count > 6 ? i.SubItems[6].Text : "-"))
                                    .ThenBy(i => i.Text, new GameNameComparer()).ToList();
                 break;
         }
@@ -378,12 +399,35 @@ public class FastGalleryPanel : Control
         Invalidate();
     }
 
-    private double ParsePopularity(string popStr)
+    private int ParsePopularity(string popStr)
     {
-        if (double.TryParse(popStr?.Trim(), System.Globalization.NumberStyles.Any,
-            System.Globalization.CultureInfo.InvariantCulture, out double pop))
-            return pop;
-        return 0;
+        if (string.IsNullOrEmpty(popStr))
+            return int.MaxValue; // Unranked goes to end
+
+        popStr = popStr.Trim();
+
+        // Handle new format: "#123" or "-"
+        if (popStr == "-")
+        {
+            return int.MaxValue; // Unranked items sort to the end
+        }
+
+        if (popStr.StartsWith("#"))
+        {
+            string numPart = popStr.Substring(1);
+            if (int.TryParse(numPart, out int rank))
+            {
+                return rank;
+            }
+        }
+
+        // Fallback: try parsing as raw number
+        if (int.TryParse(popStr, out int rawNum))
+        {
+            return rawNum;
+        }
+
+        return int.MaxValue; // Unparseable goes to end
     }
 
     // Custom sort to match list sort behaviour: '_' before digits, digits before letters (case-insensitive)
@@ -445,9 +489,39 @@ public class FastGalleryPanel : Control
 
     private double ParseSize(string sizeStr)
     {
-        if (double.TryParse(sizeStr?.Trim(), System.Globalization.NumberStyles.Any,
-            System.Globalization.CultureInfo.InvariantCulture, out double mb))
-            return mb;
+        if (string.IsNullOrEmpty(sizeStr))
+            return 0;
+
+        // Remove whitespace
+        sizeStr = sizeStr.Trim();
+
+        // Handle new format: "1.23 GB" or "123 MB"
+        if (sizeStr.EndsWith(" GB", StringComparison.OrdinalIgnoreCase))
+        {
+            string numPart = sizeStr.Substring(0, sizeStr.Length - 3).Trim();
+            if (double.TryParse(numPart, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out double gb))
+            {
+                return gb * 1024.0; // Convert GB to MB for consistent sorting
+            }
+        }
+        else if (sizeStr.EndsWith(" MB", StringComparison.OrdinalIgnoreCase))
+        {
+            string numPart = sizeStr.Substring(0, sizeStr.Length - 3).Trim();
+            if (double.TryParse(numPart, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out double mb))
+            {
+                return mb;
+            }
+        }
+
+        // Fallback: try parsing as raw number
+        if (double.TryParse(sizeStr, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out double rawMb))
+        {
+            return rawMb;
+        }
+
         return 0;
     }
 
@@ -899,7 +973,7 @@ public class FastGalleryPanel : Control
         // Size badge (top right) - always visible
         if (item.SubItems.Count > 5)
         {
-            string sizeText = FormatSize(item.SubItems[5].Text);
+            string sizeText = item.SubItems[5].Text;
             if (!string.IsNullOrEmpty(sizeText))
             {
                 DrawRightAlignedBadge(g, sizeText, x + scaledW - thumbPadding - 4, rightBadgeY, 1.0f);

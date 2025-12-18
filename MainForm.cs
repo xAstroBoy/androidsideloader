@@ -127,8 +127,17 @@ namespace AndroidSideloader
             gamesQueListBox.DataSource = gamesQueueList;
             SetCurrentLogPath();
             StartTimers();
+
             lvwColumnSorter = new ListViewColumnSorter();
             gamesListView.ListViewItemSorter = lvwColumnSorter;
+
+            // Initialize modern ListView renderer
+            _listViewRenderer = new ModernListView(gamesListView, lvwColumnSorter);
+
+            // Set a larger item height for increased spacing between rows
+            ImageList rowSpacingImageList = new ImageList();
+            rowSpacingImageList.ImageSize = new Size(1, 28);
+            gamesListView.SmallImageList = rowSpacingImageList;
 
             SubscribeToHoverEvents(questInfoPanel);
 
@@ -2163,6 +2172,62 @@ namespace AndroidSideloader
                 Logger.Log($"Cloud versions precomputed in {sw.ElapsedMilliseconds}ms");
                 sw.Restart();
 
+                // Calculate popularity rankings
+                var popularityScores = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (string[] release in SideloaderRCLONE.games)
+                {
+                    string packagename = release[SideloaderRCLONE.PackageNameIndex];
+
+                    // Parse popularity score from column 6
+                    if (release.Length > 6 && double.TryParse(release[6], out double score))
+                    {
+                        // Track the highest score per package
+                        if (popularityScores.TryGetValue(packagename, out var existing))
+                        {
+                            if (score > existing)
+                                popularityScores[packagename] = score;
+                        }
+                        else
+                        {
+                            popularityScores[packagename] = score;
+                        }
+                    }
+                }
+
+                // Sort packages by popularity (descending) and assign rankings
+                var rankedPackages = popularityScores
+                    .Where(kvp => kvp.Value > 0) // Exclude 0.00 scores
+                    .OrderByDescending(kvp => kvp.Value)
+                    .Select((kvp, index) => new { Package = kvp.Key, Rank = index + 1 })
+                    .ToDictionary(x => x.Package, x => x.Rank, StringComparer.OrdinalIgnoreCase);
+
+                Logger.Log($"Popularity rankings calculated for {rankedPackages.Count} games in {sw.ElapsedMilliseconds}ms");
+                sw.Restart();
+
+                // Build MR-Fix lookup. map base game name to whether an MR-Fix exists
+                var mrFixGames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                const string MrFixTag = "(MR-Fix)";
+
+                foreach (string[] release in SideloaderRCLONE.games)
+                {
+                    string gameName = release[SideloaderRCLONE.GameNameIndex];
+
+                    // Check if game name contains "(MR-Fix)" using IndexOf for case-insensitive search
+                    int mrFixIndex = gameName.IndexOf(MrFixTag, StringComparison.OrdinalIgnoreCase);
+                    if (mrFixIndex >= 0)
+                    {
+                        string baseGameName =
+                            (gameName.Substring(0, mrFixIndex) +
+                             gameName.Substring(mrFixIndex + MrFixTag.Length)).Trim();
+
+                        mrFixGames.Add(baseGameName);
+                    }
+                }
+
+                Logger.Log($"MR-Fix lookup built with {mrFixGames.Count} games in {sw.ElapsedMilliseconds}ms");
+                sw.Restart();
+
                 // Process games on background thread
                 await Task.Run(() =>
                 {
@@ -2179,7 +2244,27 @@ namespace AndroidSideloader
 
                         var item = new ListViewItem(release);
 
-                        // Add installed version as additional column
+                        // Check if this is a 0 MB entry that should be excluded
+                        bool shouldSkip = false;
+                        if (release.Length > 5 && double.TryParse(release[5], out double sizeInMB))
+                        {
+                            // If size is 0 MB and this is not already an MR-Fix version
+                            if (sizeInMB == 0 && gameName.IndexOf("(MR-Fix)", StringComparison.OrdinalIgnoreCase) < 0)
+                            {
+                                // Check if there's an MR-Fix version of this game
+                                if (mrFixGames.Contains(gameName))
+                                {
+                                    shouldSkip = true;
+                                }
+                            }
+                        }
+
+                        if (shouldSkip)
+                        {
+                            continue; // Skip this entry
+                        }
+
+                        // Show the installed version
                         ulong installedVersion = 0;
 
                         if (installedVersions.TryGetValue(packagename, out ulong installedVersionInt))
@@ -2231,10 +2316,43 @@ namespace AndroidSideloader
                             }
                         }
 
-                        // Add the installed version to the ListView item
                         if (installedVersion != 0)
                         {
-                            item.SubItems[3].Text = $"{item.SubItems[3].Text} ({installedVersion})";
+                            // Show the installed version and attach 'v' to both versions
+                            item.SubItems[3].Text = $"v{item.SubItems[3].Text} / v{installedVersion}";
+                        }
+                        else
+                        {
+                            // Attach 'v' to remote version
+                            item.SubItems[3].Text = $"v{item.SubItems[3].Text}";
+                        }
+
+                        // Remove ' UTC' from last updated
+                        item.SubItems[4].Text = item.SubItems[4].Text.Replace(" UTC", "");
+
+                        // Convert size to GB or MB
+                        if (double.TryParse(item.SubItems[5].Text, out double itemSizeInMB))
+                        {
+                            if (itemSizeInMB >= 1024)
+                            {
+                                double sizeInGB = itemSizeInMB / 1024;
+                                item.SubItems[5].Text = $"{sizeInGB:F2} GB";
+                            }
+                            else
+                            {
+                                item.SubItems[5].Text = $"{itemSizeInMB:F0} MB";
+                            }
+                        }
+
+                        // Replace popularity score with ranking
+                        if (rankedPackages.TryGetValue(packagename, out int rank))
+                        {
+                            item.SubItems[6].Text = $"#{rank}";
+                        }
+                        else
+                        {
+                            // Unranked (0.00 popularity or not found)
+                            item.SubItems[6].Text = "-";
                         }
 
                         if (favoriteView)
@@ -4382,19 +4500,34 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
         private void listView1_ColumnClick(object sender, ColumnClickEventArgs e)
         {
-            // Determine if clicked column is already the column that is being sorted.
+            // Determine sort order
             if (e.Column == lvwColumnSorter.SortColumn)
             {
-                // Reverse the current sort direction for this column.
                 lvwColumnSorter.Order = lvwColumnSorter.Order == SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending;
             }
             else
             {
                 lvwColumnSorter.SortColumn = e.Column;
-                lvwColumnSorter.Order = e.Column == 4 ? SortOrder.Descending : SortOrder.Ascending;
+                lvwColumnSorter.Order =
+                    (e.Column == 4 || e.Column == 5) ? SortOrder.Descending :
+                    (e.Column == 6) ? SortOrder.Ascending :
+                    SortOrder.Ascending;
             }
-            // Perform the sort with these new sort options.
-            gamesListView.Sort();
+
+            // Suspend drawing during sort
+            gamesListView.BeginUpdate();
+            try
+            {
+                gamesListView.Sort();
+            }
+            finally
+            {
+                gamesListView.EndUpdate();
+            }
+
+            // Invalidate header to update sort indicators
+            gamesListView.Invalidate(new Rectangle(0, 0, gamesListView.ClientSize.Width,
+                gamesListView.Font.Height + 8));
         }
 
         private void CheckEnter(object sender, System.Windows.Forms.KeyPressEventArgs e)
@@ -7252,6 +7385,13 @@ function onYouTubeIframeAPIReady() {
             {
                 action.Invoke();
             }
+        }
+
+        public static void SetStyle(this Control control, ControlStyles styles, bool value)
+        {
+            typeof(Control).GetMethod("SetStyle",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                ?.Invoke(control, new object[] { styles, value });
         }
     }
 }
