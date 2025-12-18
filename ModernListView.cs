@@ -612,7 +612,7 @@ namespace AndroidSideloader
 
             var textBounds = new Rectangle(e.Bounds.X + CellPaddingX, e.Bounds.Y, e.Bounds.Width - CellPaddingTotalX, e.Bounds.Height);
 
-            var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
+            var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
             if (e.Header.TextAlign == HorizontalAlignment.Center)
                 flags |= TextFormatFlags.HorizontalCenter;
             else if (e.Header.TextAlign == HorizontalAlignment.Right)
@@ -700,7 +700,7 @@ namespace AndroidSideloader
                 return;
             }
 
-            var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
+            var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
             flags |= (e.ColumnIndex > 2) ? TextFormatFlags.HorizontalCenter : TextFormatFlags.Left;
             TextRenderer.DrawText(g, text, font, textBounds, textColor, flags);
 
