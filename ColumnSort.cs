@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Windows.Forms;
 
 /// <summary>
@@ -41,23 +42,41 @@ public class ListViewColumnSorter : IComparer
         ListViewItem listviewX = (ListViewItem)x;
         ListViewItem listviewY = (ListViewItem)y;
 
-        // Determine if the column requires numeric comparison
-        if (SortColumn == 3 || SortColumn == 5) // Numeric columns: VersionCodeIndex, VersionNameIndex
+        // Special handling for column 6 (Popularity ranking)
+        if (SortColumn == 6)
         {
-            try
-            {
-                // Parse and compare numeric values directly
-                int xNum = ParseNumber(listviewX.SubItems[SortColumn].Text);
-                int yNum = ParseNumber(listviewY.SubItems[SortColumn].Text);
+            string textX = listviewX.SubItems[SortColumn].Text;
+            string textY = listviewY.SubItems[SortColumn].Text;
 
-                // Compare numerically
-                compareResult = xNum.CompareTo(yNum);
-            }
-            catch
+            // Extract numeric values from "#1", "#10", etc.
+            // "-" represents unranked and should go to the end
+            int rankX = int.MaxValue; // Default for unranked (-)
+            int rankY = int.MaxValue;
+
+            if (textX.StartsWith("#") && int.TryParse(textX.Substring(1), out int parsedX))
             {
-                // Fallback to string comparison if parsing fails
-                compareResult = ObjectCompare.Compare(listviewX.SubItems[SortColumn].Text, listviewY.SubItems[SortColumn].Text);
+                rankX = parsedX;
             }
+
+            if (textY.StartsWith("#") && int.TryParse(textY.Substring(1), out int parsedY))
+            {
+                rankY = parsedY;
+            }
+
+            // Compare the numeric ranks
+            compareResult = rankX.CompareTo(rankY);
+        }
+        // Special handling for column 5 (Size)
+        else if (SortColumn == 5)
+        {
+            string textX = listviewX.SubItems[SortColumn].Text;
+            string textY = listviewY.SubItems[SortColumn].Text;
+
+            double sizeX = ParseSize(textX);
+            double sizeY = ParseSize(textY);
+
+            // Compare the numeric sizes
+            compareResult = sizeX.CompareTo(sizeY);
         }
         else
         {
@@ -89,6 +108,49 @@ public class ListViewColumnSorter : IComparer
     {
         // Directly attempt to parse the string as an integer
         return int.TryParse(text, out int result) ? result : 0;
+    }
+
+    /// <summary>
+    /// Parses size strings with units (GB/MB) and converts them to MB for comparison.
+    /// </summary>
+    /// <param name="sizeStr">Size string (e.g., "1.23 GB", "123 MB")</param>
+    /// <returns>Size in MB as a double</returns>
+    private double ParseSize(string sizeStr)
+    {
+        if (string.IsNullOrEmpty(sizeStr))
+            return 0;
+
+        // Remove whitespace
+        sizeStr = sizeStr.Trim();
+
+        // Handle new format: "1.23 GB" or "123 MB"
+        if (sizeStr.EndsWith(" GB", StringComparison.OrdinalIgnoreCase))
+        {
+            string numPart = sizeStr.Substring(0, sizeStr.Length - 3).Trim();
+            if (double.TryParse(numPart, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out double gb))
+            {
+                return gb * 1024.0; // Convert GB to MB for consistent sorting
+            }
+        }
+        else if (sizeStr.EndsWith(" MB", StringComparison.OrdinalIgnoreCase))
+        {
+            string numPart = sizeStr.Substring(0, sizeStr.Length - 3).Trim();
+            if (double.TryParse(numPart, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out double mb))
+            {
+                return mb;
+            }
+        }
+
+        // Fallback: try parsing as raw number
+        if (double.TryParse(sizeStr, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out double rawMb))
+        {
+            return rawMb;
+        }
+
+        return 0;
     }
 
     /// <summary>
