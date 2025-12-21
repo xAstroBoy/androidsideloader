@@ -76,8 +76,6 @@ namespace AndroidSideloader
         private enum ColumnFillMode { StretchLastColumn, Proportional }
         private ColumnFillMode _fillMode = ColumnFillMode.Proportional;
 
-        private bool MarqueeEnabled = true;
-        private bool MarqueeOnlyWhenFocused = false;
         private int MarqueeStartDelayMs = 250;
         private int MarqueePauseMs = 500;
         private float MarqueeSpeedPxPerSecond = 30f;
@@ -342,7 +340,38 @@ namespace AndroidSideloader
 
         private void OnScrollDetected()
         {
-            _listView.Invalidate();
+            if (!_listView.IsHandleCreated) 
+                return;
+
+            // Keep hover state in sync after scroll without forcing a full repaint
+            UpdateHoverFromCursor();
+        }
+
+        private void UpdateHoverFromCursor()
+        {
+            if (!_listView.IsHandleCreated)
+                return;
+
+            Point clientPt = _listView.PointToClient(Control.MousePosition);
+            int newHoveredIndex = -1;
+
+            if (_listView.ClientRectangle.Contains(clientPt) && !IsPointInHeader(clientPt))
+            {
+                var hit = _listView.HitTest(clientPt);
+                newHoveredIndex = hit.Item != null ? hit.Item.Index : -1;
+            }
+
+            if (newHoveredIndex == _hoveredItemIndex)
+                return;
+
+            int oldIndex = _hoveredItemIndex;
+            _hoveredItemIndex = newHoveredIndex;
+
+            if (oldIndex >= 0 && oldIndex < _listView.Items.Count)
+                _listView.RedrawItems(oldIndex, oldIndex, true);
+
+            if (newHoveredIndex >= 0 && newHoveredIndex < _listView.Items.Count)
+                _listView.RedrawItems(newHoveredIndex, newHoveredIndex, true);
         }
 
         private void OnHandleCreated(object sender, EventArgs e)
@@ -741,11 +770,7 @@ namespace AndroidSideloader
 
         private bool ShouldDrawMarquee(int itemIndex, int columnIndex, bool isSelected, Rectangle textBounds, string text)
         {
-            if (!MarqueeEnabled) return false;
             if (!isSelected) return false;
-
-            if (MarqueeOnlyWhenFocused && !_listView.Focused)
-                return false;
 
             if (itemIndex != _marqueeSelectedIndex) return false;
             if (string.IsNullOrEmpty(text)) return false;
@@ -1061,18 +1086,6 @@ namespace AndroidSideloader
 
         private void UpdateMarqueeTimerState()
         {
-            if (!MarqueeEnabled)
-            {
-                if (_marqueeTimer.Enabled) _marqueeTimer.Stop();
-                return;
-            }
-
-            if (MarqueeOnlyWhenFocused && !_listView.Focused)
-            {
-                if (_marqueeTimer.Enabled) _marqueeTimer.Stop();
-                return;
-            }
-
             bool any = false;
             for (int i = 0; i < _marqueeMax.Length; i++)
             {
@@ -1096,9 +1109,6 @@ namespace AndroidSideloader
 
         private void UpdateMarquee()
         {
-            if (!MarqueeEnabled) { _marqueeTimer.Stop(); return; }
-            if (MarqueeOnlyWhenFocused && !_listView.Focused) { _marqueeTimer.Stop(); return; }
-
             var active = GetActiveSelectedItem();
             int idx = active != null ? active.Index : -1;
             if (idx != _marqueeSelectedIndex)
