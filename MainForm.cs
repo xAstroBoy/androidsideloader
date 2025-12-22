@@ -4069,7 +4069,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                 using (Form dialog = new Form())
                 {
                     dialog.Text = "Wireless ADB Options";
-                    dialog.Size = new Size(380, 130);
+                    dialog.Size = new Size(386, 130);
                     dialog.StartPosition = FormStartPosition.CenterParent;
                     dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
                     dialog.MaximizeBox = false;
@@ -4144,7 +4144,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             using (Form dialog = new Form())
             {
                 dialog.Text = "Wireless ADB Connection";
-                dialog.Size = new Size(450, 130);
+                dialog.Size = new Size(456, 130);
                 dialog.StartPosition = FormStartPosition.CenterParent;
                 dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
                 dialog.MaximizeBox = false;
