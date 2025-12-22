@@ -3089,13 +3089,10 @@ Additional Thanks & Resources
                 await Task.Delay(100);
             }
 
-            // Reset the initialized flag so initListView rebuilds _allItems with current install status
-            _allItemsInitialized = false;
-            _galleryDataSource = null;
-
-            initListView(false);
             isLoading = false;
 
+            // Use RefreshGameListAsync to preserve filter state
+            await RefreshGameListAsync();
             changeTitle("");
         }
 
@@ -4649,13 +4646,9 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                 }
 
                 changeTitle("Refreshing games list...");
-
-                // Reset the initialized flag so initListView rebuilds _allItems with current install status
-                _allItemsInitialized = false;
-                _galleryDataSource = null;
-
                 listAppsBtn();
-                initListView(false);
+                // Use RefreshGameListAsync to preserve filter state
+                _ = RefreshGameListAsync();
             }
             bool dialogIsUp = false;
             if (keyData == Keys.F1 && !dialogIsUp)
@@ -5182,13 +5175,7 @@ function onYouTubeIframeAPIReady() {
             }
 
             changeTitle("Refreshing installed apps and checking for updates...");
-
-            // Reset the initialized flag so initListView rebuilds _allItems with current install status
-            _allItemsInitialized = false;
-            _galleryDataSource = null;
-
             listAppsBtn();
-            initListView(false);
 
             if (SideloaderRCLONE.games.Count < 1)
             {
@@ -5196,6 +5183,9 @@ function onYouTubeIframeAPIReady() {
                     "There are no games in rclone, please check your internet connection and verify the config is working properly.");
                 return;
             }
+
+            // Use RefreshGameListAsync to preserve filter state
+            _ = RefreshGameListAsync();
         }
 
         private void gamesListView_MouseDoubleClick(object sender, MouseEventArgs e)
@@ -5741,6 +5731,12 @@ function onYouTubeIframeAPIReady() {
                     _fastGallery.UpdateItems(_allItems);
                 }
             }
+
+            // Clear other filter states
+            updateAvailableClicked = false;
+            upToDate_Clicked = false;
+            NeedsDonation_Clicked = false;
+            UpdateFilterButtonStates();
         }
 
         public async void UpdateQuestInfoPanel()
@@ -7163,6 +7159,26 @@ function onYouTubeIframeAPIReady() {
             bool wasUpdateAvailableClicked = updateAvailableClicked;
             bool wasUpToDateClicked = upToDate_Clicked;
             bool wasNeedsDonationClicked = NeedsDonation_Clicked;
+            bool wasFavoritesView = favoriteSwitcher.Text == "ALL";
+
+            // Save the currently selected package name to restore after refresh
+            string selectedPackageName = null;
+            if (gamesListView.SelectedItems.Count > 0)
+            {
+                var selectedItem = gamesListView.SelectedItems[0];
+                if (selectedItem.SubItems.Count > 2)
+                {
+                    selectedPackageName = selectedItem.SubItems[2].Text;
+                }
+            }
+            else if (isGalleryView && _fastGallery != null)
+            {
+                var galleryItem = _fastGallery.GetItemAtIndex(_fastGallery._selectedIndex);
+                if (galleryItem != null && galleryItem.SubItems.Count > 2)
+                {
+                    selectedPackageName = galleryItem.SubItems[2].Text;
+                }
+            }
 
             // Temporarily clear filter states
             updateAvailableClicked = false;
@@ -7188,6 +7204,13 @@ function onYouTubeIframeAPIReady() {
             isGalleryView = wasGalleryView;
 
             // Reapply the active filter
+            if (wasFavoritesView)
+            {
+                // Reapply favorites filter
+                favoriteSwitcher.Text = "FAVORITES"; // Reset text first
+                favoriteSwitcher_Click(favoriteSwitcher, EventArgs.Empty); // This will toggle to show favorites and set text to "ALL"
+            }
+
             if (wasUpToDateClicked)
             {
                 upToDate_Clicked = true;
@@ -7209,8 +7232,38 @@ function onYouTubeIframeAPIReady() {
                 gamesGalleryView.Visible = true;
                 PopulateGalleryView();
             }
+
+            // Restore selection and scroll to the previously selected item
+            if (!string.IsNullOrEmpty(selectedPackageName))
+            {
+                RestoreSelectionByPackageName(selectedPackageName);
+            }
         }
 
+        private void RestoreSelectionByPackageName(string packageName)
+        {
+            if (string.IsNullOrEmpty(packageName))
+                return;
+
+            // Restore in ListView
+            foreach (ListViewItem item in gamesListView.Items)
+            {
+                if (item.SubItems.Count > 2 &&
+                    item.SubItems[2].Text.Equals(packageName, StringComparison.OrdinalIgnoreCase))
+                {
+                    item.Selected = true;
+                    item.Focused = true;
+                    item.EnsureVisible();
+                    break;
+                }
+            }
+
+            // Restore in Gallery view
+            if (isGalleryView && _fastGallery != null)
+            {
+                _fastGallery.ScrollToPackage(packageName);
+            }
+        }
         private async void timer_DeviceCheck(object sender, EventArgs e)
         {
             // Skip if a device is connected, we're in the middle of loading or other operations
@@ -7241,13 +7294,9 @@ function onYouTubeIframeAPIReady() {
                     await CheckForDevice();
                     changeTitlebarToDevice();
                     showAvailableSpace();
-
-                    // Reset the initialized flag so initListView rebuilds _allItems with current install status
-                    _allItemsInitialized = false;
-                    _galleryDataSource = null;
-
                     listAppsBtn();
-                    initListView(false);
+                    // Use RefreshGameListAsync to preserve filter state
+                    await RefreshGameListAsync();
                     UpdateStatusLabels();
                 }
             }

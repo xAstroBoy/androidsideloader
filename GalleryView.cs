@@ -52,7 +52,7 @@ public class FastGalleryPanel : Control
 
     // Interaction
     private int _hoveredIndex = -1;
-    private int _selectedIndex = -1;
+    public int _selectedIndex = -1;
     private bool _isHoveringDeleteButton = false;
 
     // Context Menu & Favorites

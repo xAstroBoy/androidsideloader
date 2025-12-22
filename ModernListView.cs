@@ -80,7 +80,6 @@ namespace AndroidSideloader
         private int MarqueePauseMs = 500;
         private float MarqueeSpeedPxPerSecond = 30f;
         private int MarqueeFadeWidthPx = 8;
-        private int MarqueeOvershootPx = 2;
         private int MinOverflowForMarqueePx = 2;
         private float MarqueeMinProgressPerSecond = 0.15f;
 
@@ -582,13 +581,6 @@ namespace AndroidSideloader
             return (itemIndex % 2 == 1) ? RowAlt : RowNormal;
         }
 
-        private int GetEffectiveOvershootPx()
-        {
-            int o = Math.Max(0, MarqueeOvershootPx);
-            o = Math.Max(o, Math.Max(0, MarqueeFadeWidthPx));
-            return o;
-        }
-
         private void PaintHeaderRightGap(IntPtr headerHandle)
         {
             if (headerHandle == IntPtr.Zero || !_listView.IsHandleCreated) return;
@@ -1010,8 +1002,6 @@ namespace AndroidSideloader
             float[] oldMax = (float[])_marqueeMax.Clone();
             ComputeMarqueeMaxForSelectedRow();
 
-            int overshoot = GetEffectiveOvershootPx();
-
             for (int i = 0; i < _marqueeOffsets.Length; i++)
             {
                 if (_marqueeMax[i] <= 0f)
@@ -1024,10 +1014,10 @@ namespace AndroidSideloader
                 }
 
                 float overflow = _marqueeMax[i];
-                float travel = overflow + (2f * overshoot);
+                float travel = overflow + (2f * MarqueeFadeWidthPx);
                 float p = Clamp01(_marqueeProgress[i]);
                 _marqueeProgress[i] = p;
-                _marqueeOffsets[i] = (Ease(p) * travel) - overshoot;
+                _marqueeOffsets[i] = (Ease(p) * travel) - MarqueeFadeWidthPx;
             }
 
             UpdateMarqueeTimerState();
@@ -1137,8 +1127,6 @@ namespace AndroidSideloader
             int pauseMs = Math.Max(0, MarqueePauseMs);
             float speed = Math.Max(1f, MarqueeSpeedPxPerSecond);
 
-            int overshoot = GetEffectiveOvershootPx();
-
             for (int col = 0; col < _marqueeOffsets.Length; col++)
             {
                 float overflow = _marqueeMax[col];
@@ -1165,7 +1153,7 @@ namespace AndroidSideloader
                 int dir = _marqueeDirs[col];
                 if (dir == 0) dir = 1;
 
-                float travel = overflow + (2f * overshoot);
+                float travel = overflow + (2f * MarqueeFadeWidthPx);
 
                 float pSpeed = speed / (1.5f * travel);
                 pSpeed = Math.Max(pSpeed, MarqueeMinProgressPerSecond);
@@ -1185,7 +1173,7 @@ namespace AndroidSideloader
                     _marqueeHoldMs[col] = pauseMs;
                 }
 
-                float newOffset = (Ease(p) * travel) - overshoot;
+                float newOffset = (Ease(p) * travel) - MarqueeFadeWidthPx;
 
                 if (Math.Abs(newOffset - _marqueeOffsets[col]) > 0.02f || Math.Abs(p - _marqueeProgress[col]) > 0.0005f)
                 {
