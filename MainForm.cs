@@ -2845,7 +2845,15 @@ namespace AndroidSideloader
             {
                 await Task.Run(() => remotesList.Invoke(() =>
                 {
-                    remotesList.SelectedIndex = 0;
+                    if (!string.IsNullOrWhiteSpace(settings.selectedMirror))
+                    {
+                        int i = remotesList.Items.IndexOf(settings.selectedMirror);
+                        if (i >= 0)
+                            remotesList.SelectedIndex = i;
+                        else
+                            remotesList.SelectedIndex = 0;
+                    }
+
                     string selectedRemote = remotesList.SelectedItem.ToString();
                     currentRemote = "";
 
@@ -4644,6 +4652,9 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                     UsingPublicConfig = false;
                     remotesList.Invoke(() => { currentRemote = "VRP-mirror" + selectedRemote; });
                 }
+
+                settings.selectedMirror = selectedRemote;
+                settings.Save();
 
                 await refreshCurrentMirror("Refreshing App List...");
                 UpdateStatusLabels();

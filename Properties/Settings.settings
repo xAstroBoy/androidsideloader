@@ -191,5 +191,7 @@
     <Setting Name="proxyPort" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
+    <Setting Name="selectedMirror" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
   </Settings>
 </SettingsFile>
