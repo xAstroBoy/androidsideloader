@@ -170,7 +170,7 @@ namespace JR.Utils.GUI.Forms
                 titleLabel.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
                 titleLabel.Location = new System.Drawing.Point(0, 0);
                 titleLabel.Name = "titleLabel";
-                titleLabel.Padding = new System.Windows.Forms.Padding(18, 0, 0, 0);
+                titleLabel.Padding = new System.Windows.Forms.Padding(12, 0, 0, 0);
                 titleLabel.Size = new System.Drawing.Size(218, 28);
                 titleLabel.TabIndex = 0;
                 titleLabel.Text = "<Caption>";
@@ -198,7 +198,7 @@ namespace JR.Utils.GUI.Forms
                 //
                 button1.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
                 button1.DialogResult = System.Windows.Forms.DialogResult.OK;
-                button1.Location = new System.Drawing.Point(16, 80);
+                button1.Location = new System.Drawing.Point(26, 80);
                 button1.Name = "button1";
                 button1.Size = new System.Drawing.Size(75, 28);
                 button1.TabIndex = 2;
@@ -222,7 +222,7 @@ namespace JR.Utils.GUI.Forms
                 richTextBoxMessage.BorderStyle = System.Windows.Forms.BorderStyle.None;
                 richTextBoxMessage.DataBindings.Add(new System.Windows.Forms.Binding("Text", FlexibleMessageBoxFormBindingSource, "MessageText", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
                 richTextBoxMessage.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, 0);
-                richTextBoxMessage.Location = new System.Drawing.Point(52, 6);
+                richTextBoxMessage.Location = new System.Drawing.Point(46, 6);
                 richTextBoxMessage.Margin = new System.Windows.Forms.Padding(0);
                 richTextBoxMessage.Name = "richTextBoxMessage";
                 richTextBoxMessage.ReadOnly = true;
@@ -259,7 +259,7 @@ namespace JR.Utils.GUI.Forms
                 //
                 button2.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
                 button2.DialogResult = System.Windows.Forms.DialogResult.OK;
-                button2.Location = new System.Drawing.Point(97, 80);
+                button2.Location = new System.Drawing.Point(107, 80);
                 button2.Name = "button2";
                 button2.Size = new System.Drawing.Size(75, 28);
                 button2.TabIndex = 3;
@@ -277,7 +277,7 @@ namespace JR.Utils.GUI.Forms
                 //
                 button3.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
                 button3.DialogResult = System.Windows.Forms.DialogResult.OK;
-                button3.Location = new System.Drawing.Point(178, 80);
+                button3.Location = new System.Drawing.Point(188, 80);
                 button3.Name = "button3";
                 button3.Size = new System.Drawing.Size(75, 28);
                 button3.TabIndex = 0;
@@ -843,6 +843,11 @@ namespace JR.Utils.GUI.Forms
                 flexibleMessageBoxForm.richTextBoxMessage.Font = FONT;
 
                 SetDialogSizes(flexibleMessageBoxForm, text, caption);
+
+                // Force panel resize to fix closebutton position
+                int contentWidth = flexibleMessageBoxForm.ClientSize.Width - 16; // 8px padding
+                flexibleMessageBoxForm.titlePanel.Width = contentWidth;
+
                 SetDialogStartPosition(flexibleMessageBoxForm, owner);
 
                 return flexibleMessageBoxForm.ShowDialog(owner);

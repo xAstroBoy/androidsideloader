@@ -882,24 +882,10 @@ namespace AndroidSideloader
         public async Task<int> CheckForDevice()
         {
             Devices.Clear();
-            string output = string.Empty;
-            string error = string.Empty;
-            string battery = string.Empty;
             ADB.DeviceID = GetDeviceID();
-            Thread t1 = new Thread(() =>
-            {
-                output = ADB.RunAdbCommandToString("devices").Output;
-            });
-
-            t1.Start();
-
-            while (t1.IsAlive)
-            {
-                await Task.Delay(100);
-            }
+            string output = await Task.Run(() => ADB.RunAdbCommandToString("devices").Output); // Run off UI thread
 
             string[] line = output.Split('\n');
-
             int i = 0;
 
             devicesComboBox.Items.Clear();
@@ -909,9 +895,10 @@ namespace AndroidSideloader
             {
                 if (i > 0 && currLine.Length > 0)
                 {
-                    Devices.Add(currLine.Split('	')[0]);
-                    _ = devicesComboBox.Items.Add(currLine.Split('	')[0]);
-                    _ = Logger.Log(currLine.Split('	')[0] + "\n", LogLevel.INFO, false);
+                    string deviceId = currLine.Split('\t')[0];
+                    Devices.Add(deviceId);
+                    _ = devicesComboBox.Items.Add(deviceId);
+                    _ = Logger.Log(deviceId + "\n", LogLevel.INFO, false);
                 }
                 Debug.WriteLine(currLine);
                 i++;
@@ -920,13 +907,12 @@ namespace AndroidSideloader
             if (devicesComboBox.Items.Count > 0)
             {
                 devicesComboBox.SelectedIndex = 0;
+                string battery = await Task.Run(() => ADB.RunAdbCommandToString("shell dumpsys battery").Output); // Run off UI thread
+                battery = Utilities.StringUtilities.RemoveEverythingBeforeFirst(battery, "level:");
+                battery = Utilities.StringUtilities.RemoveEverythingAfterFirst(battery, "\n");
+                battery = Utilities.StringUtilities.KeepOnlyNumbers(battery);
+                batteryLabel.Text = battery;
             }
-
-            battery = ADB.RunAdbCommandToString("shell dumpsys battery").Output;
-            battery = Utilities.StringUtilities.RemoveEverythingBeforeFirst(battery, "level:");
-            battery = Utilities.StringUtilities.RemoveEverythingAfterFirst(battery, "\n");
-            battery = Utilities.StringUtilities.KeepOnlyNumbers(battery);
-            batteryLabel.Text = battery;
 
             UpdateQuestInfoPanel();
 
@@ -3089,13 +3075,10 @@ Additional Thanks & Resources
                 await Task.Delay(100);
             }
 
-            // Reset the initialized flag so initListView rebuilds _allItems with current install status
-            _allItemsInitialized = false;
-            _galleryDataSource = null;
-
-            initListView(false);
             isLoading = false;
 
+            // Use RefreshGameListAsync to preserve filter state
+            await RefreshGameListAsync();
             changeTitle("");
         }
 
@@ -4060,27 +4043,67 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
         private async void ADBWirelessToggle_Click(object sender, EventArgs e)
         {
-            // Check if wireless ADB is currently enabled
-            bool isWirelessEnabled = File.Exists(storedIpPath) && !string.IsNullOrEmpty(settings.IPAddress);
+            // Check if wireless ADB is currently enabled by verifying actual connection
+            bool isWirelessEnabled = false;
+
+            if (File.Exists(storedIpPath) && !string.IsNullOrEmpty(settings.IPAddress))
+            {
+                // Verify we're actually connected wirelessly by checking connected devices
+                string devicesOutput = ADB.RunAdbCommandToString("devices").Output;
+                string[] lines = devicesOutput.Split('\n');
+
+                foreach (string line in lines)
+                {
+                    // Wireless devices show as IP:port format (e.g., "192.168.1.100:5555")
+                    if (line.Contains(":5555") && line.Contains("device"))
+                    {
+                        isWirelessEnabled = true;
+                        break;
+                    }
+                }
+            }
 
             // If enabled, offer to disable or switch device
             if (isWirelessEnabled)
             {
-                DialogResult dialogResult = FlexibleMessageBox.Show(
-                    Program.form,
-                    "Wireless ADB is currently enabled.\n\n" +
-                    "Yes = Connect to a different device\n" +
-                    "No = Disable wireless ADB completely",
-                    "Wireless ADB Options",
-                    MessageBoxButtons.YesNoCancel);
-
-                if (dialogResult == DialogResult.Cancel)
+                string action = null;
+                using (Form dialog = new Form())
                 {
-                    return;
+                    dialog.Text = "Wireless ADB Options";
+                    dialog.Size = new Size(386, 130);
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.MaximizeBox = false;
+                    dialog.MinimizeBox = false;
+                    dialog.BackColor = Color.FromArgb(20, 24, 29);
+                    dialog.ForeColor = Color.White;
+
+                    var label = new Label
+                    {
+                        Text = "A device is currently connected via Wireless ADB.",
+                        ForeColor = Color.White,
+                        AutoSize = true,
+                        Location = new Point(15, 15)
+                    };
+
+                    var btnSwitch = CreateStyledButton("Connect New Device", DialogResult.None, new Point(15, 45));
+                    btnSwitch.Size = new Size(170, 32);
+                    btnSwitch.Click += (s, ev) => { action = "switch"; dialog.DialogResult = DialogResult.OK; };
+
+                    var btnDisable = CreateStyledButton("Disable Wireless ADB", DialogResult.None, new Point(195, 45));
+                    btnDisable.Size = new Size(160, 32);
+                    btnDisable.Click += (s, ev) => { action = "disable"; dialog.DialogResult = DialogResult.OK; };
+
+                    dialog.Controls.AddRange(new Control[] { label, btnSwitch, btnDisable });
+
+                    if (dialog.ShowDialog(this) != DialogResult.OK || action == null)
+                    {
+                        return;
+                    }
                 }
 
                 // Disable wireless ADB completely
-                if (dialogResult == DialogResult.No)
+                if (action == "disable")
                 {
                     ADB.wirelessadbON = false;
                     changeTitle("Disabling wireless ADB...");
@@ -4112,37 +4135,172 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                     return;
                 }
 
-                // User chose "Yes" – switch device: disconnect current wireless connection
+                // User chose to switch device: disconnect current wireless connection
                 changeTitle("Disconnecting current device...");
                 await Task.Run(() => ADB.RunAdbCommandToString("disconnect"));
             }
 
-            // Enable or switch wireless ADB - offer scan or manual entry
-            DialogResult res = FlexibleMessageBox.Show(
-                Program.form,
-                "How would you like to connect?\n\n" +
-                "Yes = Automatic (scans network to find device)\n" +
-                "No = Manual (enter IP address)",
-                "Connection Method",
-                MessageBoxButtons.YesNoCancel);
-
-            if (res == DialogResult.Cancel)
+            // Connect: Show custom dialog with three options
+            string connectionMethod = null;
+            using (Form dialog = new Form())
             {
-                changeTitle("");
-                return;
+                dialog.Text = "Wireless ADB Connection";
+                dialog.Size = new Size(456, 130);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MaximizeBox = false;
+                dialog.MinimizeBox = false;
+                dialog.BackColor = Color.FromArgb(20, 24, 29);
+                dialog.ForeColor = Color.White;
+
+                var label = new Label
+                {
+                    Text = "How would you like to connect?",
+                    ForeColor = Color.White,
+                    AutoSize = true,
+                    Location = new Point(15, 15)
+                };
+
+                var btnScan = CreateStyledButton("Automatic", DialogResult.None, new Point(15, 45));
+                btnScan.Size = new Size(130, 32);
+                btnScan.Click += (s, ev) => { connectionMethod = "scan"; dialog.DialogResult = DialogResult.OK; };
+
+                var btnUSB = CreateStyledButton("Automatic (USB)", DialogResult.None, new Point(155, 45));
+                btnUSB.Size = new Size(130, 32);
+                btnUSB.Click += (s, ev) => { connectionMethod = "usb"; dialog.DialogResult = DialogResult.OK; };
+
+                var btnManual = CreateStyledButton("Manual", DialogResult.None, new Point(295, 45));
+                btnManual.Size = new Size(130, 32);
+                btnManual.Click += (s, ev) => { connectionMethod = "manual"; dialog.DialogResult = DialogResult.OK; };
+
+                dialog.Controls.AddRange(new Control[] { label, btnScan, btnUSB, btnManual });
+
+                if (dialog.ShowDialog(this) != DialogResult.OK || connectionMethod == null)
+                {
+                    changeTitle("");
+                    return;
+                }
             }
 
             string ipAddress = null;
 
-            if (res == DialogResult.Yes)
+            if (connectionMethod == "scan")
             {
-                // Network scan
                 ipAddress = await ShowNetworkScanDialogAsync();
             }
-            else
+            else if (connectionMethod == "manual")
             {
-                // Manual IP entry
                 ipAddress = ShowManualIPDialog();
+            }
+            else if (connectionMethod == "usb")
+            {
+                // Setup via USB
+                DialogResult usbResult = FlexibleMessageBox.Show(
+                    Program.form,
+                    "Please make sure your Quest is connected to your PC via USB, then click OK.\n" +
+                    "If you need more time, click Cancel and return when you're ready.",
+                    "Connect Your Quest",
+                    MessageBoxButtons.OKCancel);
+
+                if (usbResult == DialogResult.Cancel)
+                {
+                    changeTitle("");
+                    return;
+                }
+
+                changeTitle("Setting up wireless ADB via USB...");
+                progressBar.IsIndeterminate = true;
+                progressBar.OperationType = "";
+
+                // Check for device and enable TCP/IP mode
+                await Task.Run(() =>
+                {
+                    _ = ADB.RunAdbCommandToString("devices");
+                    _ = ADB.RunAdbCommandToString("tcpip 5555");
+                });
+
+                _ = FlexibleMessageBox.Show(
+                    Program.form,
+                    "Click OK to retrieve your Quest's local IP address.",
+                    "Get Local IP Address",
+                    MessageBoxButtons.OK);
+
+                await Task.Delay(1000);
+
+                // Get IP address
+                changeTitle("Retrieving IP address...");
+                string input = await Task.Run(() => ADB.RunAdbCommandToString("shell ip route").Output);
+                string[] strArrayOne = input.Split(' ');
+
+                if (strArrayOne.Length > 8 && strArrayOne[0].Length > 7)
+                {
+                    string IPaddr = strArrayOne[8];
+                    string IPcmnd = "connect " + IPaddr + ":5555";
+
+                    _ = FlexibleMessageBox.Show(
+                        Program.form,
+                        $"Your Quest's local IP address is: {IPaddr}\n\n" +
+                        $"Please disconnect your Quest and wait 2-3 seconds.\n" +
+                        $"Once that's done, click OK.",
+                        "Disconnect USB",
+                        MessageBoxButtons.OK);
+
+                    changeTitle("Connecting wirelessly...");
+                    await Task.Delay(2000);
+
+                    // Attempt wireless connection
+                    await Task.Run(() => ADB.RunAdbCommandToString(IPcmnd));
+                    await Task.Delay(2000);
+
+                    // Verify device is actually connected
+                    int deviceIndex = await CheckForDevice();
+
+                    // success
+                    if (deviceIndex >= 0)
+                    {
+                        // Update UI with device info
+                        await Task.Run(() =>
+                        {
+                            changeTitlebarToDevice();
+                            showAvailableSpace();
+                        });
+
+                        settings.IPAddress = IPcmnd;
+                        settings.WirelessADB = true;
+                        settings.Save();
+
+                        try { File.WriteAllText(storedIpPath, IPcmnd); }
+                        catch (Exception ex) { Logger.Log($"Unable to write to StoredIP.txt: {ex.Message}", LogLevel.ERROR); }
+
+                        ADB.wirelessadbON = true;
+
+                        // Configure WiFi wakeup settings
+                        await Task.Run(() =>
+                        {
+                            _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_available 1");
+                            _ = ADB.RunAdbCommandToString("shell settings put global wifi_wakeup_enabled 1");
+                        });
+
+                        progressBar.IsIndeterminate = false;
+                        changeTitle("Connected successfully!", true);
+                        UpdateWirelessADBButtonText();
+                        UpdateStatusLabels();
+                    }
+                    // failure
+                    else
+                    {
+                        progressBar.IsIndeterminate = false;
+                        changeTitle("");
+                        _ = FlexibleMessageBox.Show(Program.form, "Device connection failed! Connect Quest via USB and try again.");
+                    }
+                }
+                else
+                {
+                    progressBar.IsIndeterminate = false;
+                    changeTitle("");
+                    _ = FlexibleMessageBox.Show(Program.form, "Device connection failed! Connect Quest via USB and try again.");
+                }
+                return;
             }
 
             if (string.IsNullOrEmpty(ipAddress))
@@ -4649,13 +4807,9 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                 }
 
                 changeTitle("Refreshing games list...");
-
-                // Reset the initialized flag so initListView rebuilds _allItems with current install status
-                _allItemsInitialized = false;
-                _galleryDataSource = null;
-
                 listAppsBtn();
-                initListView(false);
+                // Use RefreshGameListAsync to preserve filter state
+                _ = RefreshGameListAsync();
             }
             bool dialogIsUp = false;
             if (keyData == Keys.F1 && !dialogIsUp)
@@ -5182,13 +5336,7 @@ function onYouTubeIframeAPIReady() {
             }
 
             changeTitle("Refreshing installed apps and checking for updates...");
-
-            // Reset the initialized flag so initListView rebuilds _allItems with current install status
-            _allItemsInitialized = false;
-            _galleryDataSource = null;
-
             listAppsBtn();
-            initListView(false);
 
             if (SideloaderRCLONE.games.Count < 1)
             {
@@ -5196,6 +5344,9 @@ function onYouTubeIframeAPIReady() {
                     "There are no games in rclone, please check your internet connection and verify the config is working properly.");
                 return;
             }
+
+            // Use RefreshGameListAsync to preserve filter state
+            _ = RefreshGameListAsync();
         }
 
         private void gamesListView_MouseDoubleClick(object sender, MouseEventArgs e)
@@ -5741,6 +5892,12 @@ function onYouTubeIframeAPIReady() {
                     _fastGallery.UpdateItems(_allItems);
                 }
             }
+
+            // Clear other filter states
+            updateAvailableClicked = false;
+            upToDate_Clicked = false;
+            NeedsDonation_Clicked = false;
+            UpdateFilterButtonStates();
         }
 
         public async void UpdateQuestInfoPanel()
@@ -7163,6 +7320,26 @@ function onYouTubeIframeAPIReady() {
             bool wasUpdateAvailableClicked = updateAvailableClicked;
             bool wasUpToDateClicked = upToDate_Clicked;
             bool wasNeedsDonationClicked = NeedsDonation_Clicked;
+            bool wasFavoritesView = favoriteSwitcher.Text == "ALL";
+
+            // Save the currently selected package name to restore after refresh
+            string selectedPackageName = null;
+            if (gamesListView.SelectedItems.Count > 0)
+            {
+                var selectedItem = gamesListView.SelectedItems[0];
+                if (selectedItem.SubItems.Count > 2)
+                {
+                    selectedPackageName = selectedItem.SubItems[2].Text;
+                }
+            }
+            else if (isGalleryView && _fastGallery != null)
+            {
+                var galleryItem = _fastGallery.GetItemAtIndex(_fastGallery._selectedIndex);
+                if (galleryItem != null && galleryItem.SubItems.Count > 2)
+                {
+                    selectedPackageName = galleryItem.SubItems[2].Text;
+                }
+            }
 
             // Temporarily clear filter states
             updateAvailableClicked = false;
@@ -7188,6 +7365,13 @@ function onYouTubeIframeAPIReady() {
             isGalleryView = wasGalleryView;
 
             // Reapply the active filter
+            if (wasFavoritesView)
+            {
+                // Reapply favorites filter
+                favoriteSwitcher.Text = "FAVORITES"; // Reset text first
+                favoriteSwitcher_Click(favoriteSwitcher, EventArgs.Empty); // This will toggle to show favorites and set text to "ALL"
+            }
+
             if (wasUpToDateClicked)
             {
                 upToDate_Clicked = true;
@@ -7209,8 +7393,38 @@ function onYouTubeIframeAPIReady() {
                 gamesGalleryView.Visible = true;
                 PopulateGalleryView();
             }
+
+            // Restore selection and scroll to the previously selected item
+            if (!string.IsNullOrEmpty(selectedPackageName))
+            {
+                RestoreSelectionByPackageName(selectedPackageName);
+            }
         }
 
+        private void RestoreSelectionByPackageName(string packageName)
+        {
+            if (string.IsNullOrEmpty(packageName))
+                return;
+
+            // Restore in ListView
+            foreach (ListViewItem item in gamesListView.Items)
+            {
+                if (item.SubItems.Count > 2 &&
+                    item.SubItems[2].Text.Equals(packageName, StringComparison.OrdinalIgnoreCase))
+                {
+                    item.Selected = true;
+                    item.Focused = true;
+                    item.EnsureVisible();
+                    break;
+                }
+            }
+
+            // Restore in Gallery view
+            if (isGalleryView && _fastGallery != null)
+            {
+                _fastGallery.ScrollToPackage(packageName);
+            }
+        }
         private async void timer_DeviceCheck(object sender, EventArgs e)
         {
             // Skip if a device is connected, we're in the middle of loading or other operations
@@ -7241,13 +7455,9 @@ function onYouTubeIframeAPIReady() {
                     await CheckForDevice();
                     changeTitlebarToDevice();
                     showAvailableSpace();
-
-                    // Reset the initialized flag so initListView rebuilds _allItems with current install status
-                    _allItemsInitialized = false;
-                    _galleryDataSource = null;
-
                     listAppsBtn();
-                    initListView(false);
+                    // Use RefreshGameListAsync to preserve filter state
+                    await RefreshGameListAsync();
                     UpdateStatusLabels();
                 }
             }
