@@ -895,9 +895,10 @@ namespace AndroidSideloader
             {
                 if (i > 0 && currLine.Length > 0)
                 {
-                    Devices.Add(currLine.Split('\t')[0]);
-                    _ = devicesComboBox.Items.Add(currLine.Split('\t')[0]);
-                    _ = Logger.Log(currLine.Split('\t')[0] + "\n", LogLevel.INFO, false);
+                    string deviceId = currLine.Split('\t')[0];
+                    Devices.Add(deviceId);
+                    _ = devicesComboBox.Items.Add(deviceId);
+                    _ = Logger.Log(deviceId + "\n", LogLevel.INFO, false);
                 }
                 Debug.WriteLine(currLine);
                 i++;
