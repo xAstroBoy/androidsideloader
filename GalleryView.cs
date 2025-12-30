@@ -1399,17 +1399,17 @@ public class FastGalleryPanel : Control
         _favoritesCache = new HashSet<string>(SettingsManager.Instance.FavoritedGames, StringComparer.OrdinalIgnoreCase);
     }
 
-    public void ScrollToPackage(string packageName)
+    public void ScrollToPackage(string releaseName)
     {
-        if (string.IsNullOrEmpty(packageName) || _items == null || _items.Count == 0)
+        if (string.IsNullOrEmpty(releaseName) || _items == null || _items.Count == 0)
             return;
 
-        // Find the index of the item with the matching package name
+        // Find the index of the item with the matching release name
         for (int i = 0; i < _items.Count; i++)
         {
             var item = _items[i];
-            if (item.SubItems.Count > 2 &&
-                item.SubItems[2].Text.Equals(packageName, StringComparison.OrdinalIgnoreCase))
+            if (item.SubItems.Count > 1 &&
+                item.SubItems[1].Text.Equals(releaseName, StringComparison.OrdinalIgnoreCase))
             {
                 // Calculate the row this item is in
                 int row = i / _columns;

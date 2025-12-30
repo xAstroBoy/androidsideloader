@@ -6151,13 +6151,13 @@ function onYouTubeIframeAPIReady() {
         private void btnViewToggle_Click(object sender, EventArgs e)
         {
             // Capture currently selected item before switching views
-            string selectedPackageName = null;
+            string selectedReleaseName = null;
             if (gamesListView.SelectedItems.Count > 0)
             {
                 var selectedItem = gamesListView.SelectedItems[0];
-                if (selectedItem.SubItems.Count > 2)
+                if (selectedItem.SubItems.Count > 1)
                 {
-                    selectedPackageName = selectedItem.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
+                    selectedReleaseName = selectedItem.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
                 }
             }
 
@@ -6179,9 +6179,9 @@ function onYouTubeIframeAPIReady() {
                     PopulateGalleryView();
 
                     // Scroll to the previously selected item in gallery view
-                    if (!string.IsNullOrEmpty(selectedPackageName) && _fastGallery != null)
+                    if (!string.IsNullOrEmpty(selectedReleaseName) && _fastGallery != null)
                     {
-                        _fastGallery.ScrollToPackage(selectedPackageName);
+                        _fastGallery.ScrollToPackage(selectedReleaseName);
                     }
                 }
             }
@@ -6283,7 +6283,6 @@ function onYouTubeIframeAPIReady() {
             var item = _fastGallery.GetItemAtIndex(itemIndex);
             if (item == null || item.SubItems.Count <= 2) return;
 
-            string packageName = item.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
             string releaseName = item.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
             string gameName = item.SubItems[SideloaderRCLONE.GameNameIndex].Text;
 
@@ -6294,10 +6293,11 @@ function onYouTubeIframeAPIReady() {
                 listItem.Selected = false;
             }
 
-            // Find and select the matching item in gamesListView
+            // Find and select the matching item in gamesListView using release name
             foreach (ListViewItem listItem in gamesListView.Items)
             {
-                if (listItem.SubItems.Count > 2 && listItem.SubItems[2].Text == packageName)
+                if (listItem.SubItems.Count > 1 &&
+                    listItem.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text.Equals(releaseName, StringComparison.OrdinalIgnoreCase))
                 {
                     listItem.Selected = true;
                     listItem.EnsureVisible();
@@ -6319,7 +6319,8 @@ function onYouTubeIframeAPIReady() {
             var item = _fastGallery.GetItemAtIndex(itemIndex);
             if (item == null || item.SubItems.Count <= 2) return;
 
-            string packageName = item.SubItems[2].Text;
+            // Use release name to match the correct entry
+            string releaseName = item.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
 
             // Clear all selections first - must deselect each item individually
             // because SelectedItems.Clear() doesn't work reliably when ListView is hidden
@@ -6328,10 +6329,11 @@ function onYouTubeIframeAPIReady() {
                 listItem.Selected = false;
             }
 
-            // Find and select the matching item in gamesListView, then trigger download
+            // Find and select the matching item in gamesListView by release name
             foreach (ListViewItem listItem in gamesListView.Items)
             {
-                if (listItem.SubItems.Count > 2 && listItem.SubItems[2].Text == packageName)
+                if (listItem.SubItems.Count > 1 &&
+                    listItem.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text.Equals(releaseName, StringComparison.OrdinalIgnoreCase))
                 {
                     listItem.Selected = true;
                     downloadInstallGameButton_Click(downloadInstallGameButton, EventArgs.Empty);
