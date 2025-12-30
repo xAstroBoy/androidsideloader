@@ -348,6 +348,9 @@ namespace AndroidSideloader
                     {
                         PublicConfigFile = config;
                         hasPublicConfig = true;
+
+                        // Test DNS for the public config hostname after it's been created/updated
+                        DnsHelper.TestPublicConfigDns();
                     }
                 }
             }
