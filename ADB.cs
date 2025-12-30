@@ -72,7 +72,7 @@ namespace AndroidSideloader
             return _currentDevice;
         }
 
-        public static ProcessOutput RunAdbCommandToString(string command)
+        public static ProcessOutput RunAdbCommandToString(string command, bool suppressLogging = false)
         {
             command = command.Replace("adb", "");
 
@@ -85,7 +85,7 @@ namespace AndroidSideloader
                 command = $" -s {DeviceID} {command}";
             }
 
-            if (!command.Contains("dumpsys") && !command.Contains("shell pm list packages") && !command.Contains("KEYCODE_WAKEUP"))
+            if (!suppressLogging && !command.Contains("dumpsys") && !command.Contains("shell pm list packages") && !command.Contains("KEYCODE_WAKEUP") )
             {
                 string logcmd = command;
                 if (logcmd.Contains(Environment.CurrentDirectory))
@@ -94,6 +94,9 @@ namespace AndroidSideloader
                 }
                 _ = Logger.Log($"Running command: {logcmd}");
             }
+
+            bool isConnectCommand = command.Contains("connect");
+            int timeoutMs = isConnectCommand ? 5000 : -1; // 5 second timeout for connect commands
 
             using (Process adb = new Process())
             {
@@ -111,19 +114,39 @@ namespace AndroidSideloader
 
                 try
                 {
-                    output = adb.StandardOutput.ReadToEnd();
-                    error = adb.StandardError.ReadToEnd();
-                }
-                catch { }
-
-                if (command.Contains("connect"))
-                {
-                    bool graceful = adb.WaitForExit(3000);
-                    if (!graceful)
+                    if (isConnectCommand)
                     {
-                        adb.Kill();
-                        adb.WaitForExit();
+                        // For connect commands, we use async reading with timeout to avoid blocking on TCP timeout
+                        var outputTask = adb.StandardOutput.ReadToEndAsync();
+                        var errorTask = adb.StandardError.ReadToEndAsync();
+
+                        bool exited = adb.WaitForExit(timeoutMs);
+
+                        if (!exited)
+                        {
+                            try { adb.Kill(); } catch { }
+                            adb.WaitForExit(1000);
+                            output = "Connection timed out";
+                            error = "cannot connect: Connection timed out";
+                            Logger.Log($"ADB connect command timed out after {timeoutMs}ms", LogLevel.WARNING);
+                        }
+                        else
+                        {
+                            // Process exited within timeout, safe to read output
+                            output = outputTask.Result;
+                            error = errorTask.Result;
+                        }
                     }
+                    else
+                    {
+                        // For non-connect commands, read output normally
+                        output = adb.StandardOutput.ReadToEnd();
+                        error = adb.StandardError.ReadToEnd();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Error reading ADB output: {ex.Message}", LogLevel.WARNING);
                 }
 
                 if (error.Contains("ADB_VENDOR_KEYS") && !settings.AdbDebugWarned)
@@ -134,7 +157,7 @@ namespace AndroidSideloader
                 {
                     _ = FlexibleMessageBox.Show(Program.form, "There is not enough room on your device to install this package. Please clear AT LEAST 2x the amount of the app you are trying to install.");
                 }
-                if (!output.Contains("version") && !output.Contains("KEYCODE_WAKEUP") && !output.Contains("Filesystem") && !output.Contains("package:") && !output.Equals(null))
+                if (!suppressLogging && !output.Contains("version") && !output.Contains("KEYCODE_WAKEUP") && !output.Contains("Filesystem") && !output.Contains("package:") && !output.Equals(null))
                 {
                     _ = Logger.Log(output);
                 }

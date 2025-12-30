@@ -7436,7 +7436,7 @@ function onYouTubeIframeAPIReady() {
             // Run a quick device check in background
             try
             {
-                string output = await Task.Run(() => ADB.RunAdbCommandToString("devices").Output);
+                string output = await Task.Run(() => ADB.RunAdbCommandToString("devices", suppressLogging: true).Output);
 
                 string[] lines = output.Split('\n');
                 bool hasDeviceNow = false;
