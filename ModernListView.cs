@@ -1187,6 +1187,28 @@ namespace AndroidSideloader
                 _listView.RedrawItems(_marqueeSelectedIndex, _marqueeSelectedIndex, true);
         }
 
+        public void ApplySort(int columnIndex, SortOrder order)
+        {
+            if (_columnSorter == null) return;
+
+            _columnSorter.SortColumn = columnIndex;
+            _columnSorter.Order = order;
+
+            _listView.BeginUpdate();
+            try
+            {
+                _listView.Sort();
+            }
+            finally
+            {
+                _listView.EndUpdate();
+            }
+
+            // Invalidate header to update sort indicators
+            _listView.Invalidate(new Rectangle(0, 0, _listView.ClientSize.Width,
+                _listView.Font.Height + 8));
+        }
+
         private static float Ease(float p)
         {
             p = Clamp01(p);

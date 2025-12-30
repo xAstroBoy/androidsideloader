@@ -49,6 +49,9 @@ namespace AndroidSideloader
         public bool DeviceConnected = false;
         public static string currremotesimple = "";
 #endif
+        // Shared sort state between Gallery and List views
+        private SortField _sharedSortField = SortField.Name;
+        private SortDirection _sharedSortDirection = SortDirection.Ascending;
         private const int BottomMargin = 8;
         private const int RightMargin = 12;
         private const int PanelSpacing = 10;
@@ -4675,6 +4678,12 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                     SortOrder.Ascending;
             }
 
+            // Update shared sort state
+            _sharedSortField = ColumnIndexToSortField(e.Column);
+            _sharedSortDirection = lvwColumnSorter.Order == SortOrder.Ascending
+                ? SortDirection.Ascending
+                : SortDirection.Descending;
+
             // Suspend drawing during sort
             gamesListView.BeginUpdate();
             try
@@ -6161,6 +6170,42 @@ function onYouTubeIframeAPIReady() {
                 }
             }
 
+            // Capture current sort state before switching
+            if (isGalleryView && _fastGallery != null)
+            {
+                // Save gallery sort state
+                _sharedSortField = _fastGallery.CurrentSortField;
+                _sharedSortDirection = _fastGallery.CurrentSortDirection;
+
+                // Flip popularity direction when going from gallery to list due to flipped underlying logic
+                // Gallery: Descending = Most Popular first
+                // List: Ascending = Most Popular first
+                if (_sharedSortField == SortField.Popularity)
+                {
+                    _sharedSortDirection = _sharedSortDirection == SortDirection.Ascending
+                        ? SortDirection.Descending
+                        : SortDirection.Ascending;
+                }
+            }
+            else if (!isGalleryView && _listViewRenderer != null && lvwColumnSorter != null)
+            {
+                // Save list view sort state
+                _sharedSortField = ColumnIndexToSortField(lvwColumnSorter.SortColumn);
+                _sharedSortDirection = lvwColumnSorter.Order == SortOrder.Ascending
+                    ? SortDirection.Ascending
+                    : SortDirection.Descending;
+
+                // Flip popularity direction when going from list to gallery due to flipped underlying logic
+                // List: Ascending = Most Popular first
+                // Gallery: Descending = Most Popular first
+                if (_sharedSortField == SortField.Popularity)
+                {
+                    _sharedSortDirection = _sharedSortDirection == SortDirection.Ascending
+                        ? SortDirection.Descending
+                        : SortDirection.Ascending;
+                }
+            }
+
             isGalleryView = !isGalleryView;
 
             // Save user preference
@@ -6191,7 +6236,46 @@ function onYouTubeIframeAPIReady() {
                 gamesGalleryView.Visible = false;
                 gamesListView.Visible = true;
                 CleanupGalleryView();
+
+                // Apply shared sort state to list view
+                ApplySortToListView();
             }
+        }
+
+        private SortField ColumnIndexToSortField(int columnIndex)
+        {
+            switch (columnIndex)
+            {
+                case 0: return SortField.Name;
+                case 4: return SortField.LastUpdated;
+                case 5: return SortField.Size;
+                case 6: return SortField.Popularity;
+                default: return SortField.Name;
+            }
+        }
+
+        private int SortFieldToColumnIndex(SortField field)
+        {
+            switch (field)
+            {
+                case SortField.Name: return 0;
+                case SortField.LastUpdated: return 4;
+                case SortField.Size: return 5;
+                case SortField.Popularity: return 6;
+                default: return 0;
+            }
+        }
+
+        private void ApplySortToListView()
+        {
+            if (_listViewRenderer == null || lvwColumnSorter == null) return;
+
+            int columnIndex = SortFieldToColumnIndex(_sharedSortField);
+            SortOrder order = _sharedSortDirection == SortDirection.Ascending
+                ? SortOrder.Ascending
+                : SortOrder.Descending;
+
+            _listViewRenderer.ApplySort(columnIndex, order);
         }
 
         private void PopulateGalleryView()
@@ -6239,6 +6323,10 @@ function onYouTubeIframeAPIReady() {
             _fastGallery.TileClicked += FastGallery_TileClicked;
             _fastGallery.TileDoubleClicked += FastGallery_TileDoubleClicked;
             _fastGallery.TileDeleteClicked += FastGallery_TileDeleteClicked;
+            _fastGallery.SortChanged += FastGallery_SortChanged;
+
+            // Apply current shared sort state to gallery
+            _fastGallery.SetSortState(_sharedSortField, _sharedSortDirection);
 
             gamesGalleryView.Controls.Add(_fastGallery);
             _fastGallery.Anchor = AnchorStyles.None;
@@ -6254,6 +6342,16 @@ function onYouTubeIframeAPIReady() {
             if (item == null) return;
 
             await UninstallGameAsync(item);
+        }
+
+        private void FastGallery_SortChanged(object sender, SortField field)
+        {
+            // Update shared state from gallery
+            if (_fastGallery != null)
+            {
+                _sharedSortField = _fastGallery.CurrentSortField;
+                _sharedSortDirection = _fastGallery.CurrentSortDirection;
+            }
         }
 
         private void GamesGalleryView_Resize(object sender, EventArgs e)

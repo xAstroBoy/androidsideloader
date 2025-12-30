@@ -24,6 +24,8 @@ public class FastGalleryPanel : Control
     // Sorting
     private SortField _currentSortField = SortField.Name;
     private SortDirection _currentSortDirection = SortDirection.Ascending;
+    public SortField CurrentSortField => _currentSortField;
+    public SortDirection CurrentSortDirection => _currentSortDirection;
     private readonly Panel _sortPanel;
     private readonly List<Button> _sortButtons;
     private Label _sortStatusLabel;
@@ -397,6 +399,14 @@ public class FastGalleryPanel : Control
 
         RecalculateLayout();
         Invalidate();
+    }
+
+    public void SetSortState(SortField field, SortDirection direction)
+    {
+        _currentSortField = field;
+        _currentSortDirection = direction;
+        UpdateSortButtonStyles();
+        ApplySort();
     }
 
     private int ParsePopularity(string popStr)
