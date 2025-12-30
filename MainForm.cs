@@ -2279,24 +2279,22 @@ namespace AndroidSideloader
                                 }
                                 else if (installedVersionInt > cloudVersionInt)
                                 {
-                                    newerThanListCount++;
                                     bool dontget = blacklistSet.Contains(packagename);
 
-                                    if (!dontget)
+                                    newerThanListCount++;
+                                    item.ForeColor = ColorDonateGame;
+
+                                    // Only prompt for upload if not blacklisted
+                                    if (!dontget && !updatesNotified && !isworking && updint < 6 && !settings.SubmittedUpdates.Contains(packagename))
                                     {
-                                        item.ForeColor = ColorDonateGame;
+                                        either = true;
+                                        updates = true;
+                                        updint++;
 
-                                        if (!updatesNotified && !isworking && updint < 6 && !settings.SubmittedUpdates.Contains(packagename))
-                                        {
-                                            either = true;
-                                            updates = true;
-                                            updint++;
-
-                                            string RlsName = Sideloader.PackageNametoGameName(packagename);
-                                            string GameName = Sideloader.gameNameToSimpleName(RlsName);
-                                            var gameData = new UpdateGameData(GameName, packagename, installedVersionInt);
-                                            gamesToAskForUpdate.Add(gameData);
-                                        }
+                                        string RlsName = Sideloader.PackageNametoGameName(packagename);
+                                        string GameName = Sideloader.gameNameToSimpleName(RlsName);
+                                        var gameData = new UpdateGameData(GameName, packagename, installedVersionInt);
+                                        gamesToAskForUpdate.Add(gameData);
                                     }
                                 }
                             }
