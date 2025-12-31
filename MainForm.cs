@@ -127,7 +127,7 @@ namespace AndroidSideloader
 
             _debounceTimer = new System.Windows.Forms.Timer { Interval = 100, Enabled = false };
             _debounceTimer.Tick += async (sender, e) => await RunSearch();
-            gamesQueListBox.DataSource = gamesQueueList;
+
             SetCurrentLogPath();
             StartTimers();
 
@@ -513,6 +513,9 @@ namespace AndroidSideloader
                     File.Delete(Path.Combine(Environment.CurrentDirectory, "crashlog.txt"));
                 }
             }
+
+            // Ensure bottom panels are properly laid out
+            LayoutBottomPanels();
 
             webView21.Visible = settings.TrailersEnabled;
 
@@ -3091,6 +3094,7 @@ Additional Thanks & Resources
         public static bool updatedConfig = false;
         public static int steps = 0;
         public static bool gamesAreDownloading = false;
+        private ModernQueuePanel _queuePanel;
         private readonly BindingList<string> gamesQueueList = new BindingList<string>();
         public static int quotaTries = 0;
         public static bool timerticked = false;
@@ -3164,7 +3168,9 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
         {
             speedLabel.Text = String.Empty;
             progressBar.Value = 0;
-            gamesQueueList.RemoveAt(0);
+            if (gamesQueueList.Count > 0)
+                gamesQueueList.RemoveAt(0);
+            _queuePanel?.Invalidate();
         }
 
         public void SetProgress(float progress)
@@ -3239,7 +3245,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                 }
 
                 gamesAreDownloading = true;
-
+                if (_queuePanel != null) _queuePanel.IsDownloading = true;
 
                 //Do user json on firsttime
                 if (settings.UserJsonOnGameInstall)
@@ -3467,33 +3473,44 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
                     if (removedownloading)
                     {
+                        removedownloading = false;
+
+                        // Store game info before removing from queue
+                        string cancelledGame = gameName;
+                        string cancelledHash = gameNameHash;
+
+                        // Remove the cancelled item from queue
+                        if (gamesQueueList.Count > 0)
+                        {
+                            gamesQueueList.RemoveAt(0);
+                        }
+
+                        // Reset progress UI
+                        speedLabel.Text = String.Empty;
+                        progressBar.Value = 0;
+
+                        // Ask about keeping files
                         changeTitle("Keep game files?");
                         try
                         {
-                            cleanupActiveDownloadStatus();
-
                             DialogResult res = FlexibleMessageBox.Show(
-                                $"{gameName} exists in destination directory, do you want to delete it?\n\nClick NO to keep the files if you wish to resume your download later.",
+                                $"{cancelledGame} download was cancelled. Do you want to delete the partial files?\n\nClick NO to keep the files if you wish to resume your download later.",
                                 "Delete Temporary Files?", MessageBoxButtons.YesNo);
 
                             if (res == DialogResult.Yes)
                             {
-                                changeTitle("Deleting game files");
+                                changeTitle("Deleting game files...");
                                 if (UsingPublicConfig)
                                 {
-                                    if (Directory.Exists($"{settings.DownloadDir}\\{gameNameHash}"))
-                                    {
-                                        Directory.Delete($"{settings.DownloadDir}\\{gameNameHash}", true);
-                                    }
-
-                                    if (Directory.Exists($"{settings.DownloadDir}\\{gameName}"))
-                                    {
-                                        Directory.Delete($"{settings.DownloadDir}\\{gameName}", true);
-                                    }
+                                    if (Directory.Exists($"{settings.DownloadDir}\\{cancelledHash}"))
+                                        Directory.Delete($"{settings.DownloadDir}\\{cancelledHash}", true);
+                                    if (Directory.Exists($"{settings.DownloadDir}\\{cancelledGame}"))
+                                        Directory.Delete($"{settings.DownloadDir}\\{cancelledGame}", true);
                                 }
                                 else
                                 {
-                                    Directory.Delete(settings.DownloadDir + "\\" + gameName, true);
+                                    if (Directory.Exists($"{settings.DownloadDir}\\{cancelledGame}"))
+                                        Directory.Delete($"{settings.DownloadDir}\\{cancelledGame}", true);
                                 }
                             }
                         }
@@ -3501,8 +3518,9 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                         {
                             _ = FlexibleMessageBox.Show(Program.form, $"Error deleting game files: {ex.Message}");
                         }
+
                         changeTitle("");
-                        break;
+                        continue; // Continue to next item in queue
                     }
                     {
                         //Quota Errors
@@ -3774,13 +3792,6 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                         }
                     }
                 }
-                if (removedownloading)
-                {
-                    removedownloading = false;
-                    gamesAreDownloading = false;
-                    isinstalling = false;
-                    return;
-                }
                 if (!obbsMismatch)
                 {
                     changeTitle("Refreshing games list, please wait...\n");
@@ -3788,12 +3799,15 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
                     await RefreshGameListAsync();
 
-                    if (settings.EnableMessageBoxes)
+                    // Only show output if there's content
+                    if (settings.EnableMessageBoxes && !string.IsNullOrWhiteSpace(output.Output + output.Error))
                     {
                         ShowPrcOutput(output);
                     }
+
                     progressBar.IsIndeterminate = false;
                     gamesAreDownloading = false;
+                    if (_queuePanel != null) _queuePanel.IsDownloading = false;
                     isinstalling = false;
 
                     changeTitle("");
@@ -3909,6 +3923,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             }
             progressBar.IsIndeterminate = false;
             gamesAreDownloading = false;
+            if (_queuePanel != null) _queuePanel.IsDownloading = false;
             isinstalling = false;
 
             changeTitle("");
@@ -4613,20 +4628,6 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
         {
             bool isWirelessEnabled = File.Exists(storedIpPath) && !string.IsNullOrEmpty(settings.IPAddress);
             ADBWirelessToggle.Text = isWirelessEnabled ? "WIRELESS ADB" : "ENABLE WIRELESS ADB";
-        }
-
-        private void gamesQueListBox_MouseClick(object sender, MouseEventArgs e)
-        {
-            if (gamesQueListBox.SelectedIndex == 0 && gamesQueueList.Count == 1)
-            {
-                removedownloading = true;
-                RCLONE.killRclone();
-            }
-            if (gamesQueListBox.SelectedIndex != -1 && gamesQueListBox.SelectedIndex != 0)
-            {
-                _ = gamesQueueList.Remove(gamesQueListBox.SelectedItem.ToString());
-            }
-
         }
 
         private void devicesComboBox_SelectedIndexChanged(object sender, EventArgs e)
@@ -5449,21 +5450,6 @@ function onYouTubeIframeAPIReady() {
             btnInstalled.Click += btnInstalled_Click;
             btnUpdateAvailable.Click += btnUpdateAvailable_Click;
             btnNewerThanList.Click += btnNewerThanList_Click;
-        }
-        
-        private void gamesQueListBox_MouseDown(object sender, MouseEventArgs e)
-        {
-            if (gamesQueListBox.SelectedItem == null)
-            {
-                return;
-            }
-
-            _ = gamesQueListBox.DoDragDrop(gamesQueListBox.SelectedItem, DragDropEffects.Move);
-        }
-
-        private void gamesQueListBox_DragOver(object sender, DragEventArgs e)
-        {
-            e.Effect = DragDropEffects.Move;
         }
 
         private async void pullAppToDesktopBtn_Click(object sender, EventArgs e)
@@ -7104,17 +7090,113 @@ function onYouTubeIframeAPIReady() {
         {
             Color panelColor = Color.FromArgb(24, 26, 30);
 
-            // Create rounded panel for notesRichTextBox
+            // Initialize modern queue panel
+            _queuePanel = new ModernQueuePanel
+            {
+                Size = new Size(250, 150),  // Placeholder; resized by LayoutBottomPanels
+                BackColor = panelColor
+            };
+            _queuePanel.ItemRemoved += QueuePanel_ItemRemoved;
+            _queuePanel.ItemReordered += QueuePanel_ItemReordered;
+
+            // Sync with binding list
+            gamesQueueList.ListChanged += (s, e) => SyncQueuePanel();
+
+            // Notes panel
             notesPanel = CreateRoundedPanel(notesRichTextBox, panelColor, 8, true);
 
-            // Create rounded panel for gamesQueListBox
-            queuePanel = CreateRoundedPanel(gamesQueListBox, panelColor, 8, false);
+            // Queue panel
+            queuePanel = CreateQueuePanel(panelColor, 8);
 
-            // Bring labels to front so they appear above the panels
             gamesQueueLabel.BringToFront();
             lblNotes.BringToFront();
+
+            // Trigger initial layout
+            LayoutBottomPanels();
         }
-        
+
+        private Panel CreateQueuePanel(Color panelColor, int radius)
+        {
+            var panel = new Panel
+            {
+                Location = gamesQueListBox.Location,
+                Size = new Size(
+                    gamesQueListBox.Width + ChildHorizontalPadding + ChildRightMargin,
+                    gamesQueListBox.Height + ReservedLabelHeight
+                ),
+                BackColor = Color.Transparent,
+                Padding = new Padding(ChildHorizontalPadding, ChildTopMargin, ChildRightMargin, ChildTopMargin)
+            };
+
+            // Double buffering
+            typeof(Panel).InvokeMember("DoubleBuffered",
+                System.Reflection.BindingFlags.SetProperty |
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic,
+                null, panel, new object[] { true });
+
+            panel.Paint += (s, e) =>
+            {
+                var p = (Panel)s;
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                var rect = new Rectangle(0, 0, p.Width - 1, p.Height - 1);
+
+                using (var path = CreateRoundedRectPath(rect, radius))
+                using (var brush = new SolidBrush(panelColor))
+                {
+                    e.Graphics.FillPath(brush, path);
+                }
+
+                using (var regionPath = CreateRoundedRectPath(new Rectangle(0, 0, p.Width, p.Height), radius))
+                {
+                    p.Region = new Region(regionPath);
+                }
+            };
+
+            var parent = gamesQueListBox.Parent;
+            parent.Controls.Remove(gamesQueListBox);
+            gamesQueListBox.Dispose();
+
+            _queuePanel.Location = new Point(ChildHorizontalPadding, ChildTopMargin);
+            _queuePanel.Anchor = AnchorStyles.None;
+            panel.Controls.Add(_queuePanel);
+            parent.Controls.Add(panel);
+            panel.BringToFront();
+
+            return panel;
+        }
+
+        private void SyncQueuePanel()
+        {
+            if (_queuePanel == null) return;
+            _queuePanel.SetItems(gamesQueueList);
+            _queuePanel.IsDownloading = gamesAreDownloading && gamesQueueList.Count > 0;
+        }
+
+        private void QueuePanel_ItemRemoved(object sender, int index)
+        {
+            if (index == 0 && gamesQueueList.Count >= 1)
+            {
+                removedownloading = true;
+                RCLONE.killRclone();
+            }
+            else if (index > 0 && index < gamesQueueList.Count)
+            {
+                gamesQueueList.RemoveAt(index);
+            }
+        }
+
+        private void QueuePanel_ItemReordered(object sender, ReorderEventArgs e)
+        {
+            if (e.FromIndex <= 0 || e.FromIndex >= gamesQueueList.Count) return;
+
+            var item = gamesQueueList[e.FromIndex];
+            gamesQueueList.RemoveAt(e.FromIndex);
+
+            int insertAt = Math.Max(1, Math.Min(e.ToIndex, gamesQueueList.Count));
+            gamesQueueList.Insert(insertAt, item);
+        }
+
         private void notesRichTextBox_LinkClicked(object sender, LinkClickedEventArgs e)
         {
             try
@@ -7124,69 +7206,6 @@ function onYouTubeIframeAPIReady() {
             catch (Exception ex)
             {
                 Logger.Log($"Failed to open link: {ex.Message}", LogLevel.WARNING);
-            }
-        }
-
-        private void gamesQueListBox_DrawItem(object sender, DrawItemEventArgs e)
-        {
-            if (e.Index < 0) return;
-
-            // Determine colors based on selection state
-            Color backColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected
-                ? Color.FromArgb(93, 203, 173)  // Accent color for selected
-                : gamesQueListBox.BackColor;
-
-            Color foreColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected
-                ? Color.FromArgb(20, 20, 20)    // Dark text on accent
-                : gamesQueListBox.ForeColor;
-
-            Font font = (e.State & DrawItemState.Selected) == DrawItemState.Selected
-                ? new Font("Microsoft Sans Serif", 10F, FontStyle.Bold)
-                : new Font("Microsoft Sans Serif", 10F, FontStyle.Regular);
-
-            // Clear the item background first
-            using (SolidBrush clearBrush = new SolidBrush(gamesQueListBox.BackColor))
-            {
-                e.Graphics.FillRectangle(clearBrush, e.Bounds);
-            }
-
-            // Draw rounded background
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-            int radius = 1;
-            int margin = 4;
-            Rectangle roundedRect = new Rectangle(
-                e.Bounds.X,
-                e.Bounds.Y,
-                e.Bounds.Width - (margin * 2),
-                e.Bounds.Height
-            );
-
-            using (GraphicsPath path = CreateRoundedRectPath(roundedRect, radius))
-            using (SolidBrush backgroundBrush = new SolidBrush(backColor))
-            {
-                e.Graphics.FillPath(backgroundBrush, path);
-            }
-
-            // Draw text with padding
-            string text = gamesQueListBox.Items[e.Index].ToString();
-            Rectangle textRect = new Rectangle(
-                roundedRect.X + 4,
-                roundedRect.Y,
-                roundedRect.Width - 8,
-                roundedRect.Height
-            );
-
-            using (SolidBrush textBrush = new SolidBrush(foreColor))
-            {
-                var sf = new StringFormat
-                {
-                    Alignment = StringAlignment.Near,
-                    LineAlignment = StringAlignment.Center,
-                    Trimming = StringTrimming.EllipsisCharacter,
-                    FormatFlags = StringFormatFlags.NoWrap
-                };
-                e.Graphics.DrawString(text, font, textBrush, textRect, sf);
             }
         }
 
@@ -7305,7 +7324,7 @@ function onYouTubeIframeAPIReady() {
         {
             // Skip if panels aren't initialized yet
             if (notesPanel == null || queuePanel == null) return;
-            if (gamesQueListBox == null || notesRichTextBox == null) return;
+            if (notesRichTextBox == null) return;
 
             // Panels start after webView21 (webView21 ends at 259 + 384 = 643, add spacing)
             int panelsStartX = 654;
@@ -7323,13 +7342,22 @@ function onYouTubeIframeAPIReady() {
             queuePanel.Location = new Point(panelsStartX, panelY);
             queuePanel.Size = new Size(queueWidth, BottomPanelHeight);
 
+            // Layout queue panel child (_queuePanel)
+            if (_queuePanel != null)
+            {
+                _queuePanel.Location = new Point(ChildHorizontalPadding, ChildTopMargin);
+                _queuePanel.Size = new Size(
+                    queuePanel.Width - ChildHorizontalPadding - ChildRightMargin,
+                    queuePanel.Height - ChildTopMargin * 2 - ReservedLabelHeight
+                );
+            }
+
             // Notes panel
             int notesX = panelsStartX + queueWidth + PanelSpacing;
             notesPanel.Location = new Point(notesX, panelY);
             notesPanel.Size = new Size(this.ClientSize.Width - notesX - RightMargin, BottomPanelHeight);
 
-            // Layout children using the same helper as CreateRoundedPanel
-            LayoutChildInPanel(queuePanel, gamesQueListBox, isNotesPanel: false);
+            // Layout notes child
             LayoutChildInPanel(notesPanel, notesRichTextBox, isNotesPanel: true);
 
             // Position labels at bottom of their panels

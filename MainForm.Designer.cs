@@ -202,6 +202,7 @@ namespace AndroidSideloader
             // 
             // gamesQueListBox
             // 
+            this.gamesQueListBox.AllowDrop = false;
             this.gamesQueListBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.gamesQueListBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(24)))), ((int)(((byte)(26)))), ((int)(((byte)(30)))));
             this.gamesQueListBox.BorderStyle = System.Windows.Forms.BorderStyle.None;
@@ -215,10 +216,6 @@ namespace AndroidSideloader
             this.gamesQueListBox.Name = "gamesQueListBox";
             this.gamesQueListBox.Size = new System.Drawing.Size(266, 192);
             this.gamesQueListBox.TabIndex = 9;
-            this.gamesQueListBox.MouseClick += new System.Windows.Forms.MouseEventHandler(this.gamesQueListBox_MouseClick);
-            this.gamesQueListBox.DrawItem += new System.Windows.Forms.DrawItemEventHandler(this.gamesQueListBox_DrawItem);
-            this.gamesQueListBox.DragDrop += new System.Windows.Forms.DragEventHandler(this.Form1_DragDrop);
-            this.gamesQueListBox.DragEnter += new System.Windows.Forms.DragEventHandler(this.Form1_DragEnter);
             // 
             // devicesComboBox
             // 
