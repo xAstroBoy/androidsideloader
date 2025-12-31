@@ -85,7 +85,7 @@ namespace AndroidSideloader
                 command = $" -s {DeviceID} {command}";
             }
 
-            if (!suppressLogging && !command.Contains("dumpsys") && !command.Contains("shell pm list packages") && !command.Contains("KEYCODE_WAKEUP") )
+            if (!suppressLogging && !command.Contains("dumpsys") && !command.Contains("shell pm list packages") && !command.Contains("KEYCODE_WAKEUP"))
             {
                 string logcmd = command;
                 if (logcmd.Contains(Environment.CurrentDirectory))

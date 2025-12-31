@@ -268,7 +268,9 @@ namespace AndroidSideloader.Utilities
                 writer.Write(IPAddress.HostToNetworkOrder((short)new Random().Next(0, ushort.MaxValue)));
                 writer.Write(IPAddress.HostToNetworkOrder((short)0x0100)); // Flags
                 writer.Write(IPAddress.HostToNetworkOrder((short)1));      // Questions
-                writer.Write(new byte[6]);                                 // Answer/Authority/Additional counts
+                writer.Write(IPAddress.HostToNetworkOrder((short)0));      // Answer RRs
+                writer.Write(IPAddress.HostToNetworkOrder((short)0));      // Authority RRs
+                writer.Write(IPAddress.HostToNetworkOrder((short)0));      // Additional RRs
 
                 foreach (string label in hostname.Split('.'))
                 {
