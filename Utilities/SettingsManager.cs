@@ -149,6 +149,9 @@ namespace AndroidSideloader.Utilities
         public int SortColumn { get; set; } = 0;
         public bool SortAscending { get; set; } = true;
 
+        // Download queue persistence
+        public string[] QueuedGames { get; set; } = new string[0];
+
         private SettingsManager()
         {
             Load();
@@ -280,6 +283,7 @@ namespace AndroidSideloader.Utilities
             WindowMaximized = false;
             SortColumn = 0;
             SortAscending = true;
+            QueuedGames = new string[0];
 
             Save();
             Debug.WriteLine("Default settings created.");

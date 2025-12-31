@@ -803,6 +803,13 @@ namespace AndroidSideloader
 
             changeTitlebarToDevice();
             UpdateStatusLabels();
+
+            // Load saved download queue and offer to resume
+            LoadQueueFromSettings();
+            if (gamesQueueList.Count > 0 && !isOffline)
+            {
+                await ResumeQueuedDownloadsAsync();
+            }
         }
 
         private void timer_Tick(object sender, EventArgs e)
@@ -3183,6 +3190,9 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             if (gamesQueueList.Count > 0)
                 gamesQueueList.RemoveAt(0);
             _queuePanel?.Invalidate();
+
+            // Save updated queue state
+            SaveQueueToSettings();
         }
 
         public void SetProgress(float progress)
@@ -3217,43 +3227,58 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                 }
                 progressBar.IsIndeterminate = true;
                 progressBar.OperationType = "Downloading";
-                if (gamesListView.SelectedItems.Count == 0)
+
+                // Check if we're resuming (queue already has items) or starting fresh
+                bool isResuming = gamesQueueList.Count > 0 && gamesAreDownloading == false;
+
+                if (!isResuming)
                 {
-                    progressBar.IsIndeterminate = false;
-                    changeTitle("You must select a game from the game list!");
-                    return;
-                }
-                string namebox = gamesListView.SelectedItems[0].ToString();
-                string nameboxtranslated = Sideloader.gameNameToSimpleName(namebox);
-                int count = 0;
-                string[] gamesToDownload;
-                if (gamesListView.SelectedItems.Count > 0)
-                {
-                    count = gamesListView.SelectedItems.Count;
-                    gamesToDownload = new string[count];
-                    for (int i = 0; i < count; i++)
+                    // Normal flow: add selected games to queue
+                    if (gamesListView.SelectedItems.Count == 0)
                     {
-                        gamesToDownload[i] = gamesListView.SelectedItems[i].SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
+                        progressBar.IsIndeterminate = false;
+                        changeTitle("You must select a game from the game list!");
+                        return;
+                    }
+                    string namebox = gamesListView.SelectedItems[0].ToString();
+                    string nameboxtranslated = Sideloader.gameNameToSimpleName(namebox);
+                    int count = 0;
+                    string[] gamesToDownload;
+                    if (gamesListView.SelectedItems.Count > 0)
+                    {
+                        count = gamesListView.SelectedItems.Count;
+                        gamesToDownload = new string[count];
+                        for (int i = 0; i < count; i++)
+                        {
+                            gamesToDownload[i] = gamesListView.SelectedItems[i].SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
+                        }
+                    }
+                    else
+                    {
+                        return;
+                    }
+
+                    progressBar.Value = 0;
+                    progressBar.IsIndeterminate = false;
+                    string game = gamesToDownload.Length == 1 ? $"\"{gamesToDownload[0]}\"" : "the selected games";
+                    isinstalling = true;
+                    //Add games to the queue
+                    for (int i = 0; i < gamesToDownload.Length; i++)
+                    {
+                        gamesQueueList.Add(gamesToDownload[i]);
+                    }
+
+                    if (gamesAreDownloading)
+                    {
+                        return;
                     }
                 }
                 else
                 {
-                    return;
-                }
-
-                progressBar.Value = 0;
-                progressBar.IsIndeterminate = false;
-                string game = gamesToDownload.Length == 1 ? $"\"{gamesToDownload[0]}\"" : "the selected games";
-                isinstalling = true;
-                //Add games to the queue
-                for (int i = 0; i < gamesToDownload.Length; i++)
-                {
-                    gamesQueueList.Add(gamesToDownload[i]);
-                }
-
-                if (gamesAreDownloading)
-                {
-                    return;
+                    // Resuming: queue already populated, just start processing
+                    progressBar.Value = 0;
+                    progressBar.IsIndeterminate = false;
+                    isinstalling = true;
                 }
 
                 gamesAreDownloading = true;
@@ -4040,8 +4065,8 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
             if (isinstalling)
             {
-                DialogResult res1 = FlexibleMessageBox.Show(Program.form, "There are downloads and/or installations in progress,\nif you exit now you'll have to start the entire process over again.\nAre you sure you want to exit?", "Still downloading/installing.",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                DialogResult res1 = FlexibleMessageBox.Show(Program.form, "There are downloads and/or installations in progress.\nYour download queue will be saved, but any ongoing installations will be canceled.\n\nAre you sure you want to exit?", "Still downloading/installing.",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
                 if (res1 != DialogResult.Yes)
                 {
                     e.Cancel = true;
@@ -4055,7 +4080,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             else if (isuploading)
             {
                 DialogResult res = FlexibleMessageBox.Show(Program.form, "There is an upload still in progress, if you exit now\nyou'll have to start the entire process over again.\nAre you sure you want to exit?", "Still uploading.",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
                 if (res != DialogResult.Yes)
                 {
                     e.Cancel = true;
@@ -7217,6 +7242,54 @@ function onYouTubeIframeAPIReady() {
             if (_queuePanel == null) return;
             _queuePanel.SetItems(gamesQueueList);
             _queuePanel.IsDownloading = gamesAreDownloading && gamesQueueList.Count > 0;
+
+            // Persist queue to settings
+            SaveQueueToSettings();
+        }
+
+        private void SaveQueueToSettings()
+        {
+            settings.QueuedGames = gamesQueueList.ToArray();
+            settings.Save();
+        }
+
+        private void LoadQueueFromSettings()
+        {
+            if (settings.QueuedGames == null || settings.QueuedGames.Length == 0)
+                return;
+
+            foreach (string game in settings.QueuedGames)
+            {
+                if (!string.IsNullOrWhiteSpace(game) && !gamesQueueList.Contains(game))
+                {
+                    gamesQueueList.Add(game);
+                }
+            }
+        }
+
+        private async Task ResumeQueuedDownloadsAsync()
+        {
+            if (gamesQueueList.Count == 0)
+                return;
+
+            // Ask user if they want to resume
+            DialogResult result = FlexibleMessageBox.Show(
+                Program.form,
+                $"You have {gamesQueueList.Count} game(s) in your download queue from a previous session.\n\nDo you want to resume downloading?",
+                "Resume Downloads?",
+                MessageBoxButtons.YesNo);
+
+            if (result == DialogResult.Yes)
+            {
+                // Trigger the download process
+                downloadInstallGameButton_Click(null, EventArgs.Empty);
+            }
+            else
+            {
+                // Clear the queue if user doesn't want to resume
+                gamesQueueList.Clear();
+                SaveQueueToSettings();
+            }
         }
 
         private void QueuePanel_ItemRemoved(object sender, int index)
@@ -7229,6 +7302,7 @@ function onYouTubeIframeAPIReady() {
             else if (index > 0 && index < gamesQueueList.Count)
             {
                 gamesQueueList.RemoveAt(index);
+                SaveQueueToSettings();
             }
         }
 
@@ -7241,6 +7315,8 @@ function onYouTubeIframeAPIReady() {
 
             int insertAt = Math.Max(1, Math.Min(e.ToIndex, gamesQueueList.Count));
             gamesQueueList.Insert(insertAt, item);
+
+            SaveQueueToSettings();
         }
 
         private void notesRichTextBox_LinkClicked(object sender, LinkClickedEventArgs e)
