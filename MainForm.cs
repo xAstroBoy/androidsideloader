@@ -239,6 +239,9 @@ namespace AndroidSideloader
 
             // Subscribe to click events to unfocus search text box
             this.Click += UnfocusSearchTextBox;
+
+            // Load saved window state
+            LoadWindowState();
         }
 
         private void CheckCommandLineArguments()
@@ -411,8 +414,11 @@ namespace AndroidSideloader
                 }
             });
 
-            // Basic UI setup
-            CenterToScreen();
+            // Basic UI setup - only center if no saved position
+            if (this.StartPosition != FormStartPosition.Manual)
+            {
+                CenterToScreen();
+            }
             gamesListView.View = View.Details;
             gamesListView.FullRowSelect = true;
             gamesListView.GridLines = false;
@@ -2464,6 +2470,12 @@ namespace AndroidSideloader
             loaded = true;
             Logger.Log($"initListView total completed in {sw.ElapsedMilliseconds}ms");
 
+            // Show header now that loading is complete
+            if (_listViewRenderer != null)
+            {
+                _listViewRenderer.SuppressHeader = false;
+            }
+
             // Now that ListView is fully populated and _allItems is initialized,
             // switch to the user's preferred view
             this.Invoke(() =>
@@ -4020,6 +4032,9 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
         private async void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
+            // Save window state before closing
+            SaveWindowState();
+
             // Cleanup DNS helper (stops proxy)
             DnsHelper.Cleanup();
 
@@ -4697,6 +4712,9 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             // Invalidate header to update sort indicators
             gamesListView.Invalidate(new Rectangle(0, 0, gamesListView.ClientSize.Width,
                 gamesListView.Font.Height + 8));
+
+            // Save sort state
+            SaveWindowState();
         }
 
         private void CheckEnter(object sender, System.Windows.Forms.KeyPressEventArgs e)
@@ -6153,6 +6171,15 @@ function onYouTubeIframeAPIReady() {
                     selectedReleaseName = selectedItem.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
                 }
             }
+            else if (isGalleryView && _fastGallery != null && _fastGallery._selectedIndex >= 0)
+            {
+                // Capture selection from gallery view
+                var galleryItem = _fastGallery.GetItemAtIndex(_fastGallery._selectedIndex);
+                if (galleryItem != null && galleryItem.SubItems.Count > 1)
+                {
+                    selectedReleaseName = galleryItem.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
+                }
+            }
 
             // Capture current sort state before switching
             if (isGalleryView && _fastGallery != null)
@@ -6223,6 +6250,22 @@ function onYouTubeIframeAPIReady() {
 
                 // Apply shared sort state to list view
                 ApplySortToListView();
+
+                // Scroll to the previously selected item in list view
+                if (!string.IsNullOrEmpty(selectedReleaseName))
+                {
+                    foreach (ListViewItem item in gamesListView.Items)
+                    {
+                        if (item.SubItems.Count > 1 &&
+                            item.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text.Equals(selectedReleaseName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            item.Selected = true;
+                            item.Focused = true;
+                            item.EnsureVisible();
+                            break;
+                        }
+                    }
+                }
             }
         }
 
@@ -6336,6 +6379,9 @@ function onYouTubeIframeAPIReady() {
                 _sharedSortField = _fastGallery.CurrentSortField;
                 _sharedSortDirection = _fastGallery.CurrentSortDirection;
             }
+
+            // Save sort state
+            SaveWindowState();
         }
 
         private void GamesGalleryView_Resize(object sender, EventArgs e)
@@ -7709,6 +7755,143 @@ function onYouTubeIframeAPIReady() {
             }
 
             speedLabel.Text = "";
+        }
+
+        private void SaveWindowState()
+        {
+            try
+            {
+                // Save maximized state separately
+                settings.WindowMaximized = this.WindowState == FormWindowState.Maximized;
+
+                // Save normal bounds (not maximized bounds)
+                if (this.WindowState == FormWindowState.Normal)
+                {
+                    settings.WindowX = this.Location.X;
+                    settings.WindowY = this.Location.Y;
+                    settings.WindowWidth = this.Size.Width;
+                    settings.WindowHeight = this.Size.Height;
+                }
+                else if (this.WindowState == FormWindowState.Maximized)
+                {
+                    settings.WindowX = this.RestoreBounds.X;
+                    settings.WindowY = this.RestoreBounds.Y;
+                    settings.WindowWidth = this.RestoreBounds.Width;
+                    settings.WindowHeight = this.RestoreBounds.Height;
+                }
+
+                // Capture current sort state from active view before saving
+                if (isGalleryView && _fastGallery != null)
+                {
+                    _sharedSortField = _fastGallery.CurrentSortField;
+                    _sharedSortDirection = _fastGallery.CurrentSortDirection;
+                }
+                else if (!isGalleryView && lvwColumnSorter != null)
+                {
+                    _sharedSortField = ColumnIndexToSortField(lvwColumnSorter.SortColumn);
+                    SortDirection listDirection = lvwColumnSorter.Order == SortOrder.Ascending
+                        ? SortDirection.Ascending
+                        : SortDirection.Descending;
+
+                    // Flip popularity when capturing from list view
+                    if (_sharedSortField == SortField.Popularity)
+                    {
+                        _sharedSortDirection = listDirection == SortDirection.Ascending
+                            ? SortDirection.Descending
+                            : SortDirection.Ascending;
+                    }
+                    else
+                    {
+                        _sharedSortDirection = listDirection;
+                    }
+                }
+
+                // Save sort state
+                settings.SortColumn = SortFieldToColumnIndex(_sharedSortField);
+                settings.SortAscending = _sharedSortDirection == SortDirection.Ascending;
+
+                settings.Save();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to save window state: {ex.Message}", LogLevel.WARNING);
+            }
+        }
+
+        private void LoadWindowState()
+        {
+            try
+            {
+                // Load window position and size
+                if (settings.WindowWidth > 0 && settings.WindowHeight > 0)
+                {
+                    // Validate that the saved position is on a visible screen
+                    Rectangle savedBounds = new Rectangle(
+                        settings.WindowX,
+                        settings.WindowY,
+                        settings.WindowWidth,
+                        settings.WindowHeight);
+
+                    bool isOnScreen = false;
+                    foreach (Screen screen in Screen.AllScreens)
+                    {
+                        if (screen.WorkingArea.IntersectsWith(savedBounds))
+                        {
+                            isOnScreen = true;
+                            break;
+                        }
+                    }
+
+                    if (isOnScreen)
+                    {
+                        this.StartPosition = FormStartPosition.Manual;
+                        this.Location = new Point(settings.WindowX, settings.WindowY);
+                        this.Size = new Size(settings.WindowWidth, settings.WindowHeight);
+
+                        if (settings.WindowMaximized)
+                        {
+                            this.WindowState = FormWindowState.Maximized;
+                        }
+                    }
+                    else
+                    {
+                        // Saved position is off-screen, use defaults
+                        this.StartPosition = FormStartPosition.CenterScreen;
+                    }
+                }
+
+                // Load sort state
+                _sharedSortField = ColumnIndexToSortField(settings.SortColumn);
+                _sharedSortDirection = settings.SortAscending ? SortDirection.Ascending : SortDirection.Descending;
+
+                // Apply to list view sorter (with popularity flip)
+                if (settings.SortColumn >= 0 && settings.SortColumn < gamesListView.Columns.Count)
+                {
+                    lvwColumnSorter.SortColumn = settings.SortColumn;
+
+                    // For popularity, flip direction for list view
+                    SortDirection effectiveDirection = _sharedSortDirection;
+                    if (_sharedSortField == SortField.Popularity)
+                    {
+                        effectiveDirection = _sharedSortDirection == SortDirection.Ascending
+                            ? SortDirection.Descending
+                            : SortDirection.Ascending;
+                    }
+
+                    lvwColumnSorter.Order = effectiveDirection == SortDirection.Ascending
+                        ? SortOrder.Ascending
+                        : SortOrder.Descending;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to load window state: {ex.Message}", LogLevel.WARNING);
+                this.StartPosition = FormStartPosition.CenterScreen;
+                lvwColumnSorter.SortColumn = 0;
+                lvwColumnSorter.Order = SortOrder.Ascending;
+                _sharedSortField = SortField.Name;
+                _sharedSortDirection = SortDirection.Ascending;
+            }
         }
     }
 

@@ -137,6 +137,18 @@ namespace AndroidSideloader.Utilities
         public string ProxyPort { get; set; } = string.Empty;
         public bool TrailersEnabled { get; set; } = true;
         public bool UseGalleryView { get; set; } = true;
+
+        // Window state persistence
+        public int WindowX { get; set; } = -1;
+        public int WindowY { get; set; } = -1;
+        public int WindowWidth { get; set; } = -1;
+        public int WindowHeight { get; set; } = -1;
+        public bool WindowMaximized { get; set; } = false;
+
+        // Sort state persistence
+        public int SortColumn { get; set; } = 0;
+        public bool SortAscending { get; set; } = true;
+
         private SettingsManager()
         {
             Load();
@@ -261,6 +273,13 @@ namespace AndroidSideloader.Utilities
             ProxyPort = string.Empty;
             TrailersEnabled = true;
             UseGalleryView = true;
+            WindowX = -1;
+            WindowY = -1;
+            WindowWidth = -1;
+            WindowHeight = -1;
+            WindowMaximized = false;
+            SortColumn = 0;
+            SortAscending = true;
 
             Save();
             Debug.WriteLine("Default settings created.");

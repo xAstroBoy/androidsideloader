@@ -122,8 +122,30 @@ namespace AndroidSideloader
         [DllImport("user32.dll")]
         private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
 
+        [DllImport("user32.dll")]
+        private static extern bool InvalidateRect(IntPtr hWnd, IntPtr lpRect, bool bErase);
+
         [DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
+
+        private bool _suppressHeader = true;
+
+        public bool SuppressHeader
+        {
+            get => _suppressHeader;
+            set
+            {
+                if (_suppressHeader == value) return;
+                _suppressHeader = value;
+
+                // Invalidate ListView and header control
+                _listView.Invalidate();
+                if (_headerCursor.Handle != IntPtr.Zero)
+                {
+                    InvalidateRect(_headerCursor.Handle, IntPtr.Zero, true);
+                }
+            }
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         private struct HDHITTESTINFO
@@ -178,6 +200,57 @@ namespace AndroidSideloader
 
             protected override void WndProc(ref Message m)
             {
+                const int WM_LBUTTONDOWN = 0x0201;
+                const int WM_LBUTTONUP = 0x0202;
+                const int WM_LBUTTONDBLCLK = 0x0203;
+                const int WM_RBUTTONDOWN = 0x0204;
+                const int WM_RBUTTONUP = 0x0205;
+
+                // Block mouse interaction when header is suppressed, but still handle layout
+                if (_owner._suppressHeader)
+                {
+                    // Block mouse clicks
+                    if (m.Msg == WM_LBUTTONDOWN || m.Msg == WM_LBUTTONUP || m.Msg == WM_LBUTTONDBLCLK ||
+                        m.Msg == WM_RBUTTONDOWN || m.Msg == WM_RBUTTONUP)
+                    {
+                        m.Result = IntPtr.Zero;
+                        return;
+                    }
+
+                    if (m.Msg == WM_SETCURSOR)
+                    {
+                        Cursor.Current = Cursors.Default;
+                        m.Result = (IntPtr)1;
+                        return;
+                    }
+
+                    // Still handle HDM_LAYOUT to maintain custom header height
+                    if (m.Msg == HDM_LAYOUT)
+                    {
+                        base.WndProc(ref m);
+
+                        try
+                        {
+                            HDLAYOUT hdl = Marshal.PtrToStructure<HDLAYOUT>(m.LParam);
+                            WINDOWPOS wpos = Marshal.PtrToStructure<WINDOWPOS>(hdl.pwpos);
+                            RECT rc = Marshal.PtrToStructure<RECT>(hdl.prc);
+
+                            wpos.cy = CUSTOM_HEADER_HEIGHT;
+                            rc.top = CUSTOM_HEADER_HEIGHT;
+
+                            Marshal.StructureToPtr(wpos, hdl.pwpos, false);
+                            Marshal.StructureToPtr(rc, hdl.prc, false);
+                        }
+                        catch { }
+
+                        m.Result = (IntPtr)1;
+                        return;
+                    }
+
+                    base.WndProc(ref m);
+                    return;
+                }
+
                 if (m.Msg == WM_ERASEBKGND)
                 {
                     m.Result = (IntPtr)1;
@@ -609,6 +682,14 @@ namespace AndroidSideloader
         {
             var g = e.Graphics;
             int listViewWidth = _listView.ClientSize.Width;
+
+            // During loading, just fill with background color
+            if (_suppressHeader)
+            {
+                g.FillRectangle(RowNormalBrush, new Rectangle(0, e.Bounds.Y, listViewWidth, e.Bounds.Height));
+                e.DrawDefault = false;
+                return;
+            }
 
             g.FillRectangle(HeaderBgBrush, e.Bounds);
 
