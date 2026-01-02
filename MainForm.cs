@@ -5206,7 +5206,7 @@ function onYouTubeIframeAPIReady() {
             // Lightweight search
             try
             {
-                string query = WebUtility.UrlEncode(gameName + " VR trailer");
+                string query = WebUtility.UrlEncode($"\"{gameName}\" VR trailer");
                 string searchUrl = $"https://www.youtube.com/results?search_query={query}";
                 using (var http = new HttpClient())
                 {
