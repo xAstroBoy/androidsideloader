@@ -1604,8 +1604,6 @@ namespace AndroidSideloader
             }
 
             changeTitle($"Processing dropped file. If Rookie freezes, please wait. Do not close Rookie!");
-
-            DragDropLbl.Visible = false;
             ProcessOutput output = new ProcessOutput(String.Empty, String.Empty);
             ADB.DeviceID = GetDeviceID();
             progressBar.IsIndeterminate = true;
@@ -1964,9 +1962,6 @@ namespace AndroidSideloader
             progressBar.IsIndeterminate = false;
 
             showAvailableSpace();
-
-            DragDropLbl.Visible = false;
-
             ShowPrcOutput(output);
             listAppsBtn();
         }
@@ -1977,17 +1972,10 @@ namespace AndroidSideloader
             {
                 e.Effect = DragDropEffects.Copy;
             }
-
-            DragDropLbl.Visible = true;
-            DragDropLbl.Text = "Drag APK or OBB";
-            changeTitle(DragDropLbl.Text);
         }
 
         private void Form1_DragLeave(object sender, EventArgs e)
         {
-            DragDropLbl.Visible = false;
-            DragDropLbl.Text = String.Empty;
-
             changeTitle("");
         }
 
@@ -5364,7 +5352,7 @@ function onYouTubeIframeAPIReady() {
 
             if (!isGalleryView)
             {
-                notesRichTextBox.Text = File.Exists(NotePath) ? File.ReadAllText(NotePath) : "";
+                UpdateReleaseNotes(NotePath);
                 UpdateNotesScrollBar();
             }
         }
@@ -6460,7 +6448,32 @@ function onYouTubeIframeAPIReady() {
 
             // Load release notes
             string notePath = Path.Combine(SideloaderRCLONE.NotesFolder, $"{releaseName}.txt");
-            notesRichTextBox.Text = File.Exists(notePath) ? File.ReadAllText(notePath) : "";
+            UpdateReleaseNotes(notePath);
+            UpdateNotesScrollBar();
+        }
+
+        private void UpdateReleaseNotes(string notes)
+        {
+            if (File.Exists(notes))
+            {
+                // Reset to normal styling for actual content
+                notesRichTextBox.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
+                notesRichTextBox.ForeColor = Color.White;
+                notesRichTextBox.Text = File.ReadAllText(notes);
+                notesRichTextBox.SelectAll();
+                notesRichTextBox.SelectionAlignment = HorizontalAlignment.Left;
+                notesRichTextBox.DeselectAll();
+            }
+            else
+            {
+                // Show placeholder with queue-matching style (grey, italic, centered)
+                notesRichTextBox.Font = new Font("Segoe UI", 8.5F, FontStyle.Italic);
+                notesRichTextBox.ForeColor = Color.FromArgb(140, 140, 140);
+                notesRichTextBox.Text = "\n\n\n\n\nTip: Press F1 to see all shortcuts\n\nDrag and drop APKs or folders to install";
+                notesRichTextBox.SelectAll();
+                notesRichTextBox.SelectionAlignment = HorizontalAlignment.Center;
+                notesRichTextBox.DeselectAll();
+            }
             UpdateNotesScrollBar();
         }
 
