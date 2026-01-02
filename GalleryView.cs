@@ -68,8 +68,8 @@ public class FastGalleryPanel : Control
     // Visual constants
     private const int CORNER_RADIUS = 10;
     private const int THUMB_CORNER_RADIUS = 8;
-    private const float HOVER_SCALE = 1.07f;
-    private const float ANIMATION_SPEED = 0.25f;
+    private const float HOVER_SCALE = 1.08f;
+    private const float ANIMATION_SPEED = 0.33f;
     private const float SCROLL_SMOOTHING = 0.3f;
     private const int DELETE_BUTTON_SIZE = 26;
     private const int DELETE_BUTTON_MARGIN = 6;
@@ -783,7 +783,7 @@ public class FastGalleryPanel : Control
             else
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.InterpolationMode = InterpolationMode.Bilinear;
             }
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
@@ -845,6 +845,7 @@ public class FastGalleryPanel : Control
     {
         var item = _items[index];
         var state = _tileStates.ContainsKey(index) ? _tileStates[index] : new TileAnimationState();
+        bool isHovered = index == _hoveredIndex;
 
         int baseX = _leftPadding + col * (_tileWidth + _spacing);
         int baseY = _spacing + SORT_PANEL_HEIGHT + row * (_tileHeight + _spacing) - scrollY;
@@ -857,80 +858,36 @@ public class FastGalleryPanel : Control
 
         var tileRect = new Rectangle(x, y, scaledW, scaledH);
 
-        // Tile background
-        using (var tilePath = CreateRoundedRectangle(tileRect, CORNER_RADIUS))
-        {
-            int brightness = (int)state.BackgroundBrightness;
-            using (var bgBrush = new SolidBrush(Color.FromArgb(255, brightness, brightness, brightness + 2)))
-                g.FillPath(bgBrush, tilePath);
-
-            if (state.SelectionOpacity > 0.01f)
-            {
-                using (var selectionPen = new Pen(Color.FromArgb((int)(255 * state.SelectionOpacity), TileBorderSelected), 3f))
-                    g.DrawPath(selectionPen, tilePath);
-            }
-
-            if (state.BorderOpacity > 0.01f)
-            {
-                using (var borderPen = new Pen(Color.FromArgb((int)(200 * state.BorderOpacity), TileBorderHover), 2f))
-                    g.DrawPath(borderPen, tilePath);
-            }
-
-            // Favorite border (golden)
-            if (state.FavoriteOpacity > 0.5f)
-            {
-                using (var favPen = new Pen(Color.FromArgb((int)(180 * state.FavoriteOpacity), TileBorderFavorite), 1.0f))
-                    g.DrawPath(favPen, tilePath);
-            }
-        }
-
-        // Thumbnail
-        int thumbPadding = 2;
-        int thumbHeight = scaledH - (thumbPadding * 2);
-
-        var thumbRect = new Rectangle(
-            x + thumbPadding,
-            y + thumbPadding,
-            scaledW - (thumbPadding * 2),
-            thumbHeight
-        );
-
-        // Base (non-scaled) thumbnail size for stable placeholder text layout
-        int baseThumbW = _tileWidth - (thumbPadding * 2);
-        int baseThumbH = _tileHeight - (thumbPadding * 2);
-
-        var baseThumbRect = new Rectangle(
-            thumbRect.X + (thumbRect.Width - baseThumbW) / 2,
-            thumbRect.Y + (thumbRect.Height - baseThumbH) / 2,
-            baseThumbW,
-            baseThumbH
-        );
-
         string packageName = item.SubItems.Count > 2 ? item.SubItems[2].Text : "";
         var thumbnail = GetCachedImage(packageName);
 
-        using (var thumbPath = CreateRoundedRectangle(thumbRect, THUMB_CORNER_RADIUS))
+        using (var tilePath = CreateRoundedRectangle(tileRect, THUMB_CORNER_RADIUS))
         {
             var oldClip = g.Clip;
-            g.SetClip(thumbPath, CombineMode.Replace);
+            g.SetClip(tilePath, CombineMode.Replace);
 
             if (thumbnail != null)
             {
+                InterpolationMode previousMode = g.InterpolationMode;
+                if (isHovered)
+                    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+
                 float imgRatio = (float)thumbnail.Width / thumbnail.Height;
-                float rectRatio = (float)thumbRect.Width / thumbRect.Height;
+                float rectRatio = (float)tileRect.Width / tileRect.Height;
                 Rectangle drawRect = imgRatio > rectRatio
-                    ? new Rectangle(thumbRect.X - ((int)(thumbRect.Height * imgRatio) - thumbRect.Width) / 2, thumbRect.Y, (int)(thumbRect.Height * imgRatio), thumbRect.Height)
-                    : new Rectangle(thumbRect.X, thumbRect.Y - ((int)(thumbRect.Width / imgRatio) - thumbRect.Height) / 2, thumbRect.Width, (int)(thumbRect.Width / imgRatio));
+                    ? new Rectangle(x - ((int)(scaledH * imgRatio) - scaledW) / 2, y, (int)(scaledH * imgRatio), scaledH)
+                    : new Rectangle(x, y - ((int)(scaledW / imgRatio) - scaledH) / 2, scaledW, (int)(scaledW / imgRatio));
                 g.DrawImage(thumbnail, drawRect);
+
+                if (isHovered)
+                    g.InterpolationMode = previousMode;
             }
             else
             {
                 using (var brush = new SolidBrush(Color.FromArgb(35, 35, 40)))
-                    g.FillPath(brush, thumbPath);
+                    g.FillPath(brush, tilePath);
 
-                // Show game name when thumbnail is missing, centered
-                var nameRect = new Rectangle(baseThumbRect.X + 10, baseThumbRect.Y, baseThumbRect.Width - 20, baseThumbRect.Height);
-
+                var nameRect = new Rectangle(x + 10, y, scaledW - 20, scaledH);
                 using (var font = new Font("Segoe UI", 10f, FontStyle.Bold))
                 {
                     var sfName = new StringFormat
@@ -939,7 +896,6 @@ public class FastGalleryPanel : Control
                         LineAlignment = StringAlignment.Center,
                         Trimming = StringTrimming.EllipsisCharacter
                     };
-
                     using (var text = new SolidBrush(Color.FromArgb(110, 110, 120)))
                         g.DrawString(item.Text, font, text, nameRect, sfName);
                 }
@@ -949,12 +905,11 @@ public class FastGalleryPanel : Control
         }
 
         // Status badges (left side)
-        int badgeY = y + thumbPadding + 4;
+        int badgeY = y + 4;
 
-        // Favorite badge
         if (state.FavoriteOpacity > 0.5f)
         {
-            DrawBadge(g, "★", x + thumbPadding + 4, badgeY, BadgeFavoriteBg);
+            DrawBadge(g, "★", x + 4, badgeY, BadgeFavoriteBg);
             badgeY += 18;
         }
 
@@ -964,68 +919,56 @@ public class FastGalleryPanel : Control
 
         if (hasUpdate)
         {
-            DrawBadge(g, "UPDATE AVAILABLE", x + thumbPadding + 4, badgeY, Color.FromArgb(180, MainForm.ColorUpdateAvailable.R, MainForm.ColorUpdateAvailable.G, MainForm.ColorUpdateAvailable.B));
+            DrawBadge(g, "UPDATE AVAILABLE", x + 4, badgeY, Color.FromArgb(180, MainForm.ColorUpdateAvailable.R, MainForm.ColorUpdateAvailable.G, MainForm.ColorUpdateAvailable.B));
             badgeY += 18;
         }
 
         if (canDonate)
         {
-            DrawBadge(g, "NEWER THAN LIST", x + thumbPadding + 4, badgeY, Color.FromArgb(180, MainForm.ColorDonateGame.R, MainForm.ColorDonateGame.G, MainForm.ColorDonateGame.B));
+            DrawBadge(g, "NEWER THAN LIST", x + 4, badgeY, Color.FromArgb(180, MainForm.ColorDonateGame.R, MainForm.ColorDonateGame.G, MainForm.ColorDonateGame.B));
             badgeY += 18;
         }
 
         if (installed || hasUpdate || canDonate)
-            DrawBadge(g, "INSTALLED", x + thumbPadding + 4, badgeY, BadgeInstalledBg);
+            DrawBadge(g, "INSTALLED", x + 4, badgeY, BadgeInstalledBg);
 
-        // Right-side badges (top-right of thumbnail)
-        int rightBadgeY = y + thumbPadding + 4;
+        // Right-side badges
+        int rightBadgeY = y + 4;
 
-        // Size badge (top right) - always visible
         if (item.SubItems.Count > 5)
         {
             string sizeText = item.SubItems[5].Text;
             if (!string.IsNullOrEmpty(sizeText))
             {
-                DrawRightAlignedBadge(g, sizeText, x + scaledW - thumbPadding - 4, rightBadgeY, 1.0f);
+                DrawRightAlignedBadge(g, sizeText, x + scaledW - 4, rightBadgeY, 1.0f);
                 rightBadgeY += 18;
             }
         }
 
-        // Last updated badge (below size, right aligned) - only on hover with fade
         if (state.TooltipOpacity > 0.01f && item.SubItems.Count > 4)
         {
-            string lastUpdated = item.SubItems[4].Text;
-            string formattedDate = FormatLastUpdated(lastUpdated);
+            string formattedDate = FormatLastUpdated(item.SubItems[4].Text);
             if (!string.IsNullOrEmpty(formattedDate))
-            {
-                DrawRightAlignedBadge(g, formattedDate, x + scaledW - thumbPadding - 4, rightBadgeY, state.TooltipOpacity);
-            }
+                DrawRightAlignedBadge(g, formattedDate, x + scaledW - 4, rightBadgeY, state.TooltipOpacity);
         }
 
-        // Delete button (bottom-right of thumbnail) - for installed apps on hover
+        // Delete button
         if (state.DeleteButtonOpacity > 0.01f)
-        {
-            DrawDeleteButton(g, x, y, scaledW, thumbHeight, thumbPadding, state.DeleteButtonOpacity, _isHoveringDeleteButton && index == _hoveredIndex);
-        }
+            DrawDeleteButton(g, x, y, scaledW, scaledH, 0, state.DeleteButtonOpacity, _isHoveringDeleteButton && index == _hoveredIndex);
 
         // Game name
         if (state.TooltipOpacity > 0.01f)
         {
             int overlayH = 20;
-            var overlayRect = new Rectangle(thumbRect.X, thumbRect.Bottom - overlayH, thumbRect.Width, overlayH);
+            var overlayRect = new Rectangle(x, y + scaledH - overlayH, scaledW, overlayH);
 
-            // Clip to the exact rounded thumbnail so the overlay corners match perfectly
             Region oldClip = g.Clip;
-            using (var clipPath = CreateRoundedRectangle(thumbRect, THUMB_CORNER_RADIUS))
+            using (var clipPath = CreateRoundedRectangle(tileRect, THUMB_CORNER_RADIUS))
             {
                 g.SetClip(clipPath, CombineMode.Intersect);
-
-                // Slightly overdraw to avoid 1px seams from AA / integer rounding
                 var fillRect = new Rectangle(overlayRect.X - 1, overlayRect.Y, overlayRect.Width + 2, overlayRect.Height + 1);
-
                 using (var overlayBrush = new SolidBrush(Color.FromArgb((int)(180 * state.TooltipOpacity), 0, 0, 0)))
                     g.FillRectangle(overlayBrush, fillRect);
-
                 g.Clip = oldClip;
             }
 
@@ -1039,10 +982,24 @@ public class FastGalleryPanel : Control
                     Trimming = StringTrimming.EllipsisCharacter,
                     FormatFlags = StringFormatFlags.NoWrap
                 };
-
-                var textRect = new Rectangle(overlayRect.X, overlayRect.Y + 1, overlayRect.Width, overlayRect.Height);
-                g.DrawString(item.Text, font, brush, textRect, sf);
+                g.DrawString(item.Text, font, brush, new Rectangle(overlayRect.X, overlayRect.Y + 1, overlayRect.Width, overlayRect.Height), sf);
             }
+        }
+
+        // Tile borders
+        using (var tilePath = CreateRoundedRectangle(tileRect, CORNER_RADIUS))
+        {
+            if (state.SelectionOpacity > 0.01f) // Selected border
+                using (var selectionPen = new Pen(Color.FromArgb((int)(255 * state.SelectionOpacity), TileBorderSelected), 3f))
+                    g.DrawPath(selectionPen, tilePath);
+
+            if (state.BorderOpacity > 0.01f) // Hover border
+                using (var borderPen = new Pen(Color.FromArgb((int)(200 * state.BorderOpacity), TileBorderHover), 2f))
+                    g.DrawPath(borderPen, tilePath);
+
+            if (state.FavoriteOpacity > 0.5f) // Favorite border
+                using (var favPen = new Pen(Color.FromArgb((int)(180 * state.FavoriteOpacity), TileBorderFavorite), 1f))
+                    g.DrawPath(favPen, tilePath);
         }
     }
 
@@ -1160,16 +1117,6 @@ public class FastGalleryPanel : Control
                 g.DrawString(text, font, Brushes.White, rect, sf);
             }
         }
-    }
-
-    private string FormatSize(string sizeStr)
-    {
-        if (double.TryParse(sizeStr?.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double mb))
-        {
-            double gb = mb / 1024.0;
-            return gb >= 0.1 ? $"{gb:F2} GB" : $"{mb:F0} MB";
-        }
-        return "";
     }
 
     private Image GetCachedImage(string packageName)
