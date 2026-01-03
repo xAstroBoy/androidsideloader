@@ -3363,6 +3363,8 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                     }
                 }
 
+                string gameDisplayName = Sideloader.gameNameToSimpleName(releaseName);
+
                 // Check disk storage
                 if (downloadDirFreeMB > 0 && gameSizeMB > 0)
                 {
@@ -3380,7 +3382,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                     if (downloadDirFreeMB < requiredMB)
                     {
                         string driveLetter = Path.GetPathRoot(downloadPath);
-                        spaceError = $"Not enough disk space on {driveLetter}\n\n" +
+                        spaceError = $"Not enough disk space on {driveLetter} for \"{gameDisplayName}\"\n\n" +
                                     $"Available: {(downloadDirFreeMB / 1024.0):F2} GB\n" +
                                     $"Required: {(requiredMB / 1024.0):F2} GB\n\n" +
                                     $"Free up space or change download directory in Settings.";
@@ -3468,7 +3470,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                         $"Required: {gameText}";
                         }
 
-                        spaceError = $"Not enough space on your Quest\n\n" +
+                        spaceError = $"Not enough space on your Quest for \"{gameDisplayName}\"\n\n" +
                                     $"{details}\n\n" +
                                     $"Free up {neededText} on your Quest, or disable sideloading to download only.";
                         break;
@@ -3533,6 +3535,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             {
                 gameName = gamesQueueList.ToArray()[0];
                 string packagename = Sideloader.gameNameToPackageName(gameName);
+                string gameDisplayName = Sideloader.gameNameToSimpleName(gameName);
                 string versioncode = Sideloader.gameNameToVersionCode(gameName);
                 string dir = Path.GetDirectoryName(gameName);
                 string gameDirectory = Path.Combine(settings.DownloadDir, gameName);
@@ -3554,8 +3557,6 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
                 if (currentGameSizeMB > 0)
                 {
-                    string gameDisplayName = Sideloader.gameNameToSimpleName(gameName);
-
                     // Check disk space
                     long currentDiskFreeMB = -1;
                     try
