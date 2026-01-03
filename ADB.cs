@@ -287,18 +287,38 @@ namespace AndroidSideloader
             {
                 Logger.Log($"SideloadWithProgressAsync error: {ex.Message}", LogLevel.ERROR);
 
-                if (ex.Message.Contains("INSTALL_FAILED") ||
-                    ex.Message.Contains("signatures do not match"))
+                // Signature mismatches and version downgrades can be fixed by reinstalling
+                bool isReinstallEligible = ex.Message.Contains("signatures do not match") ||
+                                           ex.Message.Contains("INSTALL_FAILED_VERSION_DOWNGRADE") ||
+                                           ex.Message.Contains("failed to install");
+
+                // For insufficient storage, offer reinstall if it's an upgrade
+                // As uninstalling old version frees space for the new one
+                bool isStorageIssue = ex.Message.Contains("INSUFFICIENT_STORAGE");
+                bool isUpgrade = !string.IsNullOrEmpty(packagename) &&
+                                 settings.InstalledApps.Contains(packagename);
+
+                if (isStorageIssue && isUpgrade)
+                {
+                    isReinstallEligible = true;
+                }
+
+                if (isReinstallEligible)
                 {
                     bool cancelClicked = false;
 
                     if (!settings.AutoReinstall)
                     {
+                        string message = isStorageIssue
+                            ? "Installation failed due to insufficient storage. Since this is an upgrade, Rookie can uninstall the old version first to free up space, then install the new version.\n\nRookie will also attempt to backup your save data and reinstall the game automatically, however some games do not store their saves in an accessible location (less than 5%). Continue with reinstall?"
+                            : "In place upgrade has failed. Rookie will attempt to backup your save data and reinstall the game automatically, however some games do not store their saves in an accessible location (less than 5%). Continue with reinstall?";
+
+                        string title = isStorageIssue ? "Insufficient Storage" : "In place upgrade failed";
+
                         Program.form.Invoke(() =>
                         {
                             DialogResult dialogResult1 = FlexibleMessageBox.Show(Program.form,
-                                "In place upgrade has failed. Rookie can attempt to backup your save data and reinstall the game automatically, however some games do not store their saves in an accessible location (less than 5%). Continue with reinstall?",
-                                "In place upgrade failed.", MessageBoxButtons.OKCancel);
+                                message, title, MessageBoxButtons.OKCancel);
                             if (dialogResult1 == DialogResult.Cancel)
                                 cancelClicked = true;
                         });
@@ -316,7 +336,7 @@ namespace AndroidSideloader
                         var packageManager = new PackageManager(client, device);
 
                         statusCallback?.Invoke("Backing up save data...");
-                        _ = RunAdbCommandToString($"pull \"/sdcard/Android/data/{MainForm.CurrPCKG}\" \"{Environment.CurrentDirectory}\"");
+                        _ = RunAdbCommandToString($"pull \"/sdcard/Android/data/{packagename}\" \"{Environment.CurrentDirectory}\"");
 
                         statusCallback?.Invoke("Uninstalling old version...");
                         packageManager.UninstallPackage(packagename);
@@ -332,9 +352,9 @@ namespace AndroidSideloader
                         packageManager.InstallPackage(path, reinstallProgress);
 
                         statusCallback?.Invoke("Restoring save data...");
-                        _ = RunAdbCommandToString($"push \"{Environment.CurrentDirectory}\\{MainForm.CurrPCKG}\" /sdcard/Android/data/");
+                        _ = RunAdbCommandToString($"push \"{Environment.CurrentDirectory}\\{packagename}\" /sdcard/Android/data/");
 
-                        string directoryToDelete = Path.Combine(Environment.CurrentDirectory, MainForm.CurrPCKG);
+                        string directoryToDelete = Path.Combine(Environment.CurrentDirectory, packagename);
                         if (Directory.Exists(directoryToDelete) && directoryToDelete != Environment.CurrentDirectory)
                         {
                             Directory.Delete(directoryToDelete, true);
@@ -345,11 +365,12 @@ namespace AndroidSideloader
                     }
                     catch (Exception reinstallEx)
                     {
-                        return new ProcessOutput($"{gameName}: Reinstall: Failed: {reinstallEx.Message}\n");
+                        return new ProcessOutput("", $"{gameName}: Reinstall Failed: {reinstallEx.Message}\n");
                     }
                 }
 
-                return new ProcessOutput("", ex.Message);
+                // Return the error message so it's displayed to the user
+                return new ProcessOutput("", $"\n{gameName}: {ex.Message}");
             }
         }
 
