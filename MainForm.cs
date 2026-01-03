@@ -5138,25 +5138,34 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                 if (loaded)
                 {
                     StringBuilder copyGamesListView = new StringBuilder();
+                    var itemsSource = gamesListView.Items.Cast<ListViewItem>().ToList();
 
-                    foreach (ListViewItem item in gamesListView.Items)
+                    foreach (ListViewItem item in itemsSource)
                     {
                         // Assuming the game name is in the first column (subitem index 0)
                         copyGamesListView.Append(item.SubItems[0].Text).Append("\n");
                     }
 
-                    Clipboard.SetText(copyGamesListView.ToString());
-                    _ = MessageBox.Show("Entire game list copied as a paragraph to clipboard!\nPress CTRL+V to paste it anywhere!");
+                    if (copyGamesListView.Length > 0)
+                    {
+                        Clipboard.SetText(copyGamesListView.ToString());
+                        _ = FlexibleMessageBox.Show("Entire game list copied as a paragraph to clipboard!\nPress CTRL+V to paste it anywhere!");
+                    }
+                    else
+                    {
+                        changeTitle("No games to copy", true);
+                    }
                 }
-
+                return true; // Mark as handled
             }
             if (keyData == (Keys.Alt | Keys.L))
             {
                 if (loaded)
                 {
                     StringBuilder copyGamesListView = new StringBuilder();
+                    var itemsSource = gamesListView.Items.Cast<ListViewItem>().ToList();
 
-                    foreach (ListViewItem item in gamesListView.Items)
+                    foreach (ListViewItem item in itemsSource)
                     {
                         // Assuming the game name is in the first column (subitem index 0)
                         copyGamesListView.Append(item.SubItems[0].Text).Append(", ");
@@ -5168,10 +5177,17 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                         copyGamesListView.Length -= 2;
                     }
 
-                    Clipboard.SetText(copyGamesListView.ToString());
-                    _ = MessageBox.Show("Entire game list copied as a paragraph to clipboard!\nPress CTRL+V to paste it anywhere!");
+                    if (copyGamesListView.Length > 0)
+                    {
+                        Clipboard.SetText(copyGamesListView.ToString());
+                        _ = FlexibleMessageBox.Show("Entire game list copied as a paragraph to clipboard!\nPress CTRL+V to paste it anywhere!");
+                    }
+                    else
+                    {
+                        changeTitle("No games to copy", true);
+                    }
                 }
-
+                return true; // Mark as handled
             }
             if (keyData == (Keys.Control | Keys.H))
             {
@@ -5247,17 +5263,29 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
             }
             if (keyData == (Keys.Control | Keys.P))
             {
-                DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, "Do you wish to copy Package Name of games selected from list to clipboard?", "Copy package to clipboard?", MessageBoxButtons.YesNo);
-                if (dialogResult == DialogResult.Yes)
+                // Immediately copy the package name of the currently selected game
+                if (loaded && gamesListView.SelectedItems.Count > 0)
                 {
-                    settings.PackageNameToCB = true;
-                    settings.Save();
+                    var selectedItem = gamesListView.SelectedItems[gamesListView.SelectedItems.Count - 1];
+                    string packageName = selectedItem.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
+                    Clipboard.SetText(packageName);
+                    changeTitle($"Copied: {packageName}", true);
                 }
-                if (dialogResult == DialogResult.No)
+                else if (loaded && isGalleryView && _fastGallery != null && _fastGallery._selectedIndex >= 0)
                 {
-                    settings.PackageNameToCB = false;
-                    settings.Save();
+                    var galleryItem = _fastGallery.GetItemAtIndex(_fastGallery._selectedIndex);
+                    if (galleryItem != null && galleryItem.SubItems.Count > SideloaderRCLONE.PackageNameIndex)
+                    {
+                        string packageName = galleryItem.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
+                        Clipboard.SetText(packageName);
+                        changeTitle($"Copied: {packageName}", true);
+                    }
                 }
+                else
+                {
+                    changeTitle("No game selected", true);
+                }
+                return true; // Mark as handled
             }
             return base.ProcessCmdKey(ref msg, keyData);
 
