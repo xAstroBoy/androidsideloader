@@ -49,6 +49,13 @@ namespace AndroidSideloader
         public bool DeviceConnected = false;
         public static string currremotesimple = "";
 #endif
+        private double _totalQueueSizeMB = 0;
+        private double _effectiveQueueSizeMB = 0;
+        private Dictionary<string, double> _queueEffectiveSizes = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        private long _deviceFreeSpaceMB = 0;
+        // Shared sort state between Gallery and List views
+        private SortField _sharedSortField = SortField.Name;
+        private SortDirection _sharedSortDirection = SortDirection.Ascending;
         private const int BottomMargin = 8;
         private const int RightMargin = 12;
         private const int PanelSpacing = 10;
@@ -124,7 +131,7 @@ namespace AndroidSideloader
 
             _debounceTimer = new System.Windows.Forms.Timer { Interval = 100, Enabled = false };
             _debounceTimer.Tick += async (sender, e) => await RunSearch();
-            gamesQueListBox.DataSource = gamesQueueList;
+
             SetCurrentLogPath();
             StartTimers();
 
@@ -236,6 +243,9 @@ namespace AndroidSideloader
 
             // Subscribe to click events to unfocus search text box
             this.Click += UnfocusSearchTextBox;
+
+            // Load saved window state
+            LoadWindowState();
         }
 
         private void CheckCommandLineArguments()
@@ -348,6 +358,9 @@ namespace AndroidSideloader
                     {
                         PublicConfigFile = config;
                         hasPublicConfig = true;
+
+                        // Test DNS for the public config hostname after it's been created/updated
+                        DnsHelper.TestPublicConfigDns();
                     }
                 }
             }
@@ -405,8 +418,11 @@ namespace AndroidSideloader
                 }
             });
 
-            // Basic UI setup
-            CenterToScreen();
+            // Basic UI setup - only center if no saved position
+            if (this.StartPosition != FormStartPosition.Manual)
+            {
+                CenterToScreen();
+            }
             gamesListView.View = View.Details;
             gamesListView.FullRowSelect = true;
             gamesListView.GridLines = false;
@@ -507,6 +523,9 @@ namespace AndroidSideloader
                     File.Delete(Path.Combine(Environment.CurrentDirectory, "crashlog.txt"));
                 }
             }
+
+            // Ensure bottom panels are properly laid out
+            LayoutBottomPanels();
 
             webView21.Visible = settings.TrailersEnabled;
 
@@ -788,6 +807,13 @@ namespace AndroidSideloader
 
             changeTitlebarToDevice();
             UpdateStatusLabels();
+
+            // Load saved download queue and offer to resume
+            LoadQueueFromSettings();
+            if (gamesQueueList.Count > 0 && !isOffline)
+            {
+                await ResumeQueuedDownloadsAsync();
+            }
         }
 
         private void timer_Tick(object sender, EventArgs e)
@@ -1582,8 +1608,6 @@ namespace AndroidSideloader
             }
 
             changeTitle($"Processing dropped file. If Rookie freezes, please wait. Do not close Rookie!");
-
-            DragDropLbl.Visible = false;
             ProcessOutput output = new ProcessOutput(String.Empty, String.Empty);
             ADB.DeviceID = GetDeviceID();
             progressBar.IsIndeterminate = true;
@@ -1942,9 +1966,6 @@ namespace AndroidSideloader
             progressBar.IsIndeterminate = false;
 
             showAvailableSpace();
-
-            DragDropLbl.Visible = false;
-
             ShowPrcOutput(output);
             listAppsBtn();
         }
@@ -1955,17 +1976,10 @@ namespace AndroidSideloader
             {
                 e.Effect = DragDropEffects.Copy;
             }
-
-            DragDropLbl.Visible = true;
-            DragDropLbl.Text = "Drag APK or OBB";
-            changeTitle(DragDropLbl.Text);
         }
 
         private void Form1_DragLeave(object sender, EventArgs e)
         {
-            DragDropLbl.Visible = false;
-            DragDropLbl.Text = String.Empty;
-
             changeTitle("");
         }
 
@@ -2273,24 +2287,22 @@ namespace AndroidSideloader
                                 }
                                 else if (installedVersionInt > cloudVersionInt)
                                 {
-                                    newerThanListCount++;
                                     bool dontget = blacklistSet.Contains(packagename);
 
-                                    if (!dontget)
+                                    newerThanListCount++;
+                                    item.ForeColor = ColorDonateGame;
+
+                                    // Only prompt for upload if not blacklisted
+                                    if (!dontget && !updatesNotified && !isworking && updint < 6 && !settings.SubmittedUpdates.Contains(packagename))
                                     {
-                                        item.ForeColor = ColorDonateGame;
+                                        either = true;
+                                        updates = true;
+                                        updint++;
 
-                                        if (!updatesNotified && !isworking && updint < 6 && !settings.SubmittedUpdates.Contains(packagename))
-                                        {
-                                            either = true;
-                                            updates = true;
-                                            updint++;
-
-                                            string RlsName = Sideloader.PackageNametoGameName(packagename);
-                                            string GameName = Sideloader.gameNameToSimpleName(RlsName);
-                                            var gameData = new UpdateGameData(GameName, packagename, installedVersionInt);
-                                            gamesToAskForUpdate.Add(gameData);
-                                        }
+                                        string RlsName = Sideloader.PackageNametoGameName(packagename);
+                                        string GameName = Sideloader.gameNameToSimpleName(RlsName);
+                                        var gameData = new UpdateGameData(GameName, packagename, installedVersionInt);
+                                        gamesToAskForUpdate.Add(gameData);
                                     }
                                 }
                             }
@@ -2456,6 +2468,12 @@ namespace AndroidSideloader
 
             loaded = true;
             Logger.Log($"initListView total completed in {sw.ElapsedMilliseconds}ms");
+
+            // Show header now that loading is complete
+            if (_listViewRenderer != null)
+            {
+                _listViewRenderer.SuppressHeader = false;
+            }
 
             // Now that ListView is fully populated and _allItems is initialized,
             // switch to the user's preferred view
@@ -3095,6 +3113,7 @@ Additional Thanks & Resources
         public static bool updatedConfig = false;
         public static int steps = 0;
         public static bool gamesAreDownloading = false;
+        private ModernQueuePanel _queuePanel;
         private readonly BindingList<string> gamesQueueList = new BindingList<string>();
         public static int quotaTries = 0;
         public static bool timerticked = false;
@@ -3168,7 +3187,27 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
         {
             speedLabel.Text = String.Empty;
             progressBar.Value = 0;
-            gamesQueueList.RemoveAt(0);
+
+            if (gamesQueueList.Count > 0)
+            {
+                string removedGame = gamesQueueList[0];
+
+                // Subtract effective size from running total
+                if (_queueEffectiveSizes.TryGetValue(removedGame, out double effectiveSize))
+                {
+                    _effectiveQueueSizeMB -= effectiveSize;
+                    _queueEffectiveSizes.Remove(removedGame);
+                }
+
+                gamesQueueList.RemoveAt(0);
+            }
+
+            _queuePanel?.Invalidate();
+
+            UpdateQueueLabel();
+
+            // Save updated queue state
+            SaveQueueToSettings();
         }
 
         public void SetProgress(float progress)
@@ -3188,620 +3227,999 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
         public static bool removedownloading = false;
         public async void downloadInstallGameButton_Click(object sender, EventArgs e)
         {
+            // Helper to format sizes
+            string FormatSize(double mb)
             {
-                if (!settings.CustomDownloadDir)
-                {
-                    settings.DownloadDir = Environment.CurrentDirectory.ToString();
-                }
-                bool obbsMismatch = false;
-                if (nodeviceonstart && !updatesNotified)
-                {
-                    _ = await CheckForDevice();
-                    changeTitlebarToDevice();
-                    showAvailableSpace();
-                    listAppsBtn();
-                }
-                progressBar.IsIndeterminate = true;
-                progressBar.OperationType = "Downloading";
+                return mb >= 1024 ? $"{(mb / 1024.0):F2} GB" : $"{mb:F0} MB";
+            }
+
+            if (!settings.CustomDownloadDir)
+            {
+                settings.DownloadDir = Environment.CurrentDirectory.ToString();
+            }
+            bool obbsMismatch = false;
+            if (nodeviceonstart && !updatesNotified)
+            {
+                _ = await CheckForDevice();
+                changeTitlebarToDevice();
+                showAvailableSpace();
+                listAppsBtn();
+            }
+            progressBar.IsIndeterminate = true;
+            progressBar.OperationType = "Downloading";
+
+            // Check if we're resuming (queue already has items) or starting fresh
+            bool isResuming = gamesQueueList.Count > 0 && gamesAreDownloading == false;
+
+            string[] gamesToDownload;
+
+            if (!isResuming)
+            {
+                // Normal flow: add selected games to queue
                 if (gamesListView.SelectedItems.Count == 0)
                 {
                     progressBar.IsIndeterminate = false;
                     changeTitle("You must select a game from the game list!");
                     return;
                 }
-                string namebox = gamesListView.SelectedItems[0].ToString();
-                string nameboxtranslated = Sideloader.gameNameToSimpleName(namebox);
-                int count = 0;
-                string[] gamesToDownload;
-                if (gamesListView.SelectedItems.Count > 0)
+
+                int count = gamesListView.SelectedItems.Count;
+                gamesToDownload = new string[count];
+                for (int i = 0; i < count; i++)
                 {
-                    count = gamesListView.SelectedItems.Count;
-                    gamesToDownload = new string[count];
-                    for (int i = 0; i < count; i++)
+                    gamesToDownload[i] = gamesListView.SelectedItems[i].SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
+                }
+            }
+            else
+            {
+                // Resuming: just recalculate tracking values
+                progressBar.OperationType = "Validating";
+                changeTitle("Validating resumed queue...");
+
+                // Refresh device space info
+                if (!settings.NodeviceMode && DeviceConnected)
+                {
+                    showAvailableSpace();
+                    await Task.Delay(500);
+                }
+
+                // Recalculate queue sizes
+                _queueEffectiveSizes.Clear();
+                _effectiveQueueSizeMB = 0;
+                _totalQueueSizeMB = 0;
+
+                foreach (string releaseName in gamesQueueList)
+                {
+                    foreach (string[] gameData in SideloaderRCLONE.games)
                     {
-                        gamesToDownload[i] = gamesListView.SelectedItems[i].SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
-                    }
-                }
-                else
-                {
-                    return;
-                }
-
-                progressBar.Value = 0;
-                progressBar.IsIndeterminate = false;
-                string game = gamesToDownload.Length == 1 ? $"\"{gamesToDownload[0]}\"" : "the selected games";
-                isinstalling = true;
-                //Add games to the queue
-                for (int i = 0; i < gamesToDownload.Length; i++)
-                {
-                    gamesQueueList.Add(gamesToDownload[i]);
-                }
-
-                if (gamesAreDownloading)
-                {
-                    return;
-                }
-
-                gamesAreDownloading = true;
-
-
-                //Do user json on firsttime
-                if (settings.UserJsonOnGameInstall)
-                {
-                    Thread userJsonThread = new Thread(() => { changeTitle("Pushing user.json"); Sideloader.PushUserJsons(); })
-                    {
-                        IsBackground = true
-                    };
-                    userJsonThread.Start();
-
-                }
-
-                ProcessOutput output = new ProcessOutput("", "");
-
-                string gameName = "";
-                while (gamesQueueList.Count > 0)
-                {
-                    gameName = gamesQueueList.ToArray()[0];
-                    string packagename = Sideloader.gameNameToPackageName(gameName);
-                    string versioncode = Sideloader.gameNameToVersionCode(gameName);
-                    string dir = Path.GetDirectoryName(gameName);
-                    string gameDirectory = Path.Combine(settings.DownloadDir, gameName);
-                    string downloadDirectory = Path.Combine(settings.DownloadDir, gameName);
-                    string path = gameDirectory;
-
-                    string gameNameHash = string.Empty;
-                    using (MD5 md5 = MD5.Create())
-                    {
-                        byte[] bytes = Encoding.UTF8.GetBytes(gameName + "\n");
-                        byte[] hash = md5.ComputeHash(bytes);
-                        StringBuilder sb = new StringBuilder();
-                        foreach (byte b in hash)
+                        if (gameData.Length > SideloaderRCLONE.ReleaseNameIndex &&
+                            gameData[SideloaderRCLONE.ReleaseNameIndex].Equals(releaseName, StringComparison.OrdinalIgnoreCase))
                         {
-                            _ = sb.Append(b.ToString("x2"));
+                            double sizeMB = 0;
+                            if (gameData.Length > 5)
+                                double.TryParse(gameData[5], out sizeMB);
+                            _queueEffectiveSizes[releaseName] = sizeMB;
+                            _effectiveQueueSizeMB += sizeMB;
+                            _totalQueueSizeMB += sizeMB;
+                            break;
                         }
+                    }
+                }
 
-                        gameNameHash = sb.ToString();
+                gamesToDownload = new string[0]; // Skip validation loop for resume
+            }
+
+            progressBar.Value = 0;
+            progressBar.IsIndeterminate = false;
+            isinstalling = true;
+
+            // Validation for new downloads
+            List<string> skippedDuplicates = new List<string>();
+            string spaceError = null;
+
+            // Get available space on download drive
+            string downloadPath = settings.CustomDownloadDir ? settings.DownloadDir : Environment.CurrentDirectory;
+            long downloadDirFreeMB = -1;
+            try
+            {
+                DriveInfo drive = new DriveInfo(Path.GetPathRoot(downloadPath));
+                if (drive.IsReady)
+                    downloadDirFreeMB = drive.AvailableFreeSpace / (1024 * 1024);
+            }
+            catch { }
+
+            // Track max game size for disk space calculation
+            double maxQueuedGameSizeMB = 0;
+            foreach (string queuedGame in gamesQueueList)
+            {
+                foreach (string[] gameData in SideloaderRCLONE.games)
+                {
+                    if (gameData.Length > SideloaderRCLONE.ReleaseNameIndex &&
+                        gameData[SideloaderRCLONE.ReleaseNameIndex].Equals(queuedGame, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (gameData.Length > 5 && double.TryParse(gameData[5], out double sizeMB))
+                            maxQueuedGameSizeMB = Math.Max(maxQueuedGameSizeMB, sizeMB);
+                        break;
+                    }
+                }
+            }
+
+            for (int i = 0; i < gamesToDownload.Length; i++)
+            {
+                string releaseName = gamesToDownload[i];
+
+                // Skip duplicates
+                if (gamesQueueList.Contains(releaseName))
+                {
+                    skippedDuplicates.Add(Sideloader.gameNameToSimpleName(releaseName));
+                    continue;
+                }
+
+                // Get game metadata
+                double gameSizeMB = 0;
+                string packagename = null;
+                foreach (string[] gameData in SideloaderRCLONE.games)
+                {
+                    if (gameData.Length > SideloaderRCLONE.ReleaseNameIndex &&
+                        gameData[SideloaderRCLONE.ReleaseNameIndex].Equals(releaseName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (gameData.Length > 5)
+                            double.TryParse(gameData[5], out gameSizeMB);
+                        if (gameData.Length > SideloaderRCLONE.PackageNameIndex)
+                            packagename = gameData[SideloaderRCLONE.PackageNameIndex];
+                        break;
+                    }
+                }
+
+                string gameDisplayName = Sideloader.gameNameToSimpleName(releaseName);
+
+                // Check disk storage
+                if (downloadDirFreeMB > 0 && gameSizeMB > 0)
+                {
+                    double largestGame = Math.Max(maxQueuedGameSizeMB, gameSizeMB);
+                    double requiredMB;
+
+                    if (settings.DeleteAllAfterInstall && !settings.NodeviceMode && DeviceConnected)
+                        requiredMB = largestGame * 2.2;
+                    else
+                    {
+                        double otherGamesSize = _totalQueueSizeMB + gameSizeMB - largestGame;
+                        requiredMB = otherGamesSize + (largestGame * 2.2);
                     }
 
-                    ProcessOutput gameDownloadOutput = new ProcessOutput("", "");
-
-                    _ = Logger.Log($"Starting Game Download");
-
-                    Thread t1;
-                    string extraArgs = string.Empty;
-                    if (settings.SingleThreadMode)
+                    if (downloadDirFreeMB < requiredMB)
                     {
-                        extraArgs = "--transfers 1 --multi-thread-streams 0";
+                        string driveLetter = Path.GetPathRoot(downloadPath);
+                        spaceError = $"Not enough disk space on {driveLetter} for \"{gameDisplayName}\"\n\n" +
+                                    $"Available: {(downloadDirFreeMB / 1024.0):F2} GB\n" +
+                                    $"Required: {(requiredMB / 1024.0):F2} GB\n\n" +
+                                    $"Free up space or change download directory in Settings.";
+                        break;
                     }
-                    string bandwidthLimit = string.Empty;
-                    if (settings.BandwidthLimit > 0)
+                }
+
+                // Calculate effective device space
+                // Also account for updates replacing existing installs
+                double effectiveRequiredMB = gameSizeMB;
+
+                if (!settings.NodeviceMode && DeviceConnected && !string.IsNullOrEmpty(packagename) &&
+                    settings.InstalledApps.Contains(packagename))
+                {
+                    try
                     {
-                        bandwidthLimit = $"--bwlimit={settings.BandwidthLimit}M";
-                    }
-                    if (UsingPublicConfig)
-                    {
-                        bool doDownload = true;
-                        bool skipRedownload = false;
-                        if (settings.UseDownloadedFiles == true)
+                        long installedSizeKB = 0;
+
+                        // Get installed APK size
+                        string pmPathOutput = ADB.RunAdbCommandToString($"shell pm path {packagename}", suppressLogging: true).Output;
+                        foreach (string line in pmPathOutput.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
                         {
-                            skipRedownload = true;
-                        }
-
-                        if (Directory.Exists(gameDirectory))
-                        {
-                            if (skipRedownload == true)
+                            if (line.StartsWith("package:"))
                             {
-                                if (Directory.Exists($"{settings.DownloadDir}\\{gameName}"))
+                                string apkPath = line.Substring(8).Trim();
+                                if (!string.IsNullOrEmpty(apkPath))
                                 {
-                                    doDownload = false;
+                                    string statOutput = ADB.RunAdbCommandToString($"shell stat -c %s \"{apkPath}\"", suppressLogging: true).Output.Trim();
+                                    if (long.TryParse(statOutput, out long apkBytes))
+                                        installedSizeKB += apkBytes / 1024;
                                 }
+                            }
+                        }
+
+                        // Get installed OBB size
+                        string obbOutput = ADB.RunAdbCommandToString($"shell du -s /sdcard/Android/obb/{packagename} 2>/dev/null", suppressLogging: true).Output.Trim();
+                        if (!string.IsNullOrEmpty(obbOutput) && !obbOutput.Contains("No such file"))
+                        {
+                            string[] parts = obbOutput.Split(new[] { '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                            if (parts.Length >= 1 && long.TryParse(parts[0], out long obbKB))
+                                installedSizeKB += obbKB;
+                        }
+
+                        if (installedSizeKB > 0)
+                        {
+                            double installedSizeMB = installedSizeKB / 1024.0;
+                            effectiveRequiredMB = Math.Max(0, gameSizeMB - installedSizeMB);
+
+                            Logger.Log($"Updating {packagename}: installed: {installedSizeMB:F0}MB, " +
+                                        $"new: {gameSizeMB:F0}MB, effective required: {effectiveRequiredMB:F0}MB",
+                                        LogLevel.DEBUG);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"Error getting installed size for {packagename}: {ex.Message}", LogLevel.WARNING);
+                        effectiveRequiredMB = gameSizeMB;
+                    }
+                }
+
+                // Check device space
+                if (_deviceFreeSpaceMB > 0 && gameSizeMB > 0 && !settings.NodeviceMode && DeviceConnected)
+                {
+                    double totalDeviceRequiredMB = _effectiveQueueSizeMB + effectiveRequiredMB;
+
+                    if (_deviceFreeSpaceMB < totalDeviceRequiredMB)
+                    {
+                        double neededMB = totalDeviceRequiredMB - _deviceFreeSpaceMB;
+
+                        string availableText = FormatSize(_deviceFreeSpaceMB);
+                        string gameText = FormatSize(effectiveRequiredMB);
+                        string queueText = FormatSize(_effectiveQueueSizeMB);
+                        string neededText = FormatSize(neededMB);
+
+                        string details;
+                        if (_effectiveQueueSizeMB > 0)
+                        {
+                            string totalRequiredText = FormatSize(totalDeviceRequiredMB);
+                            details = $"Available: {availableText}\n" +
+                                        $"Required: {totalRequiredText} (Game: {gameText}, Queue: {queueText})";
+                        }
+                        else
+                        {
+                            details = $"Available: {availableText}\n" +
+                                        $"Required: {gameText}";
+                        }
+
+                        spaceError = $"Not enough space on your Quest for \"{gameDisplayName}\"\n\n" +
+                                    $"{details}\n\n" +
+                                    $"Free up {neededText} on your Quest, or disable sideloading to download only.";
+                        break;
+                    }
+                }
+
+                // Add to queue
+                gamesQueueList.Add(releaseName);
+                _queueEffectiveSizes[releaseName] = effectiveRequiredMB;
+                _effectiveQueueSizeMB += effectiveRequiredMB;
+                _totalQueueSizeMB += gameSizeMB;
+                maxQueuedGameSizeMB = Math.Max(maxQueuedGameSizeMB, gameSizeMB);
+            }
+
+            // Handle validation results for new downloads
+            if (spaceError != null)
+            {
+                FlexibleMessageBox.Show(Program.form, spaceError, "Not Enough Space", MessageBoxButtons.OK);
+            }
+
+            if (skippedDuplicates.Count > 0)
+            {
+                string msg = skippedDuplicates.Count == 1
+                    ? $"Skipped: {skippedDuplicates[0]} (already in queue)"
+                    : $"Skipped {skippedDuplicates.Count} games (already in queue)";
+                changeTitle(msg, true);
+            }
+
+            if (gamesQueueList.Count == 0)
+            {
+                progressBar.IsIndeterminate = false;
+                isinstalling = false;
+                gamesAreDownloading = false;
+                if (_queuePanel != null) _queuePanel.IsDownloading = false;
+                return;
+            }
+
+            if (gamesAreDownloading && !isResuming)
+                return;
+
+            UpdateQueueLabel();
+            changeTitle("");
+
+            gamesAreDownloading = true;
+            if (_queuePanel != null) _queuePanel.IsDownloading = true;
+
+            //Do user json on firsttime
+            if (settings.UserJsonOnGameInstall)
+            {
+                Thread userJsonThread = new Thread(() => { changeTitle("Pushing user.json"); Sideloader.PushUserJsons(); })
+                {
+                    IsBackground = true
+                };
+                userJsonThread.Start();
+
+            }
+
+            ProcessOutput output = new ProcessOutput("", "");
+
+            string gameName = "";
+            while (gamesQueueList.Count > 0)
+            {
+                gameName = gamesQueueList.ToArray()[0];
+                string packagename = Sideloader.gameNameToPackageName(gameName);
+                string gameDisplayName = Sideloader.gameNameToSimpleName(gameName);
+                string versioncode = Sideloader.gameNameToVersionCode(gameName);
+                string dir = Path.GetDirectoryName(gameName);
+                string gameDirectory = Path.Combine(settings.DownloadDir, gameName);
+                string downloadDirectory = Path.Combine(settings.DownloadDir, gameName);
+                string path = gameDirectory;
+
+                // Check disk space before starting this download
+                double currentGameSizeMB = 0;
+                foreach (string[] gameData in SideloaderRCLONE.games)
+                {
+                    if (gameData.Length > SideloaderRCLONE.ReleaseNameIndex &&
+                        gameData[SideloaderRCLONE.ReleaseNameIndex].Equals(gameName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (gameData.Length > 5)
+                            double.TryParse(gameData[5], out currentGameSizeMB);
+                        break;
+                    }
+                }
+
+                if (currentGameSizeMB > 0)
+                {
+                    // Check disk space
+                    long currentDiskFreeMB = -1;
+                    try
+                    {
+                        DriveInfo drive = new DriveInfo(Path.GetPathRoot(downloadPath));
+                        if (drive.IsReady)
+                            currentDiskFreeMB = drive.AvailableFreeSpace / (1024 * 1024);
+                    }
+                    catch { }
+
+                    double requiredDiskMB = currentGameSizeMB * 2.2;
+                    if (currentDiskFreeMB > 0 && currentDiskFreeMB < requiredDiskMB)
+                    {
+                        string driveLetter = Path.GetPathRoot(downloadPath);
+
+                        DialogResult result = FlexibleMessageBox.Show(Program.form,
+                            $"Not enough disk space on {driveLetter} for \"{gameDisplayName}\"\n\n" +
+                            $"Available: {FormatSize(currentDiskFreeMB)}\n" +
+                            $"Required: {FormatSize(requiredDiskMB)}\n\n" +
+                            $"Yes = Skip this game and continue\n" +
+                            $"No = Clear entire queue",
+                            "Not Enough Space",
+                            MessageBoxButtons.YesNo);
+
+                        if (result == DialogResult.Yes || result == DialogResult.Cancel)
+                        {
+                            // Skip this game
+                            if (_queueEffectiveSizes.TryGetValue(gameName, out double effectiveSize))
+                            {
+                                _effectiveQueueSizeMB -= effectiveSize;
+                                _queueEffectiveSizes.Remove(gameName);
+                            }
+                            gamesQueueList.RemoveAt(0);
+                            SaveQueueToSettings();
+                            continue;
+                        }
+                        else
+                        {
+                            // Clear queue
+                            gamesQueueList.Clear();
+                            _queueEffectiveSizes.Clear();
+                            _effectiveQueueSizeMB = 0;
+                            _totalQueueSizeMB = 0;
+                            SaveQueueToSettings();
+                            gamesAreDownloading = false;
+                            if (_queuePanel != null) _queuePanel.IsDownloading = false;
+                            isinstalling = false;
+                            changeTitle("");
+                            return;
+                        }
+                    }
+
+                    // Check Quest space (only if device connected and sideloading enabled)
+                    if (!settings.NodeviceMode && DeviceConnected && _deviceFreeSpaceMB > 0)
+                    {
+                        double effectiveRequiredMB = currentGameSizeMB;
+
+                        // Check if this is an update
+                        if (!string.IsNullOrEmpty(packagename) && settings.InstalledApps.Contains(packagename))
+                        {
+                            if (_queueEffectiveSizes.TryGetValue(gameName, out double cached))
+                            {
+                                effectiveRequiredMB = cached;
+                            }
+                        }
+
+                        if (_deviceFreeSpaceMB < effectiveRequiredMB)
+                        {
+                            DialogResult result = FlexibleMessageBox.Show(Program.form,
+                                $"Not enough space on your Quest for \"{gameDisplayName}\"\n\n" +
+                                $"Available: {FormatSize(_deviceFreeSpaceMB)}\n" +
+                                $"Required: {FormatSize(effectiveRequiredMB)}\n\n" +
+                                $"Yes = Skip this game and continue\n" +
+                                $"No = Clear entire queue",
+                                "Not Enough Space",
+                                MessageBoxButtons.YesNo);
+
+                            if (result == DialogResult.Yes || result == DialogResult.Cancel)
+                            {
+                                // Skip this game
+                                if (_queueEffectiveSizes.TryGetValue(gameName, out double effectiveSize))
+                                {
+                                    _effectiveQueueSizeMB -= effectiveSize;
+                                    _queueEffectiveSizes.Remove(gameName);
+                                }
+                                gamesQueueList.RemoveAt(0);
+                                SaveQueueToSettings();
+                                continue;
                             }
                             else
                             {
-                                DialogResult res = FlexibleMessageBox.Show(Program.form,
-                                    $"{gameName} already exists in destination directory.\n\n" +
-                                    "Yes = Overwrite and re-download.\n" +
-                                    "No  = Use existing files and install from them.",
-                                    "Download again?", MessageBoxButtons.YesNo);
-
-                                doDownload = res == DialogResult.Yes;
+                                // Clear queue
+                                gamesQueueList.Clear();
+                                _queueEffectiveSizes.Clear();
+                                _effectiveQueueSizeMB = 0;
+                                _totalQueueSizeMB = 0;
+                                SaveQueueToSettings();
+                                gamesAreDownloading = false;
+                                if (_queuePanel != null) _queuePanel.IsDownloading = false;
+                                isinstalling = false;
+                                changeTitle("");
+                                return;
                             }
+                        }
+                    }
+                }
 
-                            if (doDownload)
+                string gameNameHash = string.Empty;
+                using (MD5 md5 = MD5.Create())
+                {
+                    byte[] bytes = Encoding.UTF8.GetBytes(gameName + "\n");
+                    byte[] hash = md5.ComputeHash(bytes);
+                    StringBuilder sb = new StringBuilder();
+                    foreach (byte b in hash)
+                    {
+                        _ = sb.Append(b.ToString("x2"));
+                    }
+
+                    gameNameHash = sb.ToString();
+                }
+
+                ProcessOutput gameDownloadOutput = new ProcessOutput("", "");
+
+                _ = Logger.Log($"Starting Game Download");
+
+                Thread t1;
+                string extraArgs = string.Empty;
+                if (settings.SingleThreadMode)
+                {
+                    extraArgs = "--transfers 1 --multi-thread-streams 0";
+                }
+                string bandwidthLimit = string.Empty;
+                if (settings.BandwidthLimit > 0)
+                {
+                    bandwidthLimit = $"--bwlimit={settings.BandwidthLimit}M";
+                }
+                if (UsingPublicConfig)
+                {
+                    bool doDownload = true;
+                    bool skipRedownload = false;
+                    if (settings.UseDownloadedFiles == true)
+                    {
+                        skipRedownload = true;
+                    }
+
+                    if (Directory.Exists(gameDirectory))
+                    {
+                        if (skipRedownload == true)
+                        {
+                            if (Directory.Exists($"{settings.DownloadDir}\\{gameName}"))
                             {
-                                // only delete after extraction; allows for resume if the fetch fails midway.
-                                if (Directory.Exists($"{settings.DownloadDir}\\{gameName}"))
-                                {
-                                    Directory.Delete($"{settings.DownloadDir}\\{gameName}", true);
-                                }
+                                doDownload = false;
                             }
+                        }
+                        else
+                        {
+                            DialogResult res = FlexibleMessageBox.Show(Program.form,
+                                $"{gameName} already exists in destination directory.\n\n" +
+                                "Yes = Overwrite and re-download.\n" +
+                                "No  = Use existing files and install from them.",
+                                "Download again?", MessageBoxButtons.YesNo);
+
+                            doDownload = res == DialogResult.Yes;
                         }
 
                         if (doDownload)
                         {
-                            downloadDirectory = $"{settings.DownloadDir}\\{gameNameHash}";
-                            _ = Logger.Log($"rclone copy \"Public:{SideloaderRCLONE.RcloneGamesFolder}/{gameName}\"");
-                            t1 = new Thread(() =>
+                            // only delete after extraction; allows for resume if the fetch fails midway.
+                            if (Directory.Exists($"{settings.DownloadDir}\\{gameName}"))
                             {
-                                string rclonecommand =
-                                $"copy \":http:/{gameNameHash}/\" \"{downloadDirectory}\" {extraArgs} --progress --rc {bandwidthLimit}";
-                                gameDownloadOutput = RCLONE.runRcloneCommand_PublicConfig(rclonecommand);
-                            });
-                            Utilities.Metrics.CountDownload(packagename, versioncode);
-                        }
-                        else
-                        {
-                            t1 = new Thread(() => { gameDownloadOutput = new ProcessOutput("Download skipped."); });
+                                Directory.Delete($"{settings.DownloadDir}\\{gameName}", true);
+                            }
                         }
                     }
-                    else
+
+                    if (doDownload)
                     {
-                        _ = Directory.CreateDirectory(gameDirectory);
-                        downloadDirectory = $"{SideloaderRCLONE.RcloneGamesFolder}/{gameName}";
-                        _ = Logger.Log($"rclone copy \"{currentRemote}:{downloadDirectory}\"");
+                        downloadDirectory = $"{settings.DownloadDir}\\{gameNameHash}";
+                        _ = Logger.Log($"rclone copy \"Public:{SideloaderRCLONE.RcloneGamesFolder}/{gameName}\"");
                         t1 = new Thread(() =>
                         {
-                            gameDownloadOutput = RCLONE.runRcloneCommand_DownloadConfig($"copy \"{currentRemote}:{downloadDirectory}\" \"{settings.DownloadDir}\\{gameName}\" {extraArgs} --progress --rc --retries 2 --low-level-retries 1 --check-first {bandwidthLimit}");
+                            string rclonecommand =
+                            $"copy \":http:/{gameNameHash}/\" \"{downloadDirectory}\" {extraArgs} --progress --rc {bandwidthLimit}";
+                            gameDownloadOutput = RCLONE.runRcloneCommand_PublicConfig(rclonecommand);
                         });
                         Utilities.Metrics.CountDownload(packagename, versioncode);
                     }
-
-                    if (Directory.Exists(downloadDirectory))
+                    else
                     {
-                        string[] partialFiles = Directory.GetFiles($"{downloadDirectory}", "*.partial");
-                        foreach (string file in partialFiles)
+                        t1 = new Thread(() => { gameDownloadOutput = new ProcessOutput("Download skipped."); });
+                    }
+                }
+                else
+                {
+                    _ = Directory.CreateDirectory(gameDirectory);
+                    downloadDirectory = $"{SideloaderRCLONE.RcloneGamesFolder}/{gameName}";
+                    _ = Logger.Log($"rclone copy \"{currentRemote}:{downloadDirectory}\"");
+                    t1 = new Thread(() =>
+                    {
+                        gameDownloadOutput = RCLONE.runRcloneCommand_DownloadConfig($"copy \"{currentRemote}:{downloadDirectory}\" \"{settings.DownloadDir}\\{gameName}\" {extraArgs} --progress --rc --retries 2 --low-level-retries 1 --check-first {bandwidthLimit}");
+                    });
+                    Utilities.Metrics.CountDownload(packagename, versioncode);
+                }
+
+                if (Directory.Exists(downloadDirectory))
+                {
+                    string[] partialFiles = Directory.GetFiles($"{downloadDirectory}", "*.partial");
+                    foreach (string file in partialFiles)
+                    {
+                        File.Delete(file);
+                        _ = Logger.Log($"Deleted partial file: {file}");
+                    }
+                }
+
+                t1.IsBackground = true;
+                t1.Start();
+
+                changeTitle("Downloading game " + gameName);
+                speedLabel.Text = "Starting download...";
+
+                // Track the highest valid progress to prevent brief progress bar flashes during multi-file transfers
+                float highestValidPercent = 0;
+
+                // Download
+                while (t1.IsAlive)
+                {
+                    try
+                    {
+                        HttpResponseMessage response = await client.PostAsync("http://127.0.0.1:5572/core/stats", null);
+                        string foo = await response.Content.ReadAsStringAsync();
+                        dynamic results = JsonConvert.DeserializeObject<dynamic>(foo);
+
+                        if (results["transferring"] != null)
                         {
-                            File.Delete(file);
-                            _ = Logger.Log($"Deleted partial file: {file}");
+                            double totalSize = 0;
+                            double downloadedSize = 0;
+                            long fileCount = 0;
+                            long transfersComplete = 0;
+                            long totalChecks = 0;
+                            long globalEta = 0;
+                            float speed = 0;
+                            float downloadSpeed = 0;
+                            double estimatedFileCount = 0;
+
+                            totalSize = results["totalBytes"];
+                            downloadedSize = results["bytes"];
+                            fileCount = results["totalTransfers"];
+                            totalChecks = results["totalChecks"];
+                            transfersComplete = results["transfers"];
+                            globalEta = results["eta"];
+                            speed = results["speed"];
+                            estimatedFileCount = Math.Ceiling(totalSize / 524288000); // maximum part size
+
+                            if (totalChecks > fileCount)
+                            {
+                                fileCount = totalChecks;
+                            }
+                            if (estimatedFileCount > fileCount)
+                            {
+                                fileCount = (long)estimatedFileCount;
+                            }
+
+                            downloadSpeed = speed / 1000000;
+                            totalSize /= 1000000;
+                            downloadedSize /= 1000000;
+
+                            progressBar.IsIndeterminate = false;
+
+                            float percent = 0;
+                            if (totalSize > 0)
+                            {
+                                percent = (float)(downloadedSize / totalSize * 100);
+                            }
+
+                            // Clamp to 0-99 while download is in progress to prevent brief 100% flashes
+                            percent = Math.Max(0, Math.Min(99, percent));
+
+                            // Only allow progress to increase
+                            if (percent >= highestValidPercent)
+                            {
+                                highestValidPercent = percent;
+                            }
+                            else
+                            {
+                                // Progress went backwards? Keep showing the highest valid percent we've seen
+                                percent = highestValidPercent;
+                            }
+
+                            progressBar.Value = percent;
+
+                            TimeSpan time = TimeSpan.FromSeconds(globalEta);
+
+                            UpdateProgressStatus(
+                                "Downloading",
+                                (int)transfersComplete + 1,
+                                (int)fileCount,
+                                (int)Math.Round(percent),
+                                time,
+                                downloadSpeed);
                         }
                     }
-
-                    t1.IsBackground = true;
-                    t1.Start();
-
-                    changeTitle("Downloading game " + gameName);
-                    speedLabel.Text = "Starting download...";
-
-                    // Track the highest valid progress to prevent brief progress bar flashes during multi-file transfers
-                    float highestValidPercent = 0;
-
-                    // Download
-                    while (t1.IsAlive)
+                    catch
                     {
-                        try
+                    }
+                    await Task.Delay(100);
+                }
+
+                if (removedownloading)
+                {
+                    removedownloading = false;
+
+                    // Store game info before removing from queue
+                    string cancelledGame = gameName;
+                    string cancelledHash = gameNameHash;
+
+                    // Remove the cancelled item from queue
+                    if (gamesQueueList.Count > 0)
+                    {
+                        gamesQueueList.RemoveAt(0);
+                    }
+
+                    // Reset progress UI
+                    speedLabel.Text = String.Empty;
+                    progressBar.Value = 0;
+
+                    // Ask about keeping files
+                    changeTitle("Keep game files?");
+                    try
+                    {
+                        DialogResult res = FlexibleMessageBox.Show(
+                            $"{cancelledGame} download was cancelled. Do you want to delete the partial files?\n\nClick NO to keep the files if you wish to resume your download later.",
+                            "Delete Temporary Files?", MessageBoxButtons.YesNo);
+
+                        if (res == DialogResult.Yes)
                         {
-                            HttpResponseMessage response = await client.PostAsync("http://127.0.0.1:5572/core/stats", null);
-                            string foo = await response.Content.ReadAsStringAsync();
-                            dynamic results = JsonConvert.DeserializeObject<dynamic>(foo);
-
-                            if (results["transferring"] != null)
+                            changeTitle("Deleting game files...");
+                            if (UsingPublicConfig)
                             {
-                                double totalSize = 0;
-                                double downloadedSize = 0;
-                                long fileCount = 0;
-                                long transfersComplete = 0;
-                                long totalChecks = 0;
-                                long globalEta = 0;
-                                float speed = 0;
-                                float downloadSpeed = 0;
-                                double estimatedFileCount = 0;
-
-                                totalSize = results["totalBytes"];
-                                downloadedSize = results["bytes"];
-                                fileCount = results["totalTransfers"];
-                                totalChecks = results["totalChecks"];
-                                transfersComplete = results["transfers"];
-                                globalEta = results["eta"];
-                                speed = results["speed"];
-                                estimatedFileCount = Math.Ceiling(totalSize / 524288000); // maximum part size
-
-                                if (totalChecks > fileCount)
-                                {
-                                    fileCount = totalChecks;
-                                }
-                                if (estimatedFileCount > fileCount)
-                                {
-                                    fileCount = (long)estimatedFileCount;
-                                }
-
-                                downloadSpeed = speed / 1000000;
-                                totalSize /= 1000000;
-                                downloadedSize /= 1000000;
-
-                                progressBar.IsIndeterminate = false;
-
-                                float percent = 0;
-                                if (totalSize > 0)
-                                {
-                                    percent = (float)(downloadedSize / totalSize * 100);
-                                }
-
-                                // Clamp to 0-99 while download is in progress to prevent brief 100% flashes
-                                percent = Math.Max(0, Math.Min(99, percent));
-
-                                // Only allow progress to increase
-                                if (percent >= highestValidPercent)
-                                {
-                                    highestValidPercent = percent;
-                                }
-                                else
-                                {
-                                    // Progress went backwards? Keep showing the highest valid percent we've seen
-                                    percent = highestValidPercent;
-                                }
-
-                                progressBar.Value = percent;
-
-                                TimeSpan time = TimeSpan.FromSeconds(globalEta);
-
-                                UpdateProgressStatus(
-                                    "Downloading",
-                                    (int)transfersComplete + 1,
-                                    (int)fileCount,
-                                    (int)Math.Round(percent),
-                                    time,
-                                    downloadSpeed);
+                                if (Directory.Exists($"{settings.DownloadDir}\\{cancelledHash}"))
+                                    Directory.Delete($"{settings.DownloadDir}\\{cancelledHash}", true);
+                                if (Directory.Exists($"{settings.DownloadDir}\\{cancelledGame}"))
+                                    Directory.Delete($"{settings.DownloadDir}\\{cancelledGame}", true);
+                            }
+                            else
+                            {
+                                if (Directory.Exists($"{settings.DownloadDir}\\{cancelledGame}"))
+                                    Directory.Delete($"{settings.DownloadDir}\\{cancelledGame}", true);
                             }
                         }
-                        catch
-                        {
-                        }
-                        await Task.Delay(100);
+                    }
+                    catch (Exception ex)
+                    {
+                        _ = FlexibleMessageBox.Show(Program.form, $"Error deleting game files: {ex.Message}");
                     }
 
-                    if (removedownloading)
+                    changeTitle("");
+                    continue; // Continue to next item in queue
+                }
+                {
+                    //Quota Errors
+                    bool isinstalltxt = false;
+                    string installTxtPath = null;
+                    bool quotaError = false;
+                    bool otherError = false;
+                    if (gameDownloadOutput.Error.Length > 0 && !isOffline)
                     {
-                        changeTitle("Keep game files?");
-                        try
+                        string err = gameDownloadOutput.Error.ToLower();
+                        err += gameDownloadOutput.Output.ToLower();
+                        if ((err.Contains("quota") && err.Contains("exceeded")) || err.Contains("directory not found"))
                         {
+                            quotaError = true;
+
+                            SwitchMirrors();
+
+                            cleanupActiveDownloadStatus();
+                        }
+                        else if (!gameDownloadOutput.Error.Contains("Serving remote control on http://127.0.0.1:5572/"))
+                        {
+                            otherError = true;
+
+                            //Remove current game
                             cleanupActiveDownloadStatus();
 
-                            DialogResult res = FlexibleMessageBox.Show(
-                                $"{gameName} exists in destination directory, do you want to delete it?\n\nClick NO to keep the files if you wish to resume your download later.",
-                                "Delete Temporary Files?", MessageBoxButtons.YesNo);
-
-                            if (res == DialogResult.Yes)
-                            {
-                                changeTitle("Deleting game files");
-                                if (UsingPublicConfig)
-                                {
-                                    if (Directory.Exists($"{settings.DownloadDir}\\{gameNameHash}"))
-                                    {
-                                        Directory.Delete($"{settings.DownloadDir}\\{gameNameHash}", true);
-                                    }
-
-                                    if (Directory.Exists($"{settings.DownloadDir}\\{gameName}"))
-                                    {
-                                        Directory.Delete($"{settings.DownloadDir}\\{gameName}", true);
-                                    }
-                                }
-                                else
-                                {
-                                    Directory.Delete(settings.DownloadDir + "\\" + gameName, true);
-                                }
-                            }
+                            _ = FlexibleMessageBox.Show(Program.form, $"Rclone error: {gameDownloadOutput.Error}");
+                            output += new ProcessOutput("", "Download Failed");
                         }
-                        catch (Exception ex)
-                        {
-                            _ = FlexibleMessageBox.Show(Program.form, $"Error deleting game files: {ex.Message}");
-                        }
-                        changeTitle("");
-                        break;
                     }
+
+                    if (UsingPublicConfig && otherError == false && gameDownloadOutput.Output != "Download skipped.")
                     {
-                        //Quota Errors
-                        bool isinstalltxt = false;
-                        string installTxtPath = null;
-                        bool quotaError = false;
-                        bool otherError = false;
-                        if (gameDownloadOutput.Error.Length > 0 && !isOffline)
+                        // ETA tracking for extraction
+                        DateTime extractStart = DateTime.UtcNow;
+
+                        Thread extractionThread = new Thread(() =>
                         {
-                            string err = gameDownloadOutput.Error.ToLower();
-                            err += gameDownloadOutput.Output.ToLower();
-                            if ((err.Contains("quota") && err.Contains("exceeded")) || err.Contains("directory not found"))
+                            Invoke(new Action(() =>
                             {
-                                quotaError = true;
+                                speedLabel.Text = "Extracting...";
+                                progressBar.IsIndeterminate = false;
+                                progressBar.Value = 0;
+                                progressBar.OperationType = "Extracting";
+                                isInDownloadExtract = true;
+                            }));
 
-                                SwitchMirrors();
-
-                                cleanupActiveDownloadStatus();
-                            }
-                            else if (!gameDownloadOutput.Error.Contains("Serving remote control on http://127.0.0.1:5572/"))
+                            // Set up extraction callback
+                            Zip.ExtractionProgressCallback = (percent, eta) =>
                             {
-                                otherError = true;
+                                this.Invoke(() =>
+                                {
+                                    progressBar.Value = percent;
+                                    UpdateProgressStatus("Extracting", percent: (int)Math.Round(percent), eta: eta);
 
-                                //Remove current game
-                                cleanupActiveDownloadStatus();
+                                    progressBar.StatusText = $"Extracting · {percent:0.0}%";
+                                });
+                            };
 
-                                _ = FlexibleMessageBox.Show(Program.form, $"Rclone error: {gameDownloadOutput.Error}");
-                                output += new ProcessOutput("", "Download Failed");
+                            try
+                            {
+                                changeTitle("Extracting " + gameName);
+                                Zip.ExtractFile($"{settings.DownloadDir}\\{gameNameHash}\\{gameNameHash}.7z.001", $"{settings.DownloadDir}", PublicConfigFile.Password);
+                                changeTitle("");
                             }
-                        }
-
-                        if (UsingPublicConfig && otherError == false && gameDownloadOutput.Output != "Download skipped.")
-                        {
-                            // ETA tracking for extraction
-                            DateTime extractStart = DateTime.UtcNow;
-
-                            Thread extractionThread = new Thread(() =>
+                            catch (ExtractionException ex)
                             {
                                 Invoke(new Action(() =>
                                 {
-                                    speedLabel.Text = "Extracting...";
-                                    progressBar.IsIndeterminate = false;
-                                    progressBar.Value = 0;
-                                    progressBar.OperationType = "Extracting";
-                                    isInDownloadExtract = true;
+                                    cleanupActiveDownloadStatus();
                                 }));
-
-                                // Set up extraction callback
-                                Zip.ExtractionProgressCallback = (percent, eta) =>
-                                {
-                                    this.Invoke(() =>
-                                    {
-                                        progressBar.Value = percent;
-                                        UpdateProgressStatus("Extracting", percent: (int)Math.Round(percent), eta: eta);
-
-                                        progressBar.StatusText = $"Extracting · {percent:0.0}%";
-                                    });
-                                };
-
-                                try
-                                {
-                                    changeTitle("Extracting " + gameName);
-                                    Zip.ExtractFile($"{settings.DownloadDir}\\{gameNameHash}\\{gameNameHash}.7z.001", $"{settings.DownloadDir}", PublicConfigFile.Password);
-                                    changeTitle("");
-                                }
-                                catch (ExtractionException ex)
-                                {
-                                    Invoke(new Action(() =>
-                                    {
-                                        cleanupActiveDownloadStatus();
-                                    }));
-                                    otherError = true;
-                                    this.Invoke(() => _ = FlexibleMessageBox.Show(Program.form, $"7zip error: {ex.Message}"));
-                                    output += new ProcessOutput("", "Extract Failed");
-                                }
-                                finally
-                                {
-                                    // Clear callbacks
-                                    Zip.ExtractionProgressCallback = null;
-                                    Zip.ExtractionStatusCallback = null;
-                                }
-                            })
-                            {
-                                IsBackground = true
-                            };
-                            extractionThread.Start();
-
-                            while (extractionThread.IsAlive)
-                            {
-                                await Task.Delay(100);
+                                otherError = true;
+                                this.Invoke(() => _ = FlexibleMessageBox.Show(Program.form, $"7zip error: {ex.Message}"));
+                                output += new ProcessOutput("", "Extract Failed");
                             }
-
-                            progressBar.StatusText = ""; // Clear status after extraction
-
-                            if (Directory.Exists($"{settings.DownloadDir}\\{gameNameHash}"))
+                            finally
                             {
-                                Directory.Delete($"{settings.DownloadDir}\\{gameNameHash}", true);
+                                // Clear callbacks
+                                Zip.ExtractionProgressCallback = null;
+                                Zip.ExtractionStatusCallback = null;
                             }
+                        })
+                        {
+                            IsBackground = true
+                        };
+                        extractionThread.Start();
+
+                        while (extractionThread.IsAlive)
+                        {
+                            await Task.Delay(100);
                         }
 
-                        if (quotaError == false && otherError == false)
+                        progressBar.StatusText = ""; // Clear status after extraction
+                        speedLabel.Text = "";
+
+                        if (Directory.Exists($"{settings.DownloadDir}\\{gameNameHash}"))
                         {
-                            ADB.DeviceID = GetDeviceID();
-                            quotaTries = 0;
-                            progressBar.Value = 0;
-                            progressBar.IsIndeterminate = false;
-                            changeTitle("Installing game APK " + gameName);
-                            if (File.Exists(Path.Combine(settings.DownloadDir, gameName, "install.txt")))
-                            {
-                                isinstalltxt = true;
-                                installTxtPath = Path.Combine(settings.DownloadDir, gameName, "install.txt");
-                            }
-                            else if (File.Exists(Path.Combine(settings.DownloadDir, gameName, "Install.txt")))
-                            {
-                                isinstalltxt = true;
-                                installTxtPath = Path.Combine(settings.DownloadDir, gameName, "Install.txt");
-                            }
+                            Directory.Delete($"{settings.DownloadDir}\\{gameNameHash}", true);
+                        }
+                    }
 
-                            string[] files = Directory.GetFiles(settings.DownloadDir + "\\" + gameName);
+                    if (quotaError == false && otherError == false)
+                    {
+                        ADB.DeviceID = GetDeviceID();
+                        quotaTries = 0;
+                        progressBar.Value = 0;
+                        progressBar.IsIndeterminate = false;
+                        changeTitle("Installing game APK " + gameName);
+                        if (File.Exists(Path.Combine(settings.DownloadDir, gameName, "install.txt")))
+                        {
+                            isinstalltxt = true;
+                            installTxtPath = Path.Combine(settings.DownloadDir, gameName, "install.txt");
+                        }
+                        else if (File.Exists(Path.Combine(settings.DownloadDir, gameName, "Install.txt")))
+                        {
+                            isinstalltxt = true;
+                            installTxtPath = Path.Combine(settings.DownloadDir, gameName, "Install.txt");
+                        }
 
-                            Debug.WriteLine("Game Folder is: " + settings.DownloadDir + "\\" + gameName);
-                            Debug.WriteLine("FILES IN GAME FOLDER: ");
+                        string[] files = Directory.GetFiles(settings.DownloadDir + "\\" + gameName);
 
-                            if (isinstalltxt)
+                        Debug.WriteLine("Game Folder is: " + settings.DownloadDir + "\\" + gameName);
+                        Debug.WriteLine("FILES IN GAME FOLDER: ");
+
+                        if (isinstalltxt)
+                        {
+                            // Only sideload if device is connected and sideloading not disabled
+                            if (!settings.NodeviceMode && !nodeviceonstart && DeviceConnected)
                             {
-                                // Only sideload if device is connected and sideloading not disabled
-                                if (!settings.NodeviceMode && !nodeviceonstart && DeviceConnected)
+                                Thread installtxtThread = new Thread(() =>
                                 {
-                                    Thread installtxtThread = new Thread(() =>
-                                    {
-                                        output += Sideloader.RunADBCommandsFromFile(installTxtPath);
-                                        changeTitle("");
-                                    });
-                                    installtxtThread.Start();
-                                    while (installtxtThread.IsAlive)
-                                    {
-                                        await Task.Delay(100);
-                                    }
-                                }
-                                else
+                                    output += Sideloader.RunADBCommandsFromFile(installTxtPath);
+                                    changeTitle("");
+                                });
+                                installtxtThread.Start();
+                                while (installtxtThread.IsAlive)
                                 {
-                                    output.Output = "Download complete (installation skipped).\n\nConnect a device or enable sideloading to install.";
+                                    await Task.Delay(100);
                                 }
                             }
                             else
                             {
-                                // Only sideload if device is connected and sideloading not disabled
-                                if (!settings.NodeviceMode && !nodeviceonstart && DeviceConnected)
+                                output.Output = "Download complete (installation skipped).\n\nConnect a device or enable sideloading to install.";
+                            }
+                        }
+                        else
+                        {
+                            // Only sideload if device is connected and sideloading not disabled
+                            if (!settings.NodeviceMode && !nodeviceonstart && DeviceConnected)
+                            {
+                                // Find the APK file to install
+                                string apkFile = files.FirstOrDefault(file => Path.GetExtension(file) == ".apk");
+
+                                if (apkFile != null)
                                 {
-                                    // Find the APK file to install
-                                    string apkFile = files.FirstOrDefault(file => Path.GetExtension(file) == ".apk");
-
-                                    if (apkFile != null)
+                                    CurrAPK = apkFile;
+                                    CurrPCKG = packagename;
+                                    System.Windows.Forms.Timer t = new System.Windows.Forms.Timer
                                     {
-                                        CurrAPK = apkFile;
-                                        CurrPCKG = packagename;
-                                        System.Windows.Forms.Timer t = new System.Windows.Forms.Timer
-                                        {
-                                            Interval = 150000 // 150 seconds to fail
-                                        };
-                                        t.Tick += new EventHandler(timer_Tick4);
-                                        t.Start();
+                                        Interval = 150000 // 150 seconds to fail
+                                    };
+                                    t.Tick += new EventHandler(timer_Tick4);
+                                    t.Start();
 
-                                        changeTitle($"Sideloading APK...");
-                                        progressBar.IsIndeterminate = false;
-                                        progressBar.OperationType = "Installing";
-                                        progressBar.Value = 0;
+                                    changeTitle($"Sideloading APK...");
+                                    progressBar.IsIndeterminate = false;
+                                    progressBar.OperationType = "Installing";
+                                    progressBar.Value = 0;
 
-                                        // Use async method with progress
-                                        output += await ADB.SideloadWithProgressAsync(
-                                            apkFile,
-                                            (progress, eta) => this.Invoke(() => {
-                                                if (progress == 0)
+                                    // Use async method with progress
+                                    output += await ADB.SideloadWithProgressAsync(
+                                        apkFile,
+                                        (progress, eta) => this.Invoke(() => {
+                                            if (progress == 0)
+                                            {
+                                                progressBar.IsIndeterminate = true;
+                                                progressBar.OperationType = "Installing";
+                                            }
+                                            else
+                                            {
+                                                progressBar.IsIndeterminate = false;
+                                                progressBar.Value = progress;
+                                            }
+                                            UpdateProgressStatus("Installing", percent: (int)Math.Round(progress), eta: eta);
+                                            progressBar.StatusText = $"Installing · {progress:0.0}%";
+                                        }),
+                                        status => this.Invoke(() => {
+                                            if (!string.IsNullOrEmpty(status))
+                                            {
+                                                if (status.Contains("Completing Installation"))
                                                 {
-                                                    progressBar.IsIndeterminate = true;
-                                                    progressBar.OperationType = "Installing";
+                                                    // "Completing Installation..."
+                                                    speedLabel.Text = status;
+                                                }
+                                                progressBar.StatusText = status;
+                                            }
+                                        }),
+                                        packagename,
+                                        Sideloader.gameNameToSimpleName(gameName));
+
+                                    t.Stop();
+                                    progressBar.IsIndeterminate = false;
+                                    progressBar.StatusText = ""; // Clear status after APK install
+
+                                    Debug.WriteLine(wrDelimiter);
+                                    if (Directory.Exists($"{settings.DownloadDir}\\{gameName}\\{packagename}"))
+                                    {
+                                        deleteOBB(packagename);
+
+                                        changeTitle($"Copying {packagename} OBB to device...");
+                                        progressBar.Value = 0;
+                                        progressBar.OperationType = "Copying OBB";
+
+                                        // Use async method with progress for OBB
+                                        string currentObbStatusBase = string.Empty; // phase or filename
+
+                                        output += await ADB.CopyOBBWithProgressAsync(
+                                            $"{settings.DownloadDir}\\{gameName}\\{packagename}",
+                                            (progress, eta) => this.Invoke(() =>
+                                            {
+                                                progressBar.Value = progress;
+                                                UpdateProgressStatus("Copying OBB", percent: (int)Math.Round(progress), eta: eta);
+
+                                                if (!string.IsNullOrEmpty(currentObbStatusBase))
+                                                {
+                                                    progressBar.StatusText = $"{currentObbStatusBase} · {progress:0.0}%";
                                                 }
                                                 else
                                                 {
-                                                    progressBar.IsIndeterminate = false;
-                                                    progressBar.Value = progress;
-                                                }
-                                                UpdateProgressStatus("Installing", percent: (int)Math.Round(progress), eta: eta);
-                                                progressBar.StatusText = $"Installing · {progress:0.0}%";
-                                            }),
-                                            status => this.Invoke(() => {
-                                                if (!string.IsNullOrEmpty(status))
-                                                {
-                                                    if (status.Contains("Completing Installation"))
-                                                    { 
-                                                        // "Completing Installation..."
-                                                        speedLabel.Text = status;
-                                                    }
-                                                    progressBar.StatusText = status;
+                                                    progressBar.StatusText = $"{progress:0.0}%";
                                                 }
                                             }),
-                                            packagename,
+                                            status => this.Invoke(() =>
+                                            {
+                                                currentObbStatusBase = status ?? string.Empty;
+                                            }),
                                             Sideloader.gameNameToSimpleName(gameName));
 
-                                        t.Stop();
-                                        progressBar.IsIndeterminate = false;
-                                        progressBar.StatusText = ""; // Clear status after APK install
+                                        progressBar.StatusText = ""; // Clear status after OBB copy
+                                        changeTitle("");
 
-                                        Debug.WriteLine(wrDelimiter);
-                                        if (Directory.Exists($"{settings.DownloadDir}\\{gameName}\\{packagename}"))
+                                        if (!nodeviceonstart | DeviceConnected)
                                         {
-                                            deleteOBB(packagename);
-
-                                            changeTitle($"Copying {packagename} OBB to device...");
-                                            progressBar.Value = 0;
-                                            progressBar.OperationType = "Copying OBB";
-
-                                            // Use async method with progress for OBB
-                                            string currentObbStatusBase = string.Empty; // phase or filename
-
-                                            output += await ADB.CopyOBBWithProgressAsync(
-                                                $"{settings.DownloadDir}\\{gameName}\\{packagename}",
-                                                (progress, eta) => this.Invoke(() =>
-                                                {
-                                                    progressBar.Value = progress;
-                                                    UpdateProgressStatus("Copying OBB", percent: (int)Math.Round(progress), eta: eta);
-
-                                                    if (!string.IsNullOrEmpty(currentObbStatusBase))
-                                                    {
-                                                        progressBar.StatusText = $"{currentObbStatusBase} · {progress:0.0}%";
-                                                    }
-                                                    else
-                                                    {
-                                                        progressBar.StatusText = $"{progress:0.0}%";
-                                                    }
-                                                }),
-                                                status => this.Invoke(() =>
-                                                {
-                                                    currentObbStatusBase = status ?? string.Empty;
-                                                }),
-                                                Sideloader.gameNameToSimpleName(gameName));
-
-                                            progressBar.StatusText = ""; // Clear status after OBB copy
-                                            changeTitle("");
-
-                                            if (!nodeviceonstart | DeviceConnected)
+                                            if (!output.Output.Contains("offline"))
                                             {
-                                                if (!output.Output.Contains("offline"))
+                                                try
                                                 {
-                                                    try
-                                                    {
-                                                        obbsMismatch = await compareOBBSizes(packagename, gameName, output);
-                                                    }
-                                                    catch (Exception ex) { _ = FlexibleMessageBox.Show(Program.form, $"Error comparing OBB sizes: {ex.Message}"); }
+                                                    obbsMismatch = await compareOBBSizes(packagename, gameName, output);
                                                 }
+                                                catch (Exception ex) { _ = FlexibleMessageBox.Show(Program.form, $"Error comparing OBB sizes: {ex.Message}"); }
                                             }
                                         }
                                     }
                                 }
-                                else
-                                {
-                                    output.Output = "Download complete (installation skipped).\n\nConnect a device or enable sideloading to install.";
-                                }
-                                changeTitle($"Installation of {gameName} completed.");
                             }
-                            // Only delete if setting enabled and device was connected (so we actually installed)
-                            if (settings.DeleteAllAfterInstall && !nodeviceonstart && DeviceConnected)
+                            else
                             {
-                                changeTitle("Deleting game files");
-                                try { Directory.Delete(settings.DownloadDir + "\\" + gameName, true); } catch (Exception ex) { _ = FlexibleMessageBox.Show(Program.form, $"Error deleting game files: {ex.Message}"); }
+                                output.Output = "Download complete (installation skipped).\n\nConnect a device or enable sideloading to install.";
                             }
-                            // Remove current game
-                            cleanupActiveDownloadStatus();
+                            changeTitle($"Installation of {gameName} completed.");
                         }
+                        // Only delete if setting enabled and device was connected (so we actually installed)
+                        if (settings.DeleteAllAfterInstall && !nodeviceonstart && DeviceConnected)
+                        {
+                            changeTitle("Deleting game files");
+                            try { Directory.Delete(settings.DownloadDir + "\\" + gameName, true); } catch (Exception ex) { _ = FlexibleMessageBox.Show(Program.form, $"Error deleting game files: {ex.Message}"); }
+                        }
+
+                        // Update device space after successful installation
+                        if (!settings.NodeviceMode && DeviceConnected)
+                        {
+                            showAvailableSpace();
+                        }
+
+                        // Remove current game
+                        cleanupActiveDownloadStatus();
                     }
                 }
-                if (removedownloading)
+            }
+            if (!obbsMismatch)
+            {
+                changeTitle("Refreshing games list, please wait...\n");
+                showAvailableSpace();
+
+                await RefreshGameListAsync();
+
+                // Only show output if there's content
+                if (settings.EnableMessageBoxes && !string.IsNullOrWhiteSpace(output.Output + output.Error))
                 {
-                    removedownloading = false;
-                    gamesAreDownloading = false;
-                    isinstalling = false;
-                    return;
+                    ShowPrcOutput(output);
                 }
-                if (!obbsMismatch)
-                {
-                    changeTitle("Refreshing games list, please wait...\n");
-                    showAvailableSpace();
 
-                    await RefreshGameListAsync();
+                progressBar.IsIndeterminate = false;
+                gamesAreDownloading = false;
+                if (_queuePanel != null) _queuePanel.IsDownloading = false;
+                isinstalling = false;
 
-                    if (settings.EnableMessageBoxes)
-                    {
-                        ShowPrcOutput(output);
-                    }
-                    progressBar.IsIndeterminate = false;
-                    gamesAreDownloading = false;
-                    isinstalling = false;
-
-                    changeTitle("");
-                }
+                changeTitle("");
             }
         }
 
@@ -3913,6 +4331,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             }
             progressBar.IsIndeterminate = false;
             gamesAreDownloading = false;
+            if (_queuePanel != null) _queuePanel.IsDownloading = false;
             isinstalling = false;
 
             changeTitle("");
@@ -4009,13 +4428,16 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
         private async void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
+            // Save window state before closing
+            SaveWindowState();
+
             // Cleanup DNS helper (stops proxy)
             DnsHelper.Cleanup();
 
             if (isinstalling)
             {
-                DialogResult res1 = FlexibleMessageBox.Show(Program.form, "There are downloads and/or installations in progress,\nif you exit now you'll have to start the entire process over again.\nAre you sure you want to exit?", "Still downloading/installing.",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                DialogResult res1 = FlexibleMessageBox.Show(Program.form, "There are downloads and/or installations in progress.\nYour download queue will be saved, but any ongoing installations will be canceled.\n\nAre you sure you want to exit?", "Still downloading/installing.",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
                 if (res1 != DialogResult.Yes)
                 {
                     e.Cancel = true;
@@ -4029,7 +4451,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             else if (isuploading)
             {
                 DialogResult res = FlexibleMessageBox.Show(Program.form, "There is an upload still in progress, if you exit now\nyou'll have to start the entire process over again.\nAre you sure you want to exit?", "Still uploading.",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
                 if (res != DialogResult.Yes)
                 {
                     e.Cancel = true;
@@ -4619,20 +5041,6 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             ADBWirelessToggle.Text = isWirelessEnabled ? "WIRELESS ADB" : "ENABLE WIRELESS ADB";
         }
 
-        private void gamesQueListBox_MouseClick(object sender, MouseEventArgs e)
-        {
-            if (gamesQueListBox.SelectedIndex == 0 && gamesQueueList.Count == 1)
-            {
-                removedownloading = true;
-                RCLONE.killRclone();
-            }
-            if (gamesQueListBox.SelectedIndex != -1 && gamesQueListBox.SelectedIndex != 0)
-            {
-                _ = gamesQueueList.Remove(gamesQueListBox.SelectedItem.ToString());
-            }
-
-        }
-
         private void devicesComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
             showAvailableSpace();
@@ -4683,6 +5091,12 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                     SortOrder.Ascending;
             }
 
+            // Update shared sort state
+            _sharedSortField = ColumnIndexToSortField(e.Column);
+            _sharedSortDirection = lvwColumnSorter.Order == SortOrder.Ascending
+                ? SortDirection.Ascending
+                : SortDirection.Descending;
+
             // Suspend drawing during sort
             gamesListView.BeginUpdate();
             try
@@ -4697,6 +5111,9 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
             // Invalidate header to update sort indicators
             gamesListView.Invalidate(new Rectangle(0, 0, gamesListView.ClientSize.Width,
                 gamesListView.Font.Height + 8));
+
+            // Save sort state
+            SaveWindowState();
         }
 
         private void CheckEnter(object sender, System.Windows.Forms.KeyPressEventArgs e)
@@ -4732,25 +5149,34 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                 if (loaded)
                 {
                     StringBuilder copyGamesListView = new StringBuilder();
+                    var itemsSource = gamesListView.Items.Cast<ListViewItem>().ToList();
 
-                    foreach (ListViewItem item in gamesListView.Items)
+                    foreach (ListViewItem item in itemsSource)
                     {
                         // Assuming the game name is in the first column (subitem index 0)
                         copyGamesListView.Append(item.SubItems[0].Text).Append("\n");
                     }
 
-                    Clipboard.SetText(copyGamesListView.ToString());
-                    _ = MessageBox.Show("Entire game list copied as a paragraph to clipboard!\nPress CTRL+V to paste it anywhere!");
+                    if (copyGamesListView.Length > 0)
+                    {
+                        Clipboard.SetText(copyGamesListView.ToString());
+                        _ = FlexibleMessageBox.Show("Entire game list copied as a paragraph to clipboard!\nPress CTRL+V to paste it anywhere!");
+                    }
+                    else
+                    {
+                        changeTitle("No games to copy", true);
+                    }
                 }
-
+                return true; // Mark as handled
             }
             if (keyData == (Keys.Alt | Keys.L))
             {
                 if (loaded)
                 {
                     StringBuilder copyGamesListView = new StringBuilder();
+                    var itemsSource = gamesListView.Items.Cast<ListViewItem>().ToList();
 
-                    foreach (ListViewItem item in gamesListView.Items)
+                    foreach (ListViewItem item in itemsSource)
                     {
                         // Assuming the game name is in the first column (subitem index 0)
                         copyGamesListView.Append(item.SubItems[0].Text).Append(", ");
@@ -4762,10 +5188,17 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                         copyGamesListView.Length -= 2;
                     }
 
-                    Clipboard.SetText(copyGamesListView.ToString());
-                    _ = MessageBox.Show("Entire game list copied as a paragraph to clipboard!\nPress CTRL+V to paste it anywhere!");
+                    if (copyGamesListView.Length > 0)
+                    {
+                        Clipboard.SetText(copyGamesListView.ToString());
+                        _ = FlexibleMessageBox.Show("Entire game list copied as a paragraph to clipboard!\nPress CTRL+V to paste it anywhere!");
+                    }
+                    else
+                    {
+                        changeTitle("No games to copy", true);
+                    }
                 }
-
+                return true; // Mark as handled
             }
             if (keyData == (Keys.Control | Keys.H))
             {
@@ -4841,17 +5274,29 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
             }
             if (keyData == (Keys.Control | Keys.P))
             {
-                DialogResult dialogResult = FlexibleMessageBox.Show(Program.form, "Do you wish to copy Package Name of games selected from list to clipboard?", "Copy package to clipboard?", MessageBoxButtons.YesNo);
-                if (dialogResult == DialogResult.Yes)
+                // Immediately copy the package name of the currently selected game
+                if (loaded && gamesListView.SelectedItems.Count > 0)
                 {
-                    settings.PackageNameToCB = true;
-                    settings.Save();
+                    var selectedItem = gamesListView.SelectedItems[gamesListView.SelectedItems.Count - 1];
+                    string packageName = selectedItem.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
+                    Clipboard.SetText(packageName);
+                    changeTitle($"Copied: {packageName}", true);
                 }
-                if (dialogResult == DialogResult.No)
+                else if (loaded && isGalleryView && _fastGallery != null && _fastGallery._selectedIndex >= 0)
                 {
-                    settings.PackageNameToCB = false;
-                    settings.Save();
+                    var galleryItem = _fastGallery.GetItemAtIndex(_fastGallery._selectedIndex);
+                    if (galleryItem != null && galleryItem.SubItems.Count > SideloaderRCLONE.PackageNameIndex)
+                    {
+                        string packageName = galleryItem.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
+                        Clipboard.SetText(packageName);
+                        changeTitle($"Copied: {packageName}", true);
+                    }
                 }
+                else
+                {
+                    changeTitle("No game selected", true);
+                }
+                return true; // Mark as handled
             }
             return base.ProcessCmdKey(ref msg, keyData);
 
@@ -5175,7 +5620,7 @@ function onYouTubeIframeAPIReady() {
             // Lightweight search
             try
             {
-                string query = WebUtility.UrlEncode(gameName + " VR trailer");
+                string query = WebUtility.UrlEncode($"\"{gameName}\" VR trailer");
                 string searchUrl = $"https://www.youtube.com/results?search_query={query}";
                 using (var http = new HttpClient())
                 {
@@ -5321,7 +5766,7 @@ function onYouTubeIframeAPIReady() {
 
             if (!isGalleryView)
             {
-                notesRichTextBox.Text = File.Exists(NotePath) ? File.ReadAllText(NotePath) : "";
+                UpdateReleaseNotes(NotePath);
                 UpdateNotesScrollBar();
             }
         }
@@ -5450,21 +5895,6 @@ function onYouTubeIframeAPIReady() {
             btnInstalled.Click += btnInstalled_Click;
             btnUpdateAvailable.Click += btnUpdateAvailable_Click;
             btnNewerThanList.Click += btnNewerThanList_Click;
-        }
-        
-        private void gamesQueListBox_MouseDown(object sender, MouseEventArgs e)
-        {
-            if (gamesQueListBox.SelectedItem == null)
-            {
-                return;
-            }
-
-            _ = gamesQueListBox.DoDragDrop(gamesQueListBox.SelectedItem, DragDropEffects.Move);
-        }
-
-        private void gamesQueListBox_DragOver(object sender, DragEventArgs e)
-        {
-            e.Effect = DragDropEffects.Move;
         }
 
         private async void pullAppToDesktopBtn_Click(object sender, EventArgs e)
@@ -5942,7 +6372,7 @@ function onYouTubeIframeAPIReady() {
                     }
 
                     // Get storage info
-                    string storageOutput = ADB.RunAdbCommandToString("shell df /sdcard").Output;
+                    string storageOutput = ADB.RunAdbCommandToString("shell df /data").Output;
                     string[] lines = storageOutput.Split('\n');
 
                     long totalSpace = 0;
@@ -5973,6 +6403,9 @@ function onYouTubeIframeAPIReady() {
                                 }
 
                                 freeSpaceTextDetailed = $"{(usedSpace / 1024.0):F0} GB OF {(totalSpace / 1024.0):F0} GB USED";
+
+                                // Store raw value for queue space calculations
+                                _deviceFreeSpaceMB = freeSpace;
                             }
                         }
                     }
@@ -6159,13 +6592,58 @@ function onYouTubeIframeAPIReady() {
         private void btnViewToggle_Click(object sender, EventArgs e)
         {
             // Capture currently selected item before switching views
-            string selectedPackageName = null;
+            string selectedReleaseName = null;
             if (gamesListView.SelectedItems.Count > 0)
             {
                 var selectedItem = gamesListView.SelectedItems[0];
-                if (selectedItem.SubItems.Count > 2)
+                if (selectedItem.SubItems.Count > 1)
                 {
-                    selectedPackageName = selectedItem.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
+                    selectedReleaseName = selectedItem.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
+                }
+            }
+            else if (isGalleryView && _fastGallery != null && _fastGallery._selectedIndex >= 0)
+            {
+                // Capture selection from gallery view
+                var galleryItem = _fastGallery.GetItemAtIndex(_fastGallery._selectedIndex);
+                if (galleryItem != null && galleryItem.SubItems.Count > 1)
+                {
+                    selectedReleaseName = galleryItem.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
+                }
+            }
+
+            // Capture current sort state before switching
+            if (isGalleryView && _fastGallery != null)
+            {
+                // Save gallery sort state
+                _sharedSortField = _fastGallery.CurrentSortField;
+                _sharedSortDirection = _fastGallery.CurrentSortDirection;
+
+                // Flip popularity direction when going from gallery to list due to flipped underlying logic
+                // Gallery: Descending = Most Popular first
+                // List: Ascending = Most Popular first
+                if (_sharedSortField == SortField.Popularity)
+                {
+                    _sharedSortDirection = _sharedSortDirection == SortDirection.Ascending
+                        ? SortDirection.Descending
+                        : SortDirection.Ascending;
+                }
+            }
+            else if (!isGalleryView && _listViewRenderer != null && lvwColumnSorter != null)
+            {
+                // Save list view sort state
+                _sharedSortField = ColumnIndexToSortField(lvwColumnSorter.SortColumn);
+                _sharedSortDirection = lvwColumnSorter.Order == SortOrder.Ascending
+                    ? SortDirection.Ascending
+                    : SortDirection.Descending;
+
+                // Flip popularity direction when going from list to gallery due to flipped underlying logic
+                // List: Ascending = Most Popular first
+                // Gallery: Descending = Most Popular first
+                if (_sharedSortField == SortField.Popularity)
+                {
+                    _sharedSortDirection = _sharedSortDirection == SortDirection.Ascending
+                        ? SortDirection.Descending
+                        : SortDirection.Ascending;
                 }
             }
 
@@ -6187,9 +6665,9 @@ function onYouTubeIframeAPIReady() {
                     PopulateGalleryView();
 
                     // Scroll to the previously selected item in gallery view
-                    if (!string.IsNullOrEmpty(selectedPackageName) && _fastGallery != null)
+                    if (!string.IsNullOrEmpty(selectedReleaseName) && _fastGallery != null)
                     {
-                        _fastGallery.ScrollToPackage(selectedPackageName);
+                        _fastGallery.ScrollToPackage(selectedReleaseName);
                     }
                 }
             }
@@ -6199,7 +6677,62 @@ function onYouTubeIframeAPIReady() {
                 gamesGalleryView.Visible = false;
                 gamesListView.Visible = true;
                 CleanupGalleryView();
+
+                // Apply shared sort state to list view
+                ApplySortToListView();
+
+                // Scroll to the previously selected item in list view
+                if (!string.IsNullOrEmpty(selectedReleaseName))
+                {
+                    foreach (ListViewItem item in gamesListView.Items)
+                    {
+                        if (item.SubItems.Count > 1 &&
+                            item.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text.Equals(selectedReleaseName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            item.Selected = true;
+                            item.Focused = true;
+                            item.EnsureVisible();
+                            break;
+                        }
+                    }
+                }
             }
+        }
+
+        private SortField ColumnIndexToSortField(int columnIndex)
+        {
+            switch (columnIndex)
+            {
+                case 0: return SortField.Name;
+                case 4: return SortField.LastUpdated;
+                case 5: return SortField.Size;
+                case 6: return SortField.Popularity;
+                default: return SortField.Name;
+            }
+        }
+
+        private int SortFieldToColumnIndex(SortField field)
+        {
+            switch (field)
+            {
+                case SortField.Name: return 0;
+                case SortField.LastUpdated: return 4;
+                case SortField.Size: return 5;
+                case SortField.Popularity: return 6;
+                default: return 0;
+            }
+        }
+
+        private void ApplySortToListView()
+        {
+            if (_listViewRenderer == null || lvwColumnSorter == null) return;
+
+            int columnIndex = SortFieldToColumnIndex(_sharedSortField);
+            SortOrder order = _sharedSortDirection == SortDirection.Ascending
+                ? SortOrder.Ascending
+                : SortOrder.Descending;
+
+            _listViewRenderer.ApplySort(columnIndex, order);
         }
 
         private void PopulateGalleryView()
@@ -6247,6 +6780,10 @@ function onYouTubeIframeAPIReady() {
             _fastGallery.TileClicked += FastGallery_TileClicked;
             _fastGallery.TileDoubleClicked += FastGallery_TileDoubleClicked;
             _fastGallery.TileDeleteClicked += FastGallery_TileDeleteClicked;
+            _fastGallery.SortChanged += FastGallery_SortChanged;
+
+            // Apply current shared sort state to gallery
+            _fastGallery.SetSortState(_sharedSortField, _sharedSortDirection);
 
             gamesGalleryView.Controls.Add(_fastGallery);
             _fastGallery.Anchor = AnchorStyles.None;
@@ -6262,6 +6799,19 @@ function onYouTubeIframeAPIReady() {
             if (item == null) return;
 
             await UninstallGameAsync(item);
+        }
+
+        private void FastGallery_SortChanged(object sender, SortField field)
+        {
+            // Update shared state from gallery
+            if (_fastGallery != null)
+            {
+                _sharedSortField = _fastGallery.CurrentSortField;
+                _sharedSortDirection = _fastGallery.CurrentSortDirection;
+            }
+
+            // Save sort state
+            SaveWindowState();
         }
 
         private void GamesGalleryView_Resize(object sender, EventArgs e)
@@ -6291,7 +6841,6 @@ function onYouTubeIframeAPIReady() {
             var item = _fastGallery.GetItemAtIndex(itemIndex);
             if (item == null || item.SubItems.Count <= 2) return;
 
-            string packageName = item.SubItems[SideloaderRCLONE.PackageNameIndex].Text;
             string releaseName = item.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
             string gameName = item.SubItems[SideloaderRCLONE.GameNameIndex].Text;
 
@@ -6302,10 +6851,11 @@ function onYouTubeIframeAPIReady() {
                 listItem.Selected = false;
             }
 
-            // Find and select the matching item in gamesListView
+            // Find and select the matching item in gamesListView using release name
             foreach (ListViewItem listItem in gamesListView.Items)
             {
-                if (listItem.SubItems.Count > 2 && listItem.SubItems[2].Text == packageName)
+                if (listItem.SubItems.Count > 1 &&
+                    listItem.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text.Equals(releaseName, StringComparison.OrdinalIgnoreCase))
                 {
                     listItem.Selected = true;
                     listItem.EnsureVisible();
@@ -6315,7 +6865,32 @@ function onYouTubeIframeAPIReady() {
 
             // Load release notes
             string notePath = Path.Combine(SideloaderRCLONE.NotesFolder, $"{releaseName}.txt");
-            notesRichTextBox.Text = File.Exists(notePath) ? File.ReadAllText(notePath) : "";
+            UpdateReleaseNotes(notePath);
+            UpdateNotesScrollBar();
+        }
+
+        private void UpdateReleaseNotes(string notes)
+        {
+            if (File.Exists(notes))
+            {
+                // Reset to normal styling for actual content
+                notesRichTextBox.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
+                notesRichTextBox.ForeColor = Color.White;
+                notesRichTextBox.Text = File.ReadAllText(notes);
+                notesRichTextBox.SelectAll();
+                notesRichTextBox.SelectionAlignment = HorizontalAlignment.Left;
+                notesRichTextBox.DeselectAll();
+            }
+            else
+            {
+                // Show placeholder with queue-matching style (grey, italic, centered)
+                notesRichTextBox.Font = new Font("Segoe UI", 8.5F, FontStyle.Italic);
+                notesRichTextBox.ForeColor = Color.FromArgb(140, 140, 140);
+                notesRichTextBox.Text = "\n\n\n\n\nTip: Press F1 to see all shortcuts\n\nDrag and drop APKs or folders to install";
+                notesRichTextBox.SelectAll();
+                notesRichTextBox.SelectionAlignment = HorizontalAlignment.Center;
+                notesRichTextBox.DeselectAll();
+            }
             UpdateNotesScrollBar();
         }
 
@@ -6327,7 +6902,8 @@ function onYouTubeIframeAPIReady() {
             var item = _fastGallery.GetItemAtIndex(itemIndex);
             if (item == null || item.SubItems.Count <= 2) return;
 
-            string packageName = item.SubItems[2].Text;
+            // Use release name to match the correct entry
+            string releaseName = item.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text;
 
             // Clear all selections first - must deselect each item individually
             // because SelectedItems.Clear() doesn't work reliably when ListView is hidden
@@ -6336,10 +6912,11 @@ function onYouTubeIframeAPIReady() {
                 listItem.Selected = false;
             }
 
-            // Find and select the matching item in gamesListView, then trigger download
+            // Find and select the matching item in gamesListView by release name
             foreach (ListViewItem listItem in gamesListView.Items)
             {
-                if (listItem.SubItems.Count > 2 && listItem.SubItems[2].Text == packageName)
+                if (listItem.SubItems.Count > 1 &&
+                    listItem.SubItems[SideloaderRCLONE.ReleaseNameIndex].Text.Equals(releaseName, StringComparison.OrdinalIgnoreCase))
                 {
                     listItem.Selected = true;
                     downloadInstallGameButton_Click(downloadInstallGameButton, EventArgs.Empty);
@@ -7014,17 +7591,217 @@ function onYouTubeIframeAPIReady() {
         {
             Color panelColor = Color.FromArgb(24, 26, 30);
 
-            // Create rounded panel for notesRichTextBox
+            // Initialize modern queue panel
+            _queuePanel = new ModernQueuePanel
+            {
+                Size = new Size(250, 150),  // Placeholder; resized by LayoutBottomPanels
+                BackColor = panelColor
+            };
+            _queuePanel.ItemRemoved += QueuePanel_ItemRemoved;
+            _queuePanel.ItemReordered += QueuePanel_ItemReordered;
+
+            // Sync with binding list
+            gamesQueueList.ListChanged += (s, e) => SyncQueuePanel();
+
+            // Notes panel
             notesPanel = CreateRoundedPanel(notesRichTextBox, panelColor, 8, true);
 
-            // Create rounded panel for gamesQueListBox
-            queuePanel = CreateRoundedPanel(gamesQueListBox, panelColor, 8, false);
+            // Queue panel
+            queuePanel = CreateQueuePanel(panelColor, 8);
 
-            // Bring labels to front so they appear above the panels
             gamesQueueLabel.BringToFront();
             lblNotes.BringToFront();
+
+            // Trigger initial layout
+            LayoutBottomPanels();
         }
-        
+
+        private Panel CreateQueuePanel(Color panelColor, int radius)
+        {
+            var panel = new Panel
+            {
+                Location = gamesQueListBox.Location,
+                Size = new Size(
+                    gamesQueListBox.Width + ChildHorizontalPadding + ChildRightMargin,
+                    gamesQueListBox.Height + ReservedLabelHeight
+                ),
+                BackColor = Color.Transparent,
+                Padding = new Padding(ChildHorizontalPadding, ChildTopMargin, ChildRightMargin, ChildTopMargin)
+            };
+
+            // Double buffering
+            typeof(Panel).InvokeMember("DoubleBuffered",
+                System.Reflection.BindingFlags.SetProperty |
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic,
+                null, panel, new object[] { true });
+
+            panel.Paint += (s, e) =>
+            {
+                var p = (Panel)s;
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                var rect = new Rectangle(0, 0, p.Width - 1, p.Height - 1);
+
+                using (var path = CreateRoundedRectPath(rect, radius))
+                using (var brush = new SolidBrush(panelColor))
+                {
+                    e.Graphics.FillPath(brush, path);
+                }
+
+                using (var regionPath = CreateRoundedRectPath(new Rectangle(0, 0, p.Width, p.Height), radius))
+                {
+                    p.Region = new Region(regionPath);
+                }
+            };
+
+            var parent = gamesQueListBox.Parent;
+            parent.Controls.Remove(gamesQueListBox);
+            gamesQueListBox.Dispose();
+
+            _queuePanel.Location = new Point(ChildHorizontalPadding, ChildTopMargin);
+            _queuePanel.Anchor = AnchorStyles.None;
+            panel.Controls.Add(_queuePanel);
+            parent.Controls.Add(panel);
+            panel.BringToFront();
+
+            return panel;
+        }
+
+        private void SyncQueuePanel()
+        {
+            if (_queuePanel == null) return;
+            _queuePanel.SetItems(gamesQueueList);
+            _queuePanel.IsDownloading = gamesAreDownloading && gamesQueueList.Count > 0;
+
+            UpdateQueueLabel();
+
+            // Persist queue to settings
+            SaveQueueToSettings();
+        }
+
+        private void UpdateQueueLabel()
+        {
+            if (gamesQueueLabel.InvokeRequired)
+            {
+                gamesQueueLabel.Invoke(new Action(UpdateQueueLabel));
+                return;
+            }
+
+            if (gamesQueueList.Count == 0)
+            {
+                gamesQueueLabel.Text = "Download Queue";
+                _totalQueueSizeMB = 0;
+                _effectiveQueueSizeMB = 0;
+                _queueEffectiveSizes.Clear();
+                return;
+            }
+
+            // Recalculate total size
+            _totalQueueSizeMB = 0;
+            foreach (string releaseName in gamesQueueList)
+            {
+                foreach (string[] game in SideloaderRCLONE.games)
+                {
+                    if (game.Length > SideloaderRCLONE.ReleaseNameIndex &&
+                        game[SideloaderRCLONE.ReleaseNameIndex].Equals(releaseName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (game.Length > 5 && double.TryParse(game[5], out double sizeMB))
+                        {
+                            _totalQueueSizeMB += sizeMB;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            string sizeText = _totalQueueSizeMB >= 1024
+                ? $"{(_totalQueueSizeMB / 1024):F2} GB"
+                : $"{_totalQueueSizeMB:F0} MB";
+
+            gamesQueueLabel.Text = $"Download Queue ({gamesQueueList.Count}) · {sizeText}";
+        }
+
+        private void SaveQueueToSettings()
+        {
+            settings.QueuedGames = gamesQueueList.ToArray();
+            settings.Save();
+        }
+
+        private void LoadQueueFromSettings()
+        {
+            if (settings.QueuedGames == null || settings.QueuedGames.Length == 0)
+                return;
+
+            foreach (string game in settings.QueuedGames)
+            {
+                if (!string.IsNullOrWhiteSpace(game) && !gamesQueueList.Contains(game))
+                {
+                    gamesQueueList.Add(game);
+                }
+            }
+        }
+
+        private async Task ResumeQueuedDownloadsAsync()
+        {
+            if (gamesQueueList.Count == 0)
+                return;
+
+            // Ask user if they want to resume
+            DialogResult result = FlexibleMessageBox.Show(
+                Program.form,
+                $"You have {gamesQueueList.Count} game(s) in your download queue from a previous session.\n\nDo you want to resume downloading?",
+                "Resume Downloads?",
+                MessageBoxButtons.YesNo);
+
+            if (result == DialogResult.Yes)
+            {
+                // Trigger the download process
+                downloadInstallGameButton_Click(null, EventArgs.Empty);
+            }
+            else
+            {
+                // Clear the queue if user doesn't want to resume
+                gamesQueueList.Clear();
+                SaveQueueToSettings();
+            }
+        }
+
+        private void QueuePanel_ItemRemoved(object sender, int index)
+        {
+            if (index == 0 && gamesQueueList.Count >= 1)
+            {
+                removedownloading = true;
+                RCLONE.killRclone();
+            }
+            else if (index > 0 && index < gamesQueueList.Count)
+            {
+                string removedGame = gamesQueueList[index];
+
+                // Subtract effective size from running total
+                if (_queueEffectiveSizes.TryGetValue(removedGame, out double effectiveSize))
+                {
+                    _effectiveQueueSizeMB -= effectiveSize;
+                    _queueEffectiveSizes.Remove(removedGame);
+                }
+
+                gamesQueueList.RemoveAt(index);
+                SaveQueueToSettings();
+            }
+        }
+
+        private void QueuePanel_ItemReordered(object sender, ReorderEventArgs e)
+        {
+            if (e.FromIndex <= 0 || e.FromIndex >= gamesQueueList.Count) return;
+
+            var item = gamesQueueList[e.FromIndex];
+            gamesQueueList.RemoveAt(e.FromIndex);
+
+            int insertAt = Math.Max(1, Math.Min(e.ToIndex, gamesQueueList.Count));
+            gamesQueueList.Insert(insertAt, item);
+
+            SaveQueueToSettings();
+        }
+
         private void notesRichTextBox_LinkClicked(object sender, LinkClickedEventArgs e)
         {
             try
@@ -7034,69 +7811,6 @@ function onYouTubeIframeAPIReady() {
             catch (Exception ex)
             {
                 Logger.Log($"Failed to open link: {ex.Message}", LogLevel.WARNING);
-            }
-        }
-
-        private void gamesQueListBox_DrawItem(object sender, DrawItemEventArgs e)
-        {
-            if (e.Index < 0) return;
-
-            // Determine colors based on selection state
-            Color backColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected
-                ? Color.FromArgb(93, 203, 173)  // Accent color for selected
-                : gamesQueListBox.BackColor;
-
-            Color foreColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected
-                ? Color.FromArgb(20, 20, 20)    // Dark text on accent
-                : gamesQueListBox.ForeColor;
-
-            Font font = (e.State & DrawItemState.Selected) == DrawItemState.Selected
-                ? new Font("Microsoft Sans Serif", 10F, FontStyle.Bold)
-                : new Font("Microsoft Sans Serif", 10F, FontStyle.Regular);
-
-            // Clear the item background first
-            using (SolidBrush clearBrush = new SolidBrush(gamesQueListBox.BackColor))
-            {
-                e.Graphics.FillRectangle(clearBrush, e.Bounds);
-            }
-
-            // Draw rounded background
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-            int radius = 1;
-            int margin = 4;
-            Rectangle roundedRect = new Rectangle(
-                e.Bounds.X,
-                e.Bounds.Y,
-                e.Bounds.Width - (margin * 2),
-                e.Bounds.Height
-            );
-
-            using (GraphicsPath path = CreateRoundedRectPath(roundedRect, radius))
-            using (SolidBrush backgroundBrush = new SolidBrush(backColor))
-            {
-                e.Graphics.FillPath(backgroundBrush, path);
-            }
-
-            // Draw text with padding
-            string text = gamesQueListBox.Items[e.Index].ToString();
-            Rectangle textRect = new Rectangle(
-                roundedRect.X + 4,
-                roundedRect.Y,
-                roundedRect.Width - 8,
-                roundedRect.Height
-            );
-
-            using (SolidBrush textBrush = new SolidBrush(foreColor))
-            {
-                var sf = new StringFormat
-                {
-                    Alignment = StringAlignment.Near,
-                    LineAlignment = StringAlignment.Center,
-                    Trimming = StringTrimming.EllipsisCharacter,
-                    FormatFlags = StringFormatFlags.NoWrap
-                };
-                e.Graphics.DrawString(text, font, textBrush, textRect, sf);
             }
         }
 
@@ -7215,7 +7929,7 @@ function onYouTubeIframeAPIReady() {
         {
             // Skip if panels aren't initialized yet
             if (notesPanel == null || queuePanel == null) return;
-            if (gamesQueListBox == null || notesRichTextBox == null) return;
+            if (notesRichTextBox == null) return;
 
             // Panels start after webView21 (webView21 ends at 259 + 384 = 643, add spacing)
             int panelsStartX = 654;
@@ -7233,13 +7947,22 @@ function onYouTubeIframeAPIReady() {
             queuePanel.Location = new Point(panelsStartX, panelY);
             queuePanel.Size = new Size(queueWidth, BottomPanelHeight);
 
+            // Layout queue panel child (_queuePanel)
+            if (_queuePanel != null)
+            {
+                _queuePanel.Location = new Point(ChildHorizontalPadding, ChildTopMargin);
+                _queuePanel.Size = new Size(
+                    queuePanel.Width - ChildHorizontalPadding - ChildRightMargin,
+                    queuePanel.Height - ChildTopMargin * 2 - ReservedLabelHeight
+                );
+            }
+
             // Notes panel
             int notesX = panelsStartX + queueWidth + PanelSpacing;
             notesPanel.Location = new Point(notesX, panelY);
             notesPanel.Size = new Size(this.ClientSize.Width - notesX - RightMargin, BottomPanelHeight);
 
-            // Layout children using the same helper as CreateRoundedPanel
-            LayoutChildInPanel(queuePanel, gamesQueListBox, isNotesPanel: false);
+            // Layout notes child
             LayoutChildInPanel(notesPanel, notesRichTextBox, isNotesPanel: true);
 
             // Position labels at bottom of their panels
@@ -7444,7 +8167,7 @@ function onYouTubeIframeAPIReady() {
             // Run a quick device check in background
             try
             {
-                string output = await Task.Run(() => ADB.RunAdbCommandToString("devices").Output);
+                string output = await Task.Run(() => ADB.RunAdbCommandToString("devices", suppressLogging: true).Output);
 
                 string[] lines = output.Split('\n');
                 bool hasDeviceNow = false;
@@ -7591,6 +8314,143 @@ function onYouTubeIframeAPIReady() {
             }
 
             speedLabel.Text = "";
+        }
+
+        private void SaveWindowState()
+        {
+            try
+            {
+                // Save maximized state separately
+                settings.WindowMaximized = this.WindowState == FormWindowState.Maximized;
+
+                // Save normal bounds (not maximized bounds)
+                if (this.WindowState == FormWindowState.Normal)
+                {
+                    settings.WindowX = this.Location.X;
+                    settings.WindowY = this.Location.Y;
+                    settings.WindowWidth = this.Size.Width;
+                    settings.WindowHeight = this.Size.Height;
+                }
+                else if (this.WindowState == FormWindowState.Maximized)
+                {
+                    settings.WindowX = this.RestoreBounds.X;
+                    settings.WindowY = this.RestoreBounds.Y;
+                    settings.WindowWidth = this.RestoreBounds.Width;
+                    settings.WindowHeight = this.RestoreBounds.Height;
+                }
+
+                // Capture current sort state from active view before saving
+                if (isGalleryView && _fastGallery != null)
+                {
+                    _sharedSortField = _fastGallery.CurrentSortField;
+                    _sharedSortDirection = _fastGallery.CurrentSortDirection;
+                }
+                else if (!isGalleryView && lvwColumnSorter != null)
+                {
+                    _sharedSortField = ColumnIndexToSortField(lvwColumnSorter.SortColumn);
+                    SortDirection listDirection = lvwColumnSorter.Order == SortOrder.Ascending
+                        ? SortDirection.Ascending
+                        : SortDirection.Descending;
+
+                    // Flip popularity when capturing from list view
+                    if (_sharedSortField == SortField.Popularity)
+                    {
+                        _sharedSortDirection = listDirection == SortDirection.Ascending
+                            ? SortDirection.Descending
+                            : SortDirection.Ascending;
+                    }
+                    else
+                    {
+                        _sharedSortDirection = listDirection;
+                    }
+                }
+
+                // Save sort state
+                settings.SortColumn = SortFieldToColumnIndex(_sharedSortField);
+                settings.SortAscending = _sharedSortDirection == SortDirection.Ascending;
+
+                settings.Save();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to save window state: {ex.Message}", LogLevel.WARNING);
+            }
+        }
+
+        private void LoadWindowState()
+        {
+            try
+            {
+                // Load window position and size
+                if (settings.WindowWidth > 0 && settings.WindowHeight > 0)
+                {
+                    // Validate that the saved position is on a visible screen
+                    Rectangle savedBounds = new Rectangle(
+                        settings.WindowX,
+                        settings.WindowY,
+                        settings.WindowWidth,
+                        settings.WindowHeight);
+
+                    bool isOnScreen = false;
+                    foreach (Screen screen in Screen.AllScreens)
+                    {
+                        if (screen.WorkingArea.IntersectsWith(savedBounds))
+                        {
+                            isOnScreen = true;
+                            break;
+                        }
+                    }
+
+                    if (isOnScreen)
+                    {
+                        this.StartPosition = FormStartPosition.Manual;
+                        this.Location = new Point(settings.WindowX, settings.WindowY);
+                        this.Size = new Size(settings.WindowWidth, settings.WindowHeight);
+
+                        if (settings.WindowMaximized)
+                        {
+                            this.WindowState = FormWindowState.Maximized;
+                        }
+                    }
+                    else
+                    {
+                        // Saved position is off-screen, use defaults
+                        this.StartPosition = FormStartPosition.CenterScreen;
+                    }
+                }
+
+                // Load sort state
+                _sharedSortField = ColumnIndexToSortField(settings.SortColumn);
+                _sharedSortDirection = settings.SortAscending ? SortDirection.Ascending : SortDirection.Descending;
+
+                // Apply to list view sorter (with popularity flip)
+                if (settings.SortColumn >= 0 && settings.SortColumn < gamesListView.Columns.Count)
+                {
+                    lvwColumnSorter.SortColumn = settings.SortColumn;
+
+                    // For popularity, flip direction for list view
+                    SortDirection effectiveDirection = _sharedSortDirection;
+                    if (_sharedSortField == SortField.Popularity)
+                    {
+                        effectiveDirection = _sharedSortDirection == SortDirection.Ascending
+                            ? SortDirection.Descending
+                            : SortDirection.Ascending;
+                    }
+
+                    lvwColumnSorter.Order = effectiveDirection == SortDirection.Ascending
+                        ? SortOrder.Ascending
+                        : SortOrder.Descending;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to load window state: {ex.Message}", LogLevel.WARNING);
+                this.StartPosition = FormStartPosition.CenterScreen;
+                lvwColumnSorter.SortColumn = 0;
+                lvwColumnSorter.Order = SortOrder.Ascending;
+                _sharedSortField = SortField.Name;
+                _sharedSortDirection = SortDirection.Ascending;
+            }
         }
     }
 

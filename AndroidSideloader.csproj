@@ -194,6 +194,9 @@
     <Compile Include="ModernProgessBar.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="ModernQueuePanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>

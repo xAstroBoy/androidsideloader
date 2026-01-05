@@ -49,7 +49,6 @@ namespace AndroidSideloader
             this.DownloadsIndex = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.gamesQueueLabel = new System.Windows.Forms.Label();
             this.notesRichTextBox = new System.Windows.Forms.RichTextBox();
-            this.DragDropLbl = new System.Windows.Forms.Label();
             this.lblNotes = new System.Windows.Forms.Label();
             this.gamesPictureBox = new System.Windows.Forms.PictureBox();
             this.startsideloadbutton_Tooltip = new System.Windows.Forms.ToolTip(this.components);
@@ -202,6 +201,7 @@ namespace AndroidSideloader
             // 
             // gamesQueListBox
             // 
+            this.gamesQueListBox.AllowDrop = false;
             this.gamesQueListBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.gamesQueListBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(24)))), ((int)(((byte)(26)))), ((int)(((byte)(30)))));
             this.gamesQueListBox.BorderStyle = System.Windows.Forms.BorderStyle.None;
@@ -215,10 +215,6 @@ namespace AndroidSideloader
             this.gamesQueListBox.Name = "gamesQueListBox";
             this.gamesQueListBox.Size = new System.Drawing.Size(266, 192);
             this.gamesQueListBox.TabIndex = 9;
-            this.gamesQueListBox.MouseClick += new System.Windows.Forms.MouseEventHandler(this.gamesQueListBox_MouseClick);
-            this.gamesQueListBox.DrawItem += new System.Windows.Forms.DrawItemEventHandler(this.gamesQueListBox_DrawItem);
-            this.gamesQueListBox.DragDrop += new System.Windows.Forms.DragEventHandler(this.Form1_DragDrop);
-            this.gamesQueListBox.DragEnter += new System.Windows.Forms.DragEventHandler(this.Form1_DragEnter);
             // 
             // devicesComboBox
             // 
@@ -340,37 +336,23 @@ namespace AndroidSideloader
             // 
             // notesRichTextBox
             // 
-            this.notesRichTextBox.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+            this.notesRichTextBox.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
             this.notesRichTextBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(24)))), ((int)(((byte)(26)))), ((int)(((byte)(30)))));
             this.notesRichTextBox.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.notesRichTextBox.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F);
-            this.notesRichTextBox.ForeColor = System.Drawing.Color.White;
+            this.notesRichTextBox.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Italic);
+            this.notesRichTextBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(140)))), ((int)(((byte)(140)))));
             this.notesRichTextBox.HideSelection = false;
             this.notesRichTextBox.Location = new System.Drawing.Point(954, 496);
             this.notesRichTextBox.Name = "notesRichTextBox";
             this.notesRichTextBox.ReadOnly = true;
             this.notesRichTextBox.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.None;
+            this.notesRichTextBox.SelectionAlignment = System.Windows.Forms.HorizontalAlignment.Center;
             this.notesRichTextBox.ShowSelectionMargin = true;
             this.notesRichTextBox.Size = new System.Drawing.Size(265, 192);
             this.notesRichTextBox.TabIndex = 10;
-            this.notesRichTextBox.Text = "Tip: Press F1 to see all shortcuts";
+            this.notesRichTextBox.Text = "\n\n\n\n\nTip: Press F1 to see all shortcuts\n\nDrag and drop APKs or folders to install";
             this.notesRichTextBox.LinkClicked += new System.Windows.Forms.LinkClickedEventHandler(this.notesRichTextBox_LinkClicked);
-            // 
-            // DragDropLbl
-            // 
-            this.DragDropLbl.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.DragDropLbl.AutoSize = true;
-            this.DragDropLbl.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(20)))), ((int)(((byte)(20)))));
-            this.DragDropLbl.DataBindings.Add(new System.Windows.Forms.Binding("ForeColor", global::AndroidSideloader.Properties.Settings.Default, "FontColor", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
-            this.DragDropLbl.Font = new System.Drawing.Font("Microsoft Sans Serif", 36F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.DragDropLbl.ForeColor = global::AndroidSideloader.Properties.Settings.Default.FontColor;
-            this.DragDropLbl.Location = new System.Drawing.Point(620, 561);
-            this.DragDropLbl.Name = "DragDropLbl";
-            this.DragDropLbl.Size = new System.Drawing.Size(320, 55);
-            this.DragDropLbl.TabIndex = 25;
-            this.DragDropLbl.Text = "DragDropLBL";
-            this.DragDropLbl.Visible = false;
             // 
             // lblNotes
             // 
@@ -1580,7 +1562,6 @@ namespace AndroidSideloader
             this.Controls.Add(this.ULLabel);
             this.Controls.Add(this.tableLayoutPanel1);
             this.Controls.Add(this.progressDLbtnContainer);
-            this.Controls.Add(this.DragDropLbl);
             this.Controls.Add(this.lblNotes);
             this.Controls.Add(this.gamesQueueLabel);
             this.Controls.Add(this.gamesQueListBox);
@@ -1642,7 +1623,6 @@ namespace AndroidSideloader
         private System.Windows.Forms.PictureBox gamesPictureBox;
         private System.Windows.Forms.Label gamesQueueLabel;
         private System.Windows.Forms.RichTextBox notesRichTextBox;
-        private System.Windows.Forms.Label DragDropLbl;
         private System.Windows.Forms.Label lblNotes;
         public System.Windows.Forms.ComboBox remotesList;
         public System.Windows.Forms.ColumnHeader GameNameIndex;

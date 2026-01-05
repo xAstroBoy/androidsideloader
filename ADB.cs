@@ -72,7 +72,7 @@ namespace AndroidSideloader
             return _currentDevice;
         }
 
-        public static ProcessOutput RunAdbCommandToString(string command)
+        public static ProcessOutput RunAdbCommandToString(string command, bool suppressLogging = false)
         {
             command = command.Replace("adb", "");
 
@@ -85,7 +85,7 @@ namespace AndroidSideloader
                 command = $" -s {DeviceID} {command}";
             }
 
-            if (!command.Contains("dumpsys") && !command.Contains("shell pm list packages") && !command.Contains("KEYCODE_WAKEUP"))
+            if (!suppressLogging && !command.Contains("dumpsys") && !command.Contains("shell pm list packages") && !command.Contains("KEYCODE_WAKEUP"))
             {
                 string logcmd = command;
                 if (logcmd.Contains(Environment.CurrentDirectory))
@@ -94,6 +94,9 @@ namespace AndroidSideloader
                 }
                 _ = Logger.Log($"Running command: {logcmd}");
             }
+
+            bool isConnectCommand = command.Contains("connect");
+            int timeoutMs = isConnectCommand ? 5000 : -1; // 5 second timeout for connect commands
 
             using (Process adb = new Process())
             {
@@ -111,19 +114,39 @@ namespace AndroidSideloader
 
                 try
                 {
-                    output = adb.StandardOutput.ReadToEnd();
-                    error = adb.StandardError.ReadToEnd();
-                }
-                catch { }
-
-                if (command.Contains("connect"))
-                {
-                    bool graceful = adb.WaitForExit(3000);
-                    if (!graceful)
+                    if (isConnectCommand)
                     {
-                        adb.Kill();
-                        adb.WaitForExit();
+                        // For connect commands, we use async reading with timeout to avoid blocking on TCP timeout
+                        var outputTask = adb.StandardOutput.ReadToEndAsync();
+                        var errorTask = adb.StandardError.ReadToEndAsync();
+
+                        bool exited = adb.WaitForExit(timeoutMs);
+
+                        if (!exited)
+                        {
+                            try { adb.Kill(); } catch { }
+                            adb.WaitForExit(1000);
+                            output = "Connection timed out";
+                            error = "cannot connect: Connection timed out";
+                            Logger.Log($"ADB connect command timed out after {timeoutMs}ms", LogLevel.WARNING);
+                        }
+                        else
+                        {
+                            // Process exited within timeout, safe to read output
+                            output = outputTask.Result;
+                            error = errorTask.Result;
+                        }
                     }
+                    else
+                    {
+                        // For non-connect commands, read output normally
+                        output = adb.StandardOutput.ReadToEnd();
+                        error = adb.StandardError.ReadToEnd();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Error reading ADB output: {ex.Message}", LogLevel.WARNING);
                 }
 
                 if (error.Contains("ADB_VENDOR_KEYS") && !settings.AdbDebugWarned)
@@ -134,7 +157,7 @@ namespace AndroidSideloader
                 {
                     _ = FlexibleMessageBox.Show(Program.form, "There is not enough room on your device to install this package. Please clear AT LEAST 2x the amount of the app you are trying to install.");
                 }
-                if (!output.Contains("version") && !output.Contains("KEYCODE_WAKEUP") && !output.Contains("Filesystem") && !output.Contains("package:") && !output.Equals(null))
+                if (!suppressLogging && !output.Contains("version") && !output.Contains("KEYCODE_WAKEUP") && !output.Contains("Filesystem") && !output.Contains("package:") && !output.Equals(null))
                 {
                     _ = Logger.Log(output);
                 }
@@ -264,18 +287,38 @@ namespace AndroidSideloader
             {
                 Logger.Log($"SideloadWithProgressAsync error: {ex.Message}", LogLevel.ERROR);
 
-                if (ex.Message.Contains("INSTALL_FAILED") ||
-                    ex.Message.Contains("signatures do not match"))
+                // Signature mismatches and version downgrades can be fixed by reinstalling
+                bool isReinstallEligible = ex.Message.Contains("signatures do not match") ||
+                                           ex.Message.Contains("INSTALL_FAILED_VERSION_DOWNGRADE") ||
+                                           ex.Message.Contains("failed to install");
+
+                // For insufficient storage, offer reinstall if it's an upgrade
+                // As uninstalling old version frees space for the new one
+                bool isStorageIssue = ex.Message.Contains("INSUFFICIENT_STORAGE");
+                bool isUpgrade = !string.IsNullOrEmpty(packagename) &&
+                                 settings.InstalledApps.Contains(packagename);
+
+                if (isStorageIssue && isUpgrade)
+                {
+                    isReinstallEligible = true;
+                }
+
+                if (isReinstallEligible)
                 {
                     bool cancelClicked = false;
 
                     if (!settings.AutoReinstall)
                     {
+                        string message = isStorageIssue
+                            ? "Installation failed due to insufficient storage. Since this is an upgrade, Rookie can uninstall the old version first to free up space, then install the new version.\n\nRookie will also attempt to backup your save data and reinstall the game automatically, however some games do not store their saves in an accessible location (less than 5%). Continue with reinstall?"
+                            : "In place upgrade has failed. Rookie will attempt to backup your save data and reinstall the game automatically, however some games do not store their saves in an accessible location (less than 5%). Continue with reinstall?";
+
+                        string title = isStorageIssue ? "Insufficient Storage" : "In place upgrade failed";
+
                         Program.form.Invoke(() =>
                         {
                             DialogResult dialogResult1 = FlexibleMessageBox.Show(Program.form,
-                                "In place upgrade has failed. Rookie can attempt to backup your save data and reinstall the game automatically, however some games do not store their saves in an accessible location (less than 5%). Continue with reinstall?",
-                                "In place upgrade failed.", MessageBoxButtons.OKCancel);
+                                message, title, MessageBoxButtons.OKCancel);
                             if (dialogResult1 == DialogResult.Cancel)
                                 cancelClicked = true;
                         });
@@ -293,7 +336,7 @@ namespace AndroidSideloader
                         var packageManager = new PackageManager(client, device);
 
                         statusCallback?.Invoke("Backing up save data...");
-                        _ = RunAdbCommandToString($"pull \"/sdcard/Android/data/{MainForm.CurrPCKG}\" \"{Environment.CurrentDirectory}\"");
+                        _ = RunAdbCommandToString($"pull \"/sdcard/Android/data/{packagename}\" \"{Environment.CurrentDirectory}\"");
 
                         statusCallback?.Invoke("Uninstalling old version...");
                         packageManager.UninstallPackage(packagename);
@@ -309,9 +352,9 @@ namespace AndroidSideloader
                         packageManager.InstallPackage(path, reinstallProgress);
 
                         statusCallback?.Invoke("Restoring save data...");
-                        _ = RunAdbCommandToString($"push \"{Environment.CurrentDirectory}\\{MainForm.CurrPCKG}\" /sdcard/Android/data/");
+                        _ = RunAdbCommandToString($"push \"{Environment.CurrentDirectory}\\{packagename}\" /sdcard/Android/data/");
 
-                        string directoryToDelete = Path.Combine(Environment.CurrentDirectory, MainForm.CurrPCKG);
+                        string directoryToDelete = Path.Combine(Environment.CurrentDirectory, packagename);
                         if (Directory.Exists(directoryToDelete) && directoryToDelete != Environment.CurrentDirectory)
                         {
                             Directory.Delete(directoryToDelete, true);
@@ -322,11 +365,12 @@ namespace AndroidSideloader
                     }
                     catch (Exception reinstallEx)
                     {
-                        return new ProcessOutput($"{gameName}: Reinstall: Failed: {reinstallEx.Message}\n");
+                        return new ProcessOutput("", $"{gameName}: Reinstall Failed: {reinstallEx.Message}\n");
                     }
                 }
 
-                return new ProcessOutput("", ex.Message);
+                // Return the error message so it's displayed to the user
+                return new ProcessOutput("", $"\n{gameName}: {ex.Message}");
             }
         }
 
