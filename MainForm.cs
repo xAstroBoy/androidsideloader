@@ -2872,6 +2872,11 @@ namespace AndroidSideloader
                             remotesList.SelectedIndex = 0;
                     }
 
+                    if (remotesList.SelectedIndex < 0 && remotesList.Items.Count > 0)
+                    {
+                        remotesList.SelectedIndex = 0;
+                    }
+
                     string selectedRemote = remotesList.SelectedItem.ToString();
                     currentRemote = "";
 
