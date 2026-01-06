@@ -83,13 +83,27 @@ namespace JR.Utils.GUI.Forms
             private const int CS_DROPSHADOW = 0x00020000;
             private const int WM_NCLBUTTONDOWN = 0xA1;
             private const int HT_CAPTION = 0x2;
-            private const int BORDER_RADIUS = 12;
+            private const uint FLASHW_TRAY = 0x00000002;
+            private const uint FLASHW_TIMERNOFG = 0x0000000C;
+
+            [StructLayout(LayoutKind.Sequential)]
+            private struct FLASHWINFO
+            {
+                public uint cbSize;
+                public IntPtr hwnd;
+                public uint dwFlags;
+                public uint uCount;
+                public uint dwTimeout;
+            }
 
             [DllImport("user32.dll")]
             private static extern int SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
 
             [DllImport("user32.dll")]
             private static extern bool ReleaseCapture();
+
+            [DllImport("user32.dll")]
+            private static extern bool FlashWindowEx(ref FLASHWINFO pwfi);
 
             protected override CreateParams CreateParams
             {
@@ -604,7 +618,7 @@ namespace JR.Utils.GUI.Forms
                     ownerForm = Form.ActiveForm;
                 }
 
-                if (ownerForm != null && ownerForm.Visible)
+                if (ownerForm != null && ownerForm.Visible && ownerForm.WindowState != FormWindowState.Minimized)
                 {
                     // Center relative to owner window
                     int x = ownerForm.Left + (ownerForm.Width - flexibleMessageBoxForm.Width) / 2;
@@ -620,7 +634,7 @@ namespace JR.Utils.GUI.Forms
                 }
                 else
                 {
-                    // No owner found: center on current screen
+                    // No owner found or minimized: center on current screen
                     CenterOnScreen(flexibleMessageBoxForm);
                 }
             }
@@ -848,7 +862,44 @@ namespace JR.Utils.GUI.Forms
                 int contentWidth = flexibleMessageBoxForm.ClientSize.Width - 16; // 8px padding
                 flexibleMessageBoxForm.titlePanel.Width = contentWidth;
 
+                // Get owner form
+                Form ownerForm = owner as Form ?? Form.ActiveForm;
+                bool ownerWasMinimized = ownerForm != null && ownerForm.WindowState == FormWindowState.Minimized;
+
                 SetDialogStartPosition(flexibleMessageBoxForm, owner);
+
+                // If owner was minimized, reposition dialog when owner is restored
+                if (ownerWasMinimized && ownerForm != null)
+                {
+                    EventHandler resizeHandler = null;
+                    resizeHandler = (s, e) =>
+                    {
+                        if (ownerForm.WindowState != FormWindowState.Minimized && flexibleMessageBoxForm.Visible && !flexibleMessageBoxForm.IsDisposed)
+                        {
+                            SetDialogStartPosition(flexibleMessageBoxForm, owner);
+                            ownerForm.Resize -= resizeHandler;
+                        }
+                    };
+                    ownerForm.Resize += resizeHandler;
+                }
+
+                // Flash taskbar if application is inactive or minimized
+                if (Form.ActiveForm == null || ownerWasMinimized)
+                {
+                    Form targetForm = ownerForm ?? Application.OpenForms.Cast<Form>().FirstOrDefault(f => f != null && !f.IsDisposed && f != flexibleMessageBoxForm && f.Visible);
+                    if (targetForm != null && !targetForm.IsDisposed)
+                    {
+                        FLASHWINFO info = new FLASHWINFO
+                        {
+                            cbSize = (uint)Marshal.SizeOf(typeof(FLASHWINFO)),
+                            hwnd = targetForm.Handle,
+                            dwFlags = FLASHW_TRAY | FLASHW_TIMERNOFG,
+                            uCount = 5,
+                            dwTimeout = 0
+                        };
+                        _ = FlashWindowEx(ref info);
+                    }
+                }
 
                 return flexibleMessageBoxForm.ShowDialog(owner);
             }
