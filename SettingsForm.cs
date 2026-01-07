@@ -327,19 +327,40 @@ namespace AndroidSideloader
 
         private void setDownloadDirectory_Click(object sender, EventArgs e)
         {
-            if (downloadDirectorySetter.ShowDialog() == DialogResult.OK)
+            var dialog = new FolderSelectDialog
+            {
+                Title = "Select Download Folder",
+                InitialDirectory = _settings.CustomDownloadDir && Directory.Exists(_settings.DownloadDir)
+                    ? _settings.DownloadDir
+                    : Environment.CurrentDirectory
+            };
+
+            if (dialog.Show(this.Handle))
             {
                 _settings.CustomDownloadDir = true;
-                _settings.DownloadDir = downloadDirectorySetter.SelectedPath;
+                _settings.DownloadDir = dialog.FileName;
             }
         }
 
         private void setBackupDirectory_Click(object sender, EventArgs e)
         {
-            if (backupDirectorySetter.ShowDialog() == DialogResult.OK)
+            string initialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Rookie Backups");
+
+            if (_settings.CustomBackupDir && Directory.Exists(_settings.BackupDir))
+            {
+                initialDirectory = _settings.BackupDir;
+            }
+
+            var dialog = new FolderSelectDialog
+            {
+                Title = "Select Backup Folder",
+                InitialDirectory = initialDirectory
+            };
+
+            if (dialog.Show(this.Handle))
             {
                 _settings.CustomBackupDir = true;
-                _settings.BackupDir = backupDirectorySetter.SelectedPath;
+                _settings.BackupDir = dialog.FileName;
                 MainForm.backupFolder = _settings.BackupDir;
             }
         }
