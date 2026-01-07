@@ -357,7 +357,7 @@ namespace AndroidSideloader
                         string directoryToDelete = Path.Combine(Environment.CurrentDirectory, packagename);
                         if (Directory.Exists(directoryToDelete) && directoryToDelete != Environment.CurrentDirectory)
                         {
-                            Directory.Delete(directoryToDelete, true);
+                            FileSystemUtilities.TryDeleteDirectory(directoryToDelete);
                         }
 
                         progressCallback?.Invoke(100, null);
@@ -732,7 +732,7 @@ namespace AndroidSideloader
                     {
                         if (directoryToDelete != Environment.CurrentDirectory)
                         {
-                            Directory.Delete(directoryToDelete, true);
+                            FileSystemUtilities.TryDeleteDirectory(directoryToDelete);
                         }
                     }
 

@@ -309,7 +309,7 @@ namespace AndroidSideloader
                         }
                         File.Move(file, destFile);
                     }
-                    Directory.Delete(dirExtractedRclone, true);
+                    FileSystemUtilities.TryDeleteDirectory(dirExtractedRclone);
 
                     // Restore vrp.download.config if it was backed up
                     if (hasConfig && File.Exists(tempConfigPath))

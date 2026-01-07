@@ -434,6 +434,20 @@ namespace AndroidSideloader
 
             changeTitle(isOffline ? "Starting in Offline Mode..." : "Initializing...");
 
+            // Non-blocking WebView cleanup
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    string webViewDirectoryPath = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL", "EBWebView");
+                    if (Directory.Exists(webViewDirectoryPath))
+                    {
+                        FileSystemUtilities.TryDeleteDirectory(webViewDirectoryPath);
+                    }
+                }
+                catch { }
+            });
+
             // Non-blocking background cleanup
             _ = Task.Run(() =>
             {
@@ -441,7 +455,7 @@ namespace AndroidSideloader
                 {
                     if (Directory.Exists(Sideloader.TempFolder))
                     {
-                        Directory.Delete(Sideloader.TempFolder, true);
+                        FileSystemUtilities.TryDeleteDirectory(Sideloader.TempFolder);
                         _ = Directory.CreateDirectory(Sideloader.TempFolder);
                     }
                 }
@@ -587,20 +601,6 @@ namespace AndroidSideloader
                         settings.Save();
                     }
                 }
-
-                // WebView cleanup in background
-                _ = Task.Run(() =>
-                {
-                    try
-                    {
-                        string webViewDirectoryPath = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL", "EBWebView");
-                        if (Directory.Exists(webViewDirectoryPath))
-                        {
-                            Directory.Delete(webViewDirectoryPath, true);
-                        }
-                    }
-                    catch { }
-                });
 
                 // Pre-initialize trailer player in background
                 try
@@ -831,7 +831,8 @@ namespace AndroidSideloader
             try
             {
                 string titleSuffix = string.IsNullOrWhiteSpace(txt) ? "" : " | " + txt;
-                this.Invoke(() => { 
+                this.Invoke(() =>
+                {
                     Text = "Rookie Sideloader " + Updater.LocalVersion + titleSuffix;
                     rookieStatusLabel.Text = txt;
                 });
@@ -843,8 +844,9 @@ namespace AndroidSideloader
 
                 await Task.Delay(TimeSpan.FromSeconds(5));
                 // Reset to base title without any status message
-                this.Invoke(() => { 
-                    Text = "Rookie Sideloader " + Updater.LocalVersion; 
+                this.Invoke(() =>
+                {
+                    Text = "Rookie Sideloader " + Updater.LocalVersion;
                     rookieStatusLabel.Text = "";
                 });
             }
@@ -985,14 +987,16 @@ namespace AndroidSideloader
 
                 output = await ADB.CopyOBBWithProgressAsync(
                     path,
-                    (progress, eta) => this.Invoke(() => {
+                    (progress, eta) => this.Invoke(() =>
+                    {
                         progressBar.Value = progress;
                         string etaStr = eta.HasValue && eta.Value.TotalSeconds > 0
                             ? $" · ETA: {eta.Value:mm\\:ss}"
                             : "";
                         speedLabel.Text = $"Progress: {progress}%{etaStr}";
                     }),
-                    status => this.Invoke(() => {
+                    status => this.Invoke(() =>
+                    {
                         progressBar.StatusText = status;
                     }),
                     folderName);
@@ -1489,7 +1493,7 @@ namespace AndroidSideloader
                         File.Delete($"{settings.MainDir}\\{gameZipName}");
 
                         this.Invoke(() => FlexibleMessageBox.Show(Program.form, $"Upload of {currentlyUploading} is complete! Thank you for your contribution!"));
-                        Directory.Delete($"{settings.MainDir}\\{packageName}", true);
+                        FileSystemUtilities.TryDeleteDirectory($"{settings.MainDir}\\{packageName}");
                     })
                     {
                         IsBackground = true
@@ -1750,7 +1754,7 @@ namespace AndroidSideloader
                                     await Task.Delay(100);
                                 }
 
-                                Directory.Delete($"{zippath}\\{datazip}", true);
+                                FileSystemUtilities.TryDeleteDirectory($"{zippath}\\{datazip}");
                             }
                         }
                     }
@@ -1907,7 +1911,7 @@ namespace AndroidSideloader
                             await Task.Delay(100);
                         }
 
-                        Directory.Delete(foldername, true);
+                        FileSystemUtilities.TryDeleteDirectory(foldername);
                         changeTitle("");
                     }
                     // BMBF Zip extraction then push to BMBF song folder on Quest.
@@ -1937,7 +1941,7 @@ namespace AndroidSideloader
                             await Task.Delay(100);
                         }
 
-                        Directory.Delete($"{zippath}\\{datazip}", true);
+                        FileSystemUtilities.TryDeleteDirectory($"{zippath}\\{datazip}");
                     }
                     else if (extension == ".txt")
                     {
@@ -2635,7 +2639,7 @@ namespace AndroidSideloader
                         _ = ADB.RunCommandToString(cmd, path);
                         if (Directory.Exists($"{settings.MainDir}\\{game.Pckgcommand}"))
                         {
-                            Directory.Delete($"{settings.MainDir}\\{game.Pckgcommand}", true);
+                            FileSystemUtilities.TryDeleteDirectory($"{settings.MainDir}\\{game.Pckgcommand}");
                         }
                         Program.form.changeTitle("Uploading to server, you can continue to use Rookie while it uploads.");
 
@@ -3740,7 +3744,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                             // only delete after extraction; allows for resume if the fetch fails midway.
                             if (Directory.Exists($"{settings.DownloadDir}\\{gameName}"))
                             {
-                                Directory.Delete($"{settings.DownloadDir}\\{gameName}", true);
+                                FileSystemUtilities.TryDeleteDirectory($"{settings.DownloadDir}\\{gameName}");
                             }
                         }
                     }
@@ -3909,14 +3913,14 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                             if (UsingPublicConfig)
                             {
                                 if (Directory.Exists($"{settings.DownloadDir}\\{cancelledHash}"))
-                                    Directory.Delete($"{settings.DownloadDir}\\{cancelledHash}", true);
+                                    FileSystemUtilities.TryDeleteDirectory($"{settings.DownloadDir}\\{cancelledHash}");
                                 if (Directory.Exists($"{settings.DownloadDir}\\{cancelledGame}"))
-                                    Directory.Delete($"{settings.DownloadDir}\\{cancelledGame}", true);
+                                    FileSystemUtilities.TryDeleteDirectory($"{settings.DownloadDir}\\{cancelledGame}");
                             }
                             else
                             {
                                 if (Directory.Exists($"{settings.DownloadDir}\\{cancelledGame}"))
-                                    Directory.Delete($"{settings.DownloadDir}\\{cancelledGame}", true);
+                                    FileSystemUtilities.TryDeleteDirectory($"{settings.DownloadDir}\\{cancelledGame}");
                             }
                         }
                     }
@@ -4024,7 +4028,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
                         if (Directory.Exists($"{settings.DownloadDir}\\{gameNameHash}"))
                         {
-                            Directory.Delete($"{settings.DownloadDir}\\{gameNameHash}", true);
+                            FileSystemUtilities.TryDeleteDirectory($"{settings.DownloadDir}\\{gameNameHash}");
                         }
                     }
 
@@ -4099,7 +4103,8 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                     // Use async method with progress
                                     output += await ADB.SideloadWithProgressAsync(
                                         apkFile,
-                                        (progress, eta) => this.Invoke(() => {
+                                        (progress, eta) => this.Invoke(() =>
+                                        {
                                             if (progress == 0)
                                             {
                                                 progressBar.IsIndeterminate = true;
@@ -4113,7 +4118,8 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                             UpdateProgressStatus("Installing", percent: (int)Math.Round(progress), eta: eta);
                                             progressBar.StatusText = $"Installing · {progress:0.0}%";
                                         }),
-                                        status => this.Invoke(() => {
+                                        status => this.Invoke(() =>
+                                        {
                                             if (!string.IsNullOrEmpty(status))
                                             {
                                                 if (status.Contains("Completing Installation"))
@@ -4192,7 +4198,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                         if (settings.DeleteAllAfterInstall && !nodeviceonstart && DeviceConnected)
                         {
                             changeTitle("Deleting game files");
-                            try { Directory.Delete(settings.DownloadDir + "\\" + gameName, true); } catch (Exception ex) { _ = FlexibleMessageBox.Show(Program.form, $"Error deleting game files: {ex.Message}"); }
+                            try { FileSystemUtilities.TryDeleteDirectory(settings.DownloadDir + "\\" + gameName); } catch (Exception ex) { _ = FlexibleMessageBox.Show(Program.form, $"Error deleting game files: {ex.Message}"); }
                         }
 
                         // Update device space after successful installation
@@ -4405,7 +4411,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                     timerticked = false;
                     if (Directory.Exists(Path.Combine(Environment.CurrentDirectory, CurrPCKG)))
                     {
-                        Directory.Delete(Path.Combine(Environment.CurrentDirectory, CurrPCKG), true);
+                        FileSystemUtilities.TryDeleteDirectory(Path.Combine(Environment.CurrentDirectory, CurrPCKG));
                     }
 
                     changeTitle("");
@@ -5753,10 +5759,10 @@ function onYouTubeIframeAPIReady() {
                 score += extraWords * -3;  // -3 per extra word
 
                 // Hard penalties for junk
-                if (title.Contains("review") || 
-                    title.Contains("tutorial") || 
-                    title.Contains("how to") || 
-                    title.Contains("reaction")) 
+                if (title.Contains("review") ||
+                    title.Contains("tutorial") ||
+                    title.Contains("how to") ||
+                    title.Contains("reaction"))
                     score -= 30;
 
                 if (score > bestScore)
@@ -6053,7 +6059,7 @@ function onYouTubeIframeAPIReady() {
                 ulong VersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
                 if (Directory.Exists($"{settings.MainDir}\\{packageName}"))
                 {
-                    Directory.Delete($"{settings.MainDir}\\{packageName}", true);
+                    FileSystemUtilities.TryDeleteDirectory($"{settings.MainDir}\\{packageName}");
                 }
 
                 ProcessOutput output = new ProcessOutput("", "");
@@ -6119,7 +6125,7 @@ function onYouTubeIframeAPIReady() {
 
                 File.Copy($"{settings.MainDir}\\{GameName} v{VersionInt} {packageName}.zip", $"{Environment.GetFolderPath(Environment.SpecialFolder.Desktop)}\\{GameName} v{VersionInt} {packageName}.zip");
                 File.Delete($"{settings.MainDir}\\{GameName} v{VersionInt} {packageName}.zip");
-                Directory.Delete($"{settings.MainDir}\\{packageName}", true);
+                FileSystemUtilities.TryDeleteDirectory($"{settings.MainDir}\\{packageName}");
                 isworking = false;
                 changeTitle("");
                 progressBar.IsIndeterminate = false;
@@ -6386,7 +6392,7 @@ function onYouTubeIframeAPIReady() {
 
             gamesListView.SelectedItems.Clear();
             _rightClickedItem.Selected = true;
-            
+
             UpdateFavoriteMenuItemText();
             favoriteGame.Show(gamesListView, e.Location);
         }
@@ -6494,7 +6500,9 @@ function onYouTubeIframeAPIReady() {
                     if (string.IsNullOrEmpty(firmware))
                     {
                         firmware = string.Empty;
-                    } else {
+                    }
+                    else
+                    {
                         firmware = Utilities.StringUtilities.RemoveEverythingBeforeFirst(firmware, "-v");
                         firmware = Utilities.StringUtilities.KeepOnlyNumbers(firmware);
                     }
@@ -6506,7 +6514,7 @@ function onYouTubeIframeAPIReady() {
                     long totalSpace = 0;
                     long usedSpace = 0;
                     long freeSpace = 0;
-                    
+
                     if (lines.Length > 1)
                     {
                         string[] parts = lines[1].Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
@@ -8123,7 +8131,7 @@ function onYouTubeIframeAPIReady() {
 
             // Confirm uninstall
             DialogResult dialogresult = FlexibleMessageBox.Show(
-                $"Are you sure you want to uninstall {gameName}?", 
+                $"Are you sure you want to uninstall {gameName}?",
                 "Proceed with uninstall?", MessageBoxButtons.YesNo);
 
             if (dialogresult == DialogResult.No)
@@ -8140,7 +8148,7 @@ function onYouTubeIframeAPIReady() {
             }
 
             DialogResult dialogresult2 = FlexibleMessageBox.Show(
-                $"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\", 
+                $"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\",
                 "Attempt Game Backup?", MessageBoxButtons.YesNo);
 
             if (dialogresult2 == DialogResult.Yes)
@@ -8153,7 +8161,8 @@ function onYouTubeIframeAPIReady() {
             progressBar.IsIndeterminate = true;
             progressBar.OperationType = "";
 
-            await Task.Run(() => {
+            await Task.Run(() =>
+            {
                 output += Sideloader.UninstallGame(packageName);
             });
 

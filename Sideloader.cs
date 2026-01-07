@@ -204,7 +204,7 @@ namespace AndroidSideloader
 
             if (Directory.Exists($"{settings.MainDir}\\{packageName}"))
             {
-                Directory.Delete($"{settings.MainDir}\\{packageName}", true);
+                FileSystemUtilities.TryDeleteDirectory($"{settings.MainDir}\\{packageName}");
             }
 
             _ = Directory.CreateDirectory($"{settings.MainDir}\\{packageName}");
