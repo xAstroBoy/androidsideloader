@@ -5622,28 +5622,167 @@ function onYouTubeIframeAPIReady() {
             if (_videoIdCache.TryGetValue(gameName, out var cached))
                 return cached;
 
-            // Lightweight search
+            string cleanedName = CleanGameNameForSearch(gameName);
+
+            // 2 strategies
+            string[] searchStrategies = new[]
+            {
+                $"{cleanedName} VR trailer",               // Request 1
+                $"\"{cleanedName}\" VR trailer",           // Request 2
+            };
+
             try
             {
-                string query = WebUtility.UrlEncode($"\"{gameName}\" VR trailer");
-                string searchUrl = $"https://www.youtube.com/results?search_query={query}";
                 using (var http = new HttpClient())
                 {
                     http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/119.0");
-                    var html = await http.GetStringAsync(searchUrl);
-                    var vid = ExtractVideoId(html);
-                    if (!string.IsNullOrEmpty(vid))
+                    http.Timeout = TimeSpan.FromSeconds(5);
+
+                    foreach (string searchTerm in searchStrategies)
                     {
-                        _videoIdCache[gameName] = vid;
-                        return vid;
+                        string query = WebUtility.UrlEncode(searchTerm);
+                        string searchUrl = $"https://www.youtube.com/results?search_query={query}";
+
+                        try
+                        {
+                            var html = await http.GetStringAsync(searchUrl);
+                            var videoId = ExtractBestVideoId(html, cleanedName);
+
+                            if (!string.IsNullOrEmpty(videoId))
+                            {
+                                _videoIdCache[gameName] = videoId;
+                                return videoId;
+                            }
+                        }
+                        catch (TaskCanceledException)
+                        {
+                            continue;
+                        }
                     }
                 }
             }
             catch
             {
-                // swallow – return empty
+                // swallow
             }
+
+            // Cache empty result to prevent repeated lookups
+            _videoIdCache[gameName] = string.Empty;
             return string.Empty;
+        }
+
+        private static string CleanGameNameForSearch(string gameName)
+        {
+            if (string.IsNullOrWhiteSpace(gameName))
+                return gameName;
+
+            // Clean up game name, remove:
+            string[] patternsToRemove = new[]
+            {
+                @"\s*\([^)]+\)",                 // (anything in parentheses)
+                @"\s*\[[^\]]*\]",                // [anything in brackets]
+                @"\s+v?\d+\.\d+[\d.]*\b",        // version numbers. v1.0, 1.35.0, 1.37.0 etc.
+            };
+
+            string cleaned = gameName;
+            foreach (string pattern in patternsToRemove)
+                cleaned = Regex.Replace(cleaned, pattern, "", RegexOptions.IgnoreCase);
+
+            // Clean up trailing punctuation and whitespace
+            cleaned = Regex.Replace(cleaned, @"[-:,]+$", "");
+            cleaned = Regex.Replace(cleaned, @"\s+", " ").Trim();
+
+            // If cleaning removed everything, return original
+            return string.IsNullOrWhiteSpace(cleaned) ? gameName.Trim() : cleaned;
+        }
+
+        private static readonly Regex VideoDataRegex = new Regex(
+            @"""videoRenderer""\s*:\s*\{\s*[^}]*?""videoId""\s*:\s*""([A-Za-z0-9_\-]{11})""[\s\S]*?""title""\s*:\s*\{\s*""runs""\s*:\s*\[\s*\{\s*""text""\s*:\s*""([^""]+)""",
+            RegexOptions.Compiled);
+
+        private static readonly Regex UnicodeEscapeRegex = new Regex(
+            @"\\u([0-9A-Fa-f]{4})",
+            RegexOptions.Compiled);
+
+        private static string ExtractBestVideoId(string html, string cleanedGameName)
+        {
+            if (string.IsNullOrEmpty(html))
+                return string.Empty;
+
+            var videoMatches = VideoDataRegex.Matches(html);
+
+            // Fallback: no matches found, do simple extraction
+            if (videoMatches.Count == 0)
+            {
+                var simpleMatch = Regex.Match(html, @"\/watch\?v=([A-Za-z0-9_\-]{11})");
+                return simpleMatch.Success ? simpleMatch.Groups[1].Value : string.Empty;
+            }
+
+            // Prepare game name words for matching
+            string lowerGameName = cleanedGameName.ToLowerInvariant();
+            var gameWords = lowerGameName
+                .Split(new[] { ' ', '-', ':', '&' }, StringSplitOptions.RemoveEmptyEntries)
+                .ToList();
+
+            int requiredMatches = Math.Max(1, gameWords.Count / 2);
+            string bestVideoId = null;
+            int bestScore = 0;
+            int position = 0;
+
+            // Score each match
+            foreach (Match match in videoMatches)
+            {
+                string videoId = match.Groups[1].Value;
+                string title = match.Groups[2].Value.ToLowerInvariant();
+
+                title = UnicodeEscapeRegex.Replace(title, m =>
+                    ((char)Convert.ToInt32(m.Groups[1].Value, 16)).ToString());
+
+                // Entry must match at least half the game name
+                int matchedWords = gameWords.Count(w => title.Contains(w));
+                if (matchedWords < requiredMatches)
+                    continue;
+
+                position++;
+
+                // Only process first 5 matches
+                if (position > 5)
+                    break;
+
+                int score = matchedWords * 10;
+
+                // Position bonus
+                if (position == 1) score += 30;
+                else if (position == 2) score += 20;
+                else if (position == 3) score += 10;
+
+                // Word bonus
+                if (title.Contains("trailer")) score += 20;
+                if (title.Contains("official") || title.Contains("launch") || title.Contains("release")) score += 15;
+                if (title.Contains("announce")) score += 12; // also includes "announcement"
+                if (title.Contains("gameplay") || title.Contains("vr")) score += 5;
+
+                // Noise penalty for extra words
+                int totalWords = title.Split(new[] { ' ', '-', '|', ':', '–' },
+                    StringSplitOptions.RemoveEmptyEntries).Length;
+                int extraWords = totalWords - gameWords.Count;
+                score += extraWords * -3;  // -3 per extra word
+
+                // Hard penalties for junk
+                if (title.Contains("review") || 
+                    title.Contains("tutorial") || 
+                    title.Contains("how to") || 
+                    title.Contains("reaction")) 
+                    score -= 30;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestVideoId = videoId;
+                }
+            }
+
+            return bestVideoId ?? string.Empty;
         }
 
         public async void gamesListView_SelectedIndexChanged(object sender, EventArgs e)
