@@ -439,7 +439,7 @@ namespace AndroidSideloader
             {
                 try
                 {
-                    string webViewDirectoryPath = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL", "EBWebView");
+                    string webViewDirectoryPath = Path.Combine(Environment.CurrentDirectory, "WebView2Cache");
                     if (Directory.Exists(webViewDirectoryPath))
                     {
                         FileSystemUtilities.TryDeleteDirectory(webViewDirectoryPath);
@@ -5460,7 +5460,8 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
 
             try
             {
-                var appDataFolder = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL");
+                var appDataFolder = Path.Combine(Environment.CurrentDirectory, "WebView2Cache");
+                Directory.CreateDirectory(appDataFolder); // Ensure it exists
                 var env = await CoreWebView2Environment.CreateAsync(userDataFolder: appDataFolder);
 
                 await webView21.EnsureCoreWebView2Async(env);
