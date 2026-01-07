@@ -5623,13 +5623,7 @@ function onYouTubeIframeAPIReady() {
                 return cached;
 
             string cleanedName = CleanGameNameForSearch(gameName);
-
-            // 2 strategies
-            string[] searchStrategies = new[]
-            {
-                $"{cleanedName} VR trailer",               // Request 1
-                $"\"{cleanedName}\" VR trailer",           // Request 2
-            };
+            string searchTerm = $"{cleanedName} VR trailer";
 
             try
             {
@@ -5638,26 +5632,16 @@ function onYouTubeIframeAPIReady() {
                     http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/119.0");
                     http.Timeout = TimeSpan.FromSeconds(5);
 
-                    foreach (string searchTerm in searchStrategies)
+                    string query = WebUtility.UrlEncode(searchTerm);
+                    string searchUrl = $"https://www.youtube.com/results?search_query={query}";
+
+                    var html = await http.GetStringAsync(searchUrl);
+                    var videoId = ExtractBestVideoId(html, cleanedName);
+
+                    if (!string.IsNullOrEmpty(videoId))
                     {
-                        string query = WebUtility.UrlEncode(searchTerm);
-                        string searchUrl = $"https://www.youtube.com/results?search_query={query}";
-
-                        try
-                        {
-                            var html = await http.GetStringAsync(searchUrl);
-                            var videoId = ExtractBestVideoId(html, cleanedName);
-
-                            if (!string.IsNullOrEmpty(videoId))
-                            {
-                                _videoIdCache[gameName] = videoId;
-                                return videoId;
-                            }
-                        }
-                        catch (TaskCanceledException)
-                        {
-                            continue;
-                        }
+                        _videoIdCache[gameName] = videoId;
+                        return videoId;
                     }
                 }
             }
