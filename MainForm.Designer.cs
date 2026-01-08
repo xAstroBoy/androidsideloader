@@ -478,9 +478,9 @@ namespace AndroidSideloader
             this.backupbutton.Padding = new System.Windows.Forms.Padding(30, 0, 0, 0);
             this.backupbutton.Size = new System.Drawing.Size(233, 28);
             this.backupbutton.TabIndex = 1;
-            this.backupbutton.Text = "BACKUP GAMEDATA";
+            this.backupbutton.Text = "BACKUP GAMESAVES";
             this.backupbutton.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.backupbutton_Tooltip.SetToolTip(this.backupbutton, "Save game and apps data to the sideloader folder (Does not save APKs or OBBs)");
+            this.backupbutton_Tooltip.SetToolTip(this.backupbutton, "Save game and apps data to the backup folder (Does not save APKs or OBBs)");
             this.backupbutton.UseVisualStyleBackColor = false;
             this.backupbutton.Click += new System.EventHandler(this.backupbutton_Click);
             // 
@@ -498,9 +498,9 @@ namespace AndroidSideloader
             this.restorebutton.Padding = new System.Windows.Forms.Padding(30, 0, 0, 0);
             this.restorebutton.Size = new System.Drawing.Size(233, 28);
             this.restorebutton.TabIndex = 0;
-            this.restorebutton.Text = "RESTORE GAMEDATA";
+            this.restorebutton.Text = "RESTORE GAMESAVES";
             this.restorebutton.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.restorebutton_Tooltip.SetToolTip(this.restorebutton, "Restore game and apps data to the device (Use BACKUP GAMEDATA first)");
+            this.restorebutton_Tooltip.SetToolTip(this.restorebutton, "Restore game and apps data to the device (Use BACKUP GAMESAVES first)");
             this.restorebutton.UseVisualStyleBackColor = false;
             this.restorebutton.Click += new System.EventHandler(this.restorebutton_Click);
             // 

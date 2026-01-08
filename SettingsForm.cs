@@ -344,24 +344,16 @@ namespace AndroidSideloader
 
         private void setBackupDirectory_Click(object sender, EventArgs e)
         {
-            string initialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Rookie Backups");
-
-            if (_settings.CustomBackupDir && Directory.Exists(_settings.BackupDir))
-            {
-                initialDirectory = _settings.BackupDir;
-            }
-
             var dialog = new FolderSelectDialog
             {
                 Title = "Select Backup Folder",
-                InitialDirectory = initialDirectory
+                InitialDirectory = _settings.GetEffectiveBackupDir()
             };
 
             if (dialog.Show(this.Handle))
             {
                 _settings.CustomBackupDir = true;
                 _settings.BackupDir = dialog.FileName;
-                MainForm.backupFolder = _settings.BackupDir;
             }
         }
 
@@ -383,9 +375,7 @@ namespace AndroidSideloader
 
         private void openBackupDirectory_Click(object sender, EventArgs e)
         {
-            string pathToOpen = _settings.CustomBackupDir
-                ? Path.Combine(_settings.BackupDir, "Rookie Backups")
-                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Rookie Backups");
+            string pathToOpen = _settings.GetEffectiveBackupDir();
             MainForm.OpenDirectory(pathToOpen);
         }
 

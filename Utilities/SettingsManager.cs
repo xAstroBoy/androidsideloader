@@ -313,6 +313,16 @@ namespace AndroidSideloader.Utilities
             }
         }
 
+        public string GetEffectiveBackupDir()
+        {
+            if (CustomBackupDir && Directory.Exists(BackupDir))
+            {
+                return BackupDir;
+            }
+
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Rookie Backups");
+        }
+
         public void Dispose()
         {
             FontStyle?.Dispose();

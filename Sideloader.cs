@@ -136,14 +136,7 @@ namespace AndroidSideloader
 
         public static void BackupGame(string packagename)
         {
-            if (!settings.CustomBackupDir)
-            {
-                MainForm.backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
-            }
-            else
-            {
-                MainForm.backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
-            }
+            MainForm.backupFolder = settings.GetEffectiveBackupDir();
             if (!Directory.Exists(MainForm.backupFolder))
             {
                 _ = Directory.CreateDirectory(MainForm.backupFolder);

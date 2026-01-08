@@ -689,7 +689,6 @@ namespace AndroidSideloader
 
             if (out2.Contains("failed"))
             {
-                _ = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
                 _ = Logger.Log(out2);
 
                 if (out2.Contains("offline") && !settings.NodeviceMode)

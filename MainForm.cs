@@ -1124,181 +1124,325 @@ namespace AndroidSideloader
             return deviceId ?? string.Empty;
         }
 
-        public static string taa = String.Empty;
-
         private async void backupadbbutton_Click(object sender, EventArgs e)
         {
             string selectedApp = ShowInstalledAppSelector("Select an app to backup with ADB");
-            if (selectedApp == null)
-            {
-                return;
-            }
+            if (selectedApp == null) return;
 
-            if (!settings.CustomBackupDir)
+            backupFolder = settings.GetEffectiveBackupDir();
+            string date_str = "ab." + DateTime.Today.ToString("yyyy.MM.dd");
+            string CurrBackups = Path.Combine(backupFolder, date_str);
+
+            Directory.CreateDirectory(CurrBackups);
+
+            string packageName = Sideloader.gameNameToPackageName(selectedApp);
+            string backupFile = Path.Combine(CurrBackups, $"{packageName}.ab");
+
+            FlexibleMessageBox.Show(Program.form,
+                $"Backing up {selectedApp} to:\n{backupFile}\n\nClick OK, then on your Quest:\n1. Unlock device\n2. Click 'Back Up My Data'");
+
+            changeTitle($"Backing up {selectedApp}...");
+            progressBar.IsIndeterminate = true;
+
+            var output = await Task.Run(() =>
+                ADB.RunAdbCommandToString($"backup -f \"{backupFile}\" {packageName}")
+            );
+
+            progressBar.IsIndeterminate = false;
+            changeTitle("");
+
+            // Success = file exists, has content, no errors
+            bool fileExists = File.Exists(backupFile);
+            bool hasContent = fileExists && new FileInfo(backupFile).Length > 0;
+            bool hasErrors = !string.IsNullOrEmpty(output.Error);
+
+            if (hasContent && !hasErrors)
             {
-                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
+                Logger.Log($"Successfully backed up {selectedApp} to {backupFile}", LogLevel.INFO);
+                FlexibleMessageBox.Show(Program.form,
+                    $"Backup successful!\n\nApp: {selectedApp}\nFile: {backupFile}\nSize: {new FileInfo(backupFile).Length / 1024} KB",
+                    "Backup Complete");
             }
             else
             {
-                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
+                // Cleanup failed backup file
+                if (File.Exists(backupFile))
+                    File.Delete(backupFile);
+
+                string errorMsg = hasErrors ? output.Error : "No backup data created";
+                Logger.Log($"Failed to backup {selectedApp}: {errorMsg}", LogLevel.ERROR);
+                FlexibleMessageBox.Show(Program.form,
+                    $"Backup failed!\n\nApp: {selectedApp}\nError: {errorMsg}",
+                    "Backup Failed");
             }
-            if (!Directory.Exists(backupFolder))
-            {
-                _ = Directory.CreateDirectory(backupFolder);
-            }
-            string output = String.Empty;
-
-            string date_str = "ab." + DateTime.Today.ToString("yyyy.MM.dd");
-            string CurrBackups = Path.Combine(backupFolder, date_str);
-            Program.form.Invoke(new Action(() =>
-            {
-                FlexibleMessageBox.Show(Program.form, $"Backing up Game Data to {backupFolder}\\{date_str}");
-            }));
-            _ = Directory.CreateDirectory(CurrBackups);
-
-            string GameName = selectedApp;
-            string packageName = Sideloader.gameNameToPackageName(GameName);
-            string InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {packageName} | grep versionCode -F\"").Output;
-
-            changeTitle("Running ADB Backup...");
-            _ = FlexibleMessageBox.Show(Program.form, "Click OK on this Message...\r\nThen on your Quest, Unlock your device and confirm the backup operation by clicking on 'Back Up My Data'");
-            output = ADB.RunAdbCommandToString($"adb backup -f \"{CurrBackups}\\{packageName}.ab\" {packageName}").Output;
-
-            changeTitle("");
         }
 
         private async void backupbutton_Click(object sender, EventArgs e)
         {
-            if (!settings.CustomBackupDir)
-            {
-                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
-            }
-            else
-            {
-                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
-            }
-            if (!Directory.Exists(backupFolder))
-            {
-                _ = Directory.CreateDirectory(backupFolder);
-            }
-            DialogResult dialogResult1 = FlexibleMessageBox.Show(Program.form, $"Do you want to backup to {backupFolder}?", "Backup?", MessageBoxButtons.YesNo);
-            if (dialogResult1 == DialogResult.No)
-            {
-                return;
-            }
-            ProcessOutput output = new ProcessOutput(String.Empty, String.Empty);
-            Thread t1 = new Thread(() =>
-            {
-                string date_str = DateTime.Today.ToString("yyyy.MM.dd");
-                string CurrBackups = Path.Combine(backupFolder, date_str);
-                Program.form.Invoke(new Action(() =>
-                {
-                    FlexibleMessageBox.Show(Program.form, $"This may take up to a minute. Backing up gamesaves to {backupFolder}\\{date_str} (year.month.date)");
-                }));
-                _ = Directory.CreateDirectory(CurrBackups);
-                output = ADB.RunAdbCommandToString($"pull \"/sdcard/Android/data\" \"{CurrBackups}\"");
-                changeTitle("Backing up Game Data in SD/Android/data...");
-                try
-                {
-                    Directory.Move(ADB.adbFolderPath + "\\data", CurrBackups + "\\data");
-                }
-                catch (Exception ex)
-                {
-                    _ = Logger.Log($"Exception on backup: {ex}", LogLevel.ERROR);
-                }
-            })
-            {
-                IsBackground = true
-            };
-            t1.Start();
+            backupFolder = settings.GetEffectiveBackupDir();
+            string date_str = DateTime.Today.ToString("yyyy.MM.dd");
+            string CurrBackups = Path.Combine(backupFolder, date_str);
 
-            while (t1.IsAlive)
+            DialogResult dialogResult1 = FlexibleMessageBox.Show(Program.form,
+                $"Do you want to backup all gamesaves to:\n{CurrBackups}\\",
+                "Backup Gamesaves",
+                MessageBoxButtons.YesNo);
+
+            if (dialogResult1 == DialogResult.No || dialogResult1 == DialogResult.Cancel) return;
+
+            Directory.CreateDirectory(CurrBackups); // Create parent dir if needed
+
+            changeTitle("Backing up gamesaves...");
+            progressBar.IsIndeterminate = true;
+            progressBar.OperationType = "Backing Up";
+
+            var successList = new List<string>();
+            var failedList = new List<string>();
+            int totalGames = 0;
+            int processedGames = 0;
+
+            await Task.Run(() =>
             {
-                await Task.Delay(100);
-                changeTitle("Backing up Game Data in SD/Android/data...");
-            }
-            ShowPrcOutput(output);
+                // Get all game folders in /sdcard/Android/data
+                var listOutput = ADB.RunAdbCommandToString("shell ls -1 /sdcard/Android/data", suppressLogging: true);
+
+                if (string.IsNullOrEmpty(listOutput.Output) || !string.IsNullOrEmpty(listOutput.Error))
+                {
+                    Logger.Log($"Failed to list game folders: {listOutput.Error}", LogLevel.ERROR);
+                    return;
+                }
+
+                var gameFolders = listOutput.Output
+                    .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(f => !string.IsNullOrWhiteSpace(f) && f.Contains("."))
+                    .Select(f => f.Trim())
+                    .ToList();
+
+                totalGames = gameFolders.Count;
+
+                foreach (var gameFolder in gameFolders)
+                {
+                    processedGames++;
+                    this.Invoke(() => changeTitle($"Backing up {gameFolder} ({processedGames}/{totalGames})..."));
+
+                    string gamePath = $"/sdcard/Android/data/{gameFolder}";
+                    string backupPath = Path.Combine(CurrBackups, gameFolder);
+
+                    var pullOutput = ADB.RunAdbCommandToString($"pull \"{gamePath}\" \"{backupPath}\"", suppressLogging: true);
+
+                    // Success = no errors and has content
+                    bool hasContent = Directory.Exists(backupPath) && Directory.GetFileSystemEntries(backupPath).Length > 0;
+                    bool hasErrors = !string.IsNullOrEmpty(pullOutput.Error);
+
+                    if (hasContent && !hasErrors)
+                    {
+                        successList.Add(gameFolder);
+                        Logger.Log($"Successfully backed up: {gameFolder}", LogLevel.INFO);
+                    }
+                    else if (hasErrors)
+                    {
+                        // Cleanup empty/failed directory
+                        if (Directory.Exists(backupPath))
+                            Directory.Delete(backupPath, true);
+
+                        failedList.Add($"{gameFolder}: {pullOutput.Error.Split('\n')[0].Trim()}");
+                        Logger.Log($"Failed to backup {gameFolder}: {pullOutput.Error}", LogLevel.WARNING);
+                    }
+                    else
+                    {
+                        // No content but no errors = app has no save data (not a failure)
+                        if (Directory.Exists(backupPath))
+                            Directory.Delete(backupPath, true);
+
+                        Logger.Log($"No save data for: {gameFolder}", LogLevel.INFO);
+                    }
+                }
+            });
+
+            progressBar.IsIndeterminate = false;
             changeTitle("");
+
+            // Build summary
+            var summary = new StringBuilder();
+            summary.AppendLine($"Backup completed to:\n{CurrBackups}\\\n");
+            summary.AppendLine($"Successfully backed up: {successList.Count} games");
+
+            if (failedList.Count > 0)
+            {
+                summary.AppendLine($"Failed to backup: {failedList.Count} games\n");
+                summary.AppendLine("Failed games:");
+                foreach (var failed in failedList)
+                    summary.AppendLine($" • {failed}");
+            }
+
+            FlexibleMessageBox.Show(Program.form, summary.ToString(), "Backup Complete");
         }
 
         private async void restorebutton_Click(object sender, EventArgs e)
         {
-            ProcessOutput output = new ProcessOutput("", "");
-            string output_abRestore = string.Empty;
+            backupFolder = settings.GetEffectiveBackupDir();
 
-            if (!settings.CustomBackupDir)
+            // Create restore method dialog
+            string restoreMethod = null;
+            using (Form dialog = new Form())
             {
-                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
-            }
-            else
-            {
-                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
-            }
+                dialog.Text = "Restore Gamesaves";
+                dialog.Size = new Size(340, 130);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MaximizeBox = false;
+                dialog.MinimizeBox = false;
+                dialog.BackColor = Color.FromArgb(20, 24, 29);
+                dialog.ForeColor = Color.White;
 
-
-            FileDialog fileDialog = new OpenFileDialog();
-            fileDialog.Title = "Select a .ab Backup file or press Cancel to select a Folder";
-            fileDialog.CheckFileExists = true;
-            fileDialog.CheckPathExists = true;
-            fileDialog.ValidateNames = false;
-            fileDialog.InitialDirectory = backupFolder;
-            fileDialog.Filter = "Android Backup Files (*.ab)|*.ab|All Files (*.*)|*.*";
-
-            FolderBrowserDialog folderDialog = new FolderBrowserDialog();
-            folderDialog.Description = "Select Game Backup folder";
-            folderDialog.SelectedPath = backupFolder;
-            folderDialog.ShowNewFolderButton = false; // To prevent creating new folders
-
-            DialogResult fileDialogResult = fileDialog.ShowDialog();
-            DialogResult folderDialogResult = DialogResult.Cancel;
-
-            if (fileDialogResult == DialogResult.OK)
-            {
-                string selectedPath = fileDialog.FileName;
-                Logger.Log("Selected .ab file: " + selectedPath);
-
-                _ = FlexibleMessageBox.Show(Program.form, "Click OK on this Message...\r\nThen on your Quest, Unlock your device and confirm the backup operation by clicking on 'Restore My Data'\r\nRookie will remain frozen until the process is completed.");
-                output_abRestore = ADB.RunAdbCommandToString($"adb restore \"{selectedPath}\"").Output;
-            }
-            if (fileDialogResult != DialogResult.OK)
-            {
-                folderDialogResult = folderDialog.ShowDialog();
-            }
-
-            if (folderDialogResult == DialogResult.OK)
-            {
-                string selectedFolder = folderDialog.SelectedPath;
-                Logger.Log("Selected folder: " + selectedFolder);
-
-                Thread t1 = new Thread(() =>
+                var label = new Label
                 {
-                    if (selectedFolder.Contains("data"))
-                    {
-                        output += ADB.RunAdbCommandToString($"push \"{selectedFolder}\" /sdcard/Android/");
-                    }
-                    else
-                    {
-                        output += ADB.RunAdbCommandToString($"push \"{selectedFolder}\" /sdcard/Android/data/");
-                    }
-                })
-                {
-                    IsBackground = true
+                    Text = "Choose restore source:",
+                    ForeColor = Color.White,
+                    AutoSize = true,
+                    Location = new Point(15, 15)
                 };
-                t1.Start();
 
-                while (t1.IsAlive)
+                var btnFolder = CreateStyledButton("From Folder", DialogResult.None, new Point(15, 45));
+                btnFolder.Size = new Size(145, 32);
+                btnFolder.Click += (s, ev) => { restoreMethod = "folder"; dialog.DialogResult = DialogResult.OK; };
+
+                var btnAbFile = CreateStyledButton("From .ab File", DialogResult.None, new Point(170, 45));
+                btnAbFile.Size = new Size(145, 32);
+                btnAbFile.Click += (s, ev) => { restoreMethod = "ab"; dialog.DialogResult = DialogResult.OK; };
+
+                dialog.Controls.AddRange(new Control[] { label, btnFolder, btnAbFile });
+
+                if (dialog.ShowDialog(this) != DialogResult.OK || restoreMethod == null) return;
+            }
+
+            // .ab file restore
+            if (restoreMethod == "ab")
+            {
+                using (var fileDialog = new OpenFileDialog())
                 {
-                    await Task.Delay(100);
+                    fileDialog.Title = "Select Android Backup (.ab) file";
+                    fileDialog.InitialDirectory = backupFolder;
+                    fileDialog.Filter = "Android Backup Files (*.ab)|*.ab|All Files (*.*)|*.*";
+
+                    if (fileDialog.ShowDialog() != DialogResult.OK) return;
+
+                    Logger.Log($"Selected .ab file: {fileDialog.FileName}");
+                    FlexibleMessageBox.Show(Program.form,
+                        "Click OK, then on your Quest:\n1. Unlock device\n2. Confirm 'Restore My Data'");
+
+                    var output = ADB.RunAdbCommandToString($"restore \"{fileDialog.FileName}\"");
+                    FlexibleMessageBox.Show(Program.form,
+                        string.IsNullOrEmpty(output.Error) ? "Restore completed" : $"Restore result:\n{output.Output}\n{output.Error}",
+                        "Restore Complete");
                 }
+                return;
             }
 
-            if (folderDialogResult == DialogResult.OK)
+            // Folder restore: find newest date folder to preselect
+            string initialPath = backupFolder;
+            if (Directory.Exists(backupFolder))
             {
-                ShowPrcOutput(output);
+                var newestDateFolder = Directory.GetDirectories(backupFolder)
+                    .Select(d => new DirectoryInfo(d))
+                    .Where(d => Regex.IsMatch(d.Name, @"^\d{4}\.\d{2}\.\d{2}$"))
+                    .OrderByDescending(d => d.Name)
+                    .FirstOrDefault();
+
+                if (newestDateFolder != null)
+                    initialPath = newestDateFolder.FullName;
             }
-            else if (fileDialogResult == DialogResult.OK)
+
+            using (var folderDialog = new FolderBrowserDialog())
             {
-                _ = FlexibleMessageBox.Show(Program.form, $"{output_abRestore}");
+                folderDialog.Description = "Select a date folder (e.g., 2026.01.01) to restore ALL gamesaves,\nor a specific game folder (e.g., com.game.name) to restore just that game.";
+                folderDialog.SelectedPath = initialPath;
+                folderDialog.ShowNewFolderButton = false;
+
+                if (folderDialog.ShowDialog() != DialogResult.OK) return;
+
+                string selectedFolder = folderDialog.SelectedPath;
+                string folderName = Path.GetFileName(selectedFolder);
+                Logger.Log($"Selected folder: {selectedFolder}");
+
+                // Determine if this is a date folder or a single game folder
+                bool isDateFolder = Regex.IsMatch(folderName, @"^\d{4}\.\d{2}\.\d{2}$");
+                bool isGameFolder = folderName.Contains(".") && !isDateFolder;
+
+                List<string> gameFoldersToRestore;
+
+                if (isGameFolder)
+                {
+                    // Single game folder selected: restore just this one
+                    gameFoldersToRestore = new List<string> { folderName };
+                    // Parent folder becomes the source
+                    selectedFolder = Path.GetDirectoryName(selectedFolder);
+                }
+                else
+                {
+                    // Date folder or other: get all game subfolders
+                    gameFoldersToRestore = Directory.GetDirectories(selectedFolder)
+                        .Select(Path.GetFileName)
+                        .Where(f => !string.IsNullOrWhiteSpace(f) && f.Contains("."))
+                        .ToList();
+                }
+
+                if (gameFoldersToRestore.Count == 0)
+                {
+                    FlexibleMessageBox.Show(Program.form, "No game folders found in the selected directory.", "Nothing to Restore");
+                    return;
+                }
+
+                changeTitle("Restoring gamesaves...");
+                progressBar.IsIndeterminate = true;
+                progressBar.OperationType = "Restoring";
+
+                var successList = new List<string>();
+                var failedList = new List<string>();
+                int totalGames = gameFoldersToRestore.Count;
+                int processedGames = 0;
+
+                await Task.Run(() =>
+                {
+                    foreach (var gameFolder in gameFoldersToRestore)
+                    {
+                        processedGames++;
+                        this.Invoke(() => changeTitle($"Restoring {gameFolder} ({processedGames}/{totalGames})..."));
+
+                        string sourcePath = Path.Combine(selectedFolder, gameFolder);
+                        string targetPath = $"/sdcard/Android/data/{gameFolder}";
+
+                        var pushOutput = ADB.RunAdbCommandToString($"push \"{sourcePath}\" \"{targetPath}\"", suppressLogging: true);
+
+                        if (string.IsNullOrEmpty(pushOutput.Error))
+                        {
+                            successList.Add(gameFolder);
+                            Logger.Log($"Successfully restored: {gameFolder}", LogLevel.INFO);
+                        }
+                        else
+                        {
+                            failedList.Add($"{gameFolder}: {pushOutput.Error.Split('\n')[0].Trim()}");
+                            Logger.Log($"Failed to restore {gameFolder}: {pushOutput.Error}", LogLevel.WARNING);
+                        }
+                    }
+                });
+
+                progressBar.IsIndeterminate = false;
+                changeTitle("");
+
+                var summary = new StringBuilder();
+                summary.AppendLine($"Restore completed from:\n{selectedFolder}\\\n");
+                summary.AppendLine($"Successfully restored: {successList.Count} game(s)");
+
+                if (failedList.Count > 0)
+                {
+                    summary.AppendLine($"Failed to restore: {failedList.Count} game(s)\n");
+                    summary.AppendLine("Failed games:");
+                    foreach (var failed in failedList)
+                        summary.AppendLine($" • {failed}");
+                }
+
+                FlexibleMessageBox.Show(Program.form, summary.ToString(), "Restore Complete");
             }
         }
 
@@ -1529,14 +1673,7 @@ namespace AndroidSideloader
                 return;
             }
 
-            if (!settings.CustomBackupDir)
-            {
-                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
-            }
-            else
-            {
-                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
-            }
+            backupFolder = settings.GetEffectiveBackupDir();
 
             string packagename;
             string GameName = selectedApp;
@@ -8139,14 +8276,7 @@ function onYouTubeIframeAPIReady() {
                 return;
 
             // Ask about backup
-            if (!settings.CustomBackupDir)
-            {
-                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
-            }
-            else
-            {
-                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
-            }
+            backupFolder = settings.GetEffectiveBackupDir();
 
             DialogResult dialogresult2 = FlexibleMessageBox.Show(
                 $"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\",
