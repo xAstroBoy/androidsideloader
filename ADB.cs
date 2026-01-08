@@ -357,7 +357,7 @@ namespace AndroidSideloader
                         string directoryToDelete = Path.Combine(Environment.CurrentDirectory, packagename);
                         if (Directory.Exists(directoryToDelete) && directoryToDelete != Environment.CurrentDirectory)
                         {
-                            Directory.Delete(directoryToDelete, true);
+                            FileSystemUtilities.TryDeleteDirectory(directoryToDelete);
                         }
 
                         progressCallback?.Invoke(100, null);
@@ -689,7 +689,6 @@ namespace AndroidSideloader
 
             if (out2.Contains("failed"))
             {
-                _ = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
                 _ = Logger.Log(out2);
 
                 if (out2.Contains("offline") && !settings.NodeviceMode)
@@ -732,7 +731,7 @@ namespace AndroidSideloader
                     {
                         if (directoryToDelete != Environment.CurrentDirectory)
                         {
-                            Directory.Delete(directoryToDelete, true);
+                            FileSystemUtilities.TryDeleteDirectory(directoryToDelete);
                         }
                     }
 

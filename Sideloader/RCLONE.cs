@@ -290,7 +290,7 @@ namespace AndroidSideloader
             {
                 if (Directory.Exists(path))
                 {
-                    Directory.Delete(path, true);
+                    FileSystemUtilities.TryDeleteDirectory(path);
                 }
             }
             catch (Exception ex)

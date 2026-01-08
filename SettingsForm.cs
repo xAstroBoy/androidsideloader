@@ -327,20 +327,33 @@ namespace AndroidSideloader
 
         private void setDownloadDirectory_Click(object sender, EventArgs e)
         {
-            if (downloadDirectorySetter.ShowDialog() == DialogResult.OK)
+            var dialog = new FolderSelectDialog
+            {
+                Title = "Select Download Folder",
+                InitialDirectory = _settings.CustomDownloadDir && Directory.Exists(_settings.DownloadDir)
+                    ? _settings.DownloadDir
+                    : Environment.CurrentDirectory
+            };
+
+            if (dialog.Show(this.Handle))
             {
                 _settings.CustomDownloadDir = true;
-                _settings.DownloadDir = downloadDirectorySetter.SelectedPath;
+                _settings.DownloadDir = dialog.FileName;
             }
         }
 
         private void setBackupDirectory_Click(object sender, EventArgs e)
         {
-            if (backupDirectorySetter.ShowDialog() == DialogResult.OK)
+            var dialog = new FolderSelectDialog
+            {
+                Title = "Select Backup Folder",
+                InitialDirectory = _settings.GetEffectiveBackupDir()
+            };
+
+            if (dialog.Show(this.Handle))
             {
                 _settings.CustomBackupDir = true;
-                _settings.BackupDir = backupDirectorySetter.SelectedPath;
-                MainForm.backupFolder = _settings.BackupDir;
+                _settings.BackupDir = dialog.FileName;
             }
         }
 
@@ -362,9 +375,7 @@ namespace AndroidSideloader
 
         private void openBackupDirectory_Click(object sender, EventArgs e)
         {
-            string pathToOpen = _settings.CustomBackupDir
-                ? Path.Combine(_settings.BackupDir, "Rookie Backups")
-                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Rookie Backups");
+            string pathToOpen = _settings.GetEffectiveBackupDir();
             MainForm.OpenDirectory(pathToOpen);
         }
 

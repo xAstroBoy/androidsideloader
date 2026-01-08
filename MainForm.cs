@@ -434,6 +434,20 @@ namespace AndroidSideloader
 
             changeTitle(isOffline ? "Starting in Offline Mode..." : "Initializing...");
 
+            // Non-blocking WebView cleanup
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    string webViewDirectoryPath = Path.Combine(Environment.CurrentDirectory, "WebView2Cache");
+                    if (Directory.Exists(webViewDirectoryPath))
+                    {
+                        FileSystemUtilities.TryDeleteDirectory(webViewDirectoryPath);
+                    }
+                }
+                catch { }
+            });
+
             // Non-blocking background cleanup
             _ = Task.Run(() =>
             {
@@ -441,7 +455,7 @@ namespace AndroidSideloader
                 {
                     if (Directory.Exists(Sideloader.TempFolder))
                     {
-                        Directory.Delete(Sideloader.TempFolder, true);
+                        FileSystemUtilities.TryDeleteDirectory(Sideloader.TempFolder);
                         _ = Directory.CreateDirectory(Sideloader.TempFolder);
                     }
                 }
@@ -587,20 +601,6 @@ namespace AndroidSideloader
                         settings.Save();
                     }
                 }
-
-                // WebView cleanup in background
-                _ = Task.Run(() =>
-                {
-                    try
-                    {
-                        string webViewDirectoryPath = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL", "EBWebView");
-                        if (Directory.Exists(webViewDirectoryPath))
-                        {
-                            Directory.Delete(webViewDirectoryPath, true);
-                        }
-                    }
-                    catch { }
-                });
 
                 // Pre-initialize trailer player in background
                 try
@@ -831,7 +831,8 @@ namespace AndroidSideloader
             try
             {
                 string titleSuffix = string.IsNullOrWhiteSpace(txt) ? "" : " | " + txt;
-                this.Invoke(() => { 
+                this.Invoke(() =>
+                {
                     Text = "Rookie Sideloader " + Updater.LocalVersion + titleSuffix;
                     rookieStatusLabel.Text = txt;
                 });
@@ -843,8 +844,9 @@ namespace AndroidSideloader
 
                 await Task.Delay(TimeSpan.FromSeconds(5));
                 // Reset to base title without any status message
-                this.Invoke(() => { 
-                    Text = "Rookie Sideloader " + Updater.LocalVersion; 
+                this.Invoke(() =>
+                {
+                    Text = "Rookie Sideloader " + Updater.LocalVersion;
                     rookieStatusLabel.Text = "";
                 });
             }
@@ -985,14 +987,16 @@ namespace AndroidSideloader
 
                 output = await ADB.CopyOBBWithProgressAsync(
                     path,
-                    (progress, eta) => this.Invoke(() => {
+                    (progress, eta) => this.Invoke(() =>
+                    {
                         progressBar.Value = progress;
                         string etaStr = eta.HasValue && eta.Value.TotalSeconds > 0
                             ? $" · ETA: {eta.Value:mm\\:ss}"
                             : "";
                         speedLabel.Text = $"Progress: {progress}%{etaStr}";
                     }),
-                    status => this.Invoke(() => {
+                    status => this.Invoke(() =>
+                    {
                         progressBar.StatusText = status;
                     }),
                     folderName);
@@ -1120,181 +1124,325 @@ namespace AndroidSideloader
             return deviceId ?? string.Empty;
         }
 
-        public static string taa = String.Empty;
-
         private async void backupadbbutton_Click(object sender, EventArgs e)
         {
             string selectedApp = ShowInstalledAppSelector("Select an app to backup with ADB");
-            if (selectedApp == null)
-            {
-                return;
-            }
+            if (selectedApp == null) return;
 
-            if (!settings.CustomBackupDir)
+            backupFolder = settings.GetEffectiveBackupDir();
+            string date_str = "ab." + DateTime.Today.ToString("yyyy.MM.dd");
+            string CurrBackups = Path.Combine(backupFolder, date_str);
+
+            Directory.CreateDirectory(CurrBackups);
+
+            string packageName = Sideloader.gameNameToPackageName(selectedApp);
+            string backupFile = Path.Combine(CurrBackups, $"{packageName}.ab");
+
+            FlexibleMessageBox.Show(Program.form,
+                $"Backing up {selectedApp} to:\n{backupFile}\n\nClick OK, then on your Quest:\n1. Unlock device\n2. Click 'Back Up My Data'");
+
+            changeTitle($"Backing up {selectedApp}...");
+            progressBar.IsIndeterminate = true;
+
+            var output = await Task.Run(() =>
+                ADB.RunAdbCommandToString($"backup -f \"{backupFile}\" {packageName}")
+            );
+
+            progressBar.IsIndeterminate = false;
+            changeTitle("");
+
+            // Success = file exists, has content, no errors
+            bool fileExists = File.Exists(backupFile);
+            bool hasContent = fileExists && new FileInfo(backupFile).Length > 0;
+            bool hasErrors = !string.IsNullOrEmpty(output.Error);
+
+            if (hasContent && !hasErrors)
             {
-                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
+                Logger.Log($"Successfully backed up {selectedApp} to {backupFile}", LogLevel.INFO);
+                FlexibleMessageBox.Show(Program.form,
+                    $"Backup successful!\n\nApp: {selectedApp}\nFile: {backupFile}\nSize: {new FileInfo(backupFile).Length / 1024} KB",
+                    "Backup Complete");
             }
             else
             {
-                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
+                // Cleanup failed backup file
+                if (File.Exists(backupFile))
+                    File.Delete(backupFile);
+
+                string errorMsg = hasErrors ? output.Error : "No backup data created";
+                Logger.Log($"Failed to backup {selectedApp}: {errorMsg}", LogLevel.ERROR);
+                FlexibleMessageBox.Show(Program.form,
+                    $"Backup failed!\n\nApp: {selectedApp}\nError: {errorMsg}",
+                    "Backup Failed");
             }
-            if (!Directory.Exists(backupFolder))
-            {
-                _ = Directory.CreateDirectory(backupFolder);
-            }
-            string output = String.Empty;
-
-            string date_str = "ab." + DateTime.Today.ToString("yyyy.MM.dd");
-            string CurrBackups = Path.Combine(backupFolder, date_str);
-            Program.form.Invoke(new Action(() =>
-            {
-                FlexibleMessageBox.Show(Program.form, $"Backing up Game Data to {backupFolder}\\{date_str}");
-            }));
-            _ = Directory.CreateDirectory(CurrBackups);
-
-            string GameName = selectedApp;
-            string packageName = Sideloader.gameNameToPackageName(GameName);
-            string InstalledVersionCode = ADB.RunAdbCommandToString($"shell \"dumpsys package {packageName} | grep versionCode -F\"").Output;
-
-            changeTitle("Running ADB Backup...");
-            _ = FlexibleMessageBox.Show(Program.form, "Click OK on this Message...\r\nThen on your Quest, Unlock your device and confirm the backup operation by clicking on 'Back Up My Data'");
-            output = ADB.RunAdbCommandToString($"adb backup -f \"{CurrBackups}\\{packageName}.ab\" {packageName}").Output;
-
-            changeTitle("");
         }
 
         private async void backupbutton_Click(object sender, EventArgs e)
         {
-            if (!settings.CustomBackupDir)
-            {
-                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
-            }
-            else
-            {
-                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
-            }
-            if (!Directory.Exists(backupFolder))
-            {
-                _ = Directory.CreateDirectory(backupFolder);
-            }
-            DialogResult dialogResult1 = FlexibleMessageBox.Show(Program.form, $"Do you want to backup to {backupFolder}?", "Backup?", MessageBoxButtons.YesNo);
-            if (dialogResult1 == DialogResult.No)
-            {
-                return;
-            }
-            ProcessOutput output = new ProcessOutput(String.Empty, String.Empty);
-            Thread t1 = new Thread(() =>
-            {
-                string date_str = DateTime.Today.ToString("yyyy.MM.dd");
-                string CurrBackups = Path.Combine(backupFolder, date_str);
-                Program.form.Invoke(new Action(() =>
-                {
-                    FlexibleMessageBox.Show(Program.form, $"This may take up to a minute. Backing up gamesaves to {backupFolder}\\{date_str} (year.month.date)");
-                }));
-                _ = Directory.CreateDirectory(CurrBackups);
-                output = ADB.RunAdbCommandToString($"pull \"/sdcard/Android/data\" \"{CurrBackups}\"");
-                changeTitle("Backing up Game Data in SD/Android/data...");
-                try
-                {
-                    Directory.Move(ADB.adbFolderPath + "\\data", CurrBackups + "\\data");
-                }
-                catch (Exception ex)
-                {
-                    _ = Logger.Log($"Exception on backup: {ex}", LogLevel.ERROR);
-                }
-            })
-            {
-                IsBackground = true
-            };
-            t1.Start();
+            backupFolder = settings.GetEffectiveBackupDir();
+            string date_str = DateTime.Today.ToString("yyyy.MM.dd");
+            string CurrBackups = Path.Combine(backupFolder, date_str);
 
-            while (t1.IsAlive)
+            DialogResult dialogResult1 = FlexibleMessageBox.Show(Program.form,
+                $"Do you want to backup all gamesaves to:\n{CurrBackups}\\",
+                "Backup Gamesaves",
+                MessageBoxButtons.YesNo);
+
+            if (dialogResult1 == DialogResult.No || dialogResult1 == DialogResult.Cancel) return;
+
+            Directory.CreateDirectory(CurrBackups); // Create parent dir if needed
+
+            changeTitle("Backing up gamesaves...");
+            progressBar.IsIndeterminate = true;
+            progressBar.OperationType = "Backing Up";
+
+            var successList = new List<string>();
+            var failedList = new List<string>();
+            int totalGames = 0;
+            int processedGames = 0;
+
+            await Task.Run(() =>
             {
-                await Task.Delay(100);
-                changeTitle("Backing up Game Data in SD/Android/data...");
-            }
-            ShowPrcOutput(output);
+                // Get all game folders in /sdcard/Android/data
+                var listOutput = ADB.RunAdbCommandToString("shell ls -1 /sdcard/Android/data", suppressLogging: true);
+
+                if (string.IsNullOrEmpty(listOutput.Output) || !string.IsNullOrEmpty(listOutput.Error))
+                {
+                    Logger.Log($"Failed to list game folders: {listOutput.Error}", LogLevel.ERROR);
+                    return;
+                }
+
+                var gameFolders = listOutput.Output
+                    .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(f => !string.IsNullOrWhiteSpace(f) && f.Contains("."))
+                    .Select(f => f.Trim())
+                    .ToList();
+
+                totalGames = gameFolders.Count;
+
+                foreach (var gameFolder in gameFolders)
+                {
+                    processedGames++;
+                    this.Invoke(() => changeTitle($"Backing up {gameFolder} ({processedGames}/{totalGames})..."));
+
+                    string gamePath = $"/sdcard/Android/data/{gameFolder}";
+                    string backupPath = Path.Combine(CurrBackups, gameFolder);
+
+                    var pullOutput = ADB.RunAdbCommandToString($"pull \"{gamePath}\" \"{backupPath}\"", suppressLogging: true);
+
+                    // Success = no errors and has content
+                    bool hasContent = Directory.Exists(backupPath) && Directory.GetFileSystemEntries(backupPath).Length > 0;
+                    bool hasErrors = !string.IsNullOrEmpty(pullOutput.Error);
+
+                    if (hasContent && !hasErrors)
+                    {
+                        successList.Add(gameFolder);
+                        Logger.Log($"Successfully backed up: {gameFolder}", LogLevel.INFO);
+                    }
+                    else if (hasErrors)
+                    {
+                        // Cleanup empty/failed directory
+                        if (Directory.Exists(backupPath))
+                            Directory.Delete(backupPath, true);
+
+                        failedList.Add($"{gameFolder}: {pullOutput.Error.Split('\n')[0].Trim()}");
+                        Logger.Log($"Failed to backup {gameFolder}: {pullOutput.Error}", LogLevel.WARNING);
+                    }
+                    else
+                    {
+                        // No content but no errors = app has no save data (not a failure)
+                        if (Directory.Exists(backupPath))
+                            Directory.Delete(backupPath, true);
+
+                        Logger.Log($"No save data for: {gameFolder}", LogLevel.INFO);
+                    }
+                }
+            });
+
+            progressBar.IsIndeterminate = false;
             changeTitle("");
+
+            // Build summary
+            var summary = new StringBuilder();
+            summary.AppendLine($"Backup completed to:\n{CurrBackups}\\\n");
+            summary.AppendLine($"Successfully backed up: {successList.Count} games");
+
+            if (failedList.Count > 0)
+            {
+                summary.AppendLine($"Failed to backup: {failedList.Count} games\n");
+                summary.AppendLine("Failed games:");
+                foreach (var failed in failedList)
+                    summary.AppendLine($" • {failed}");
+            }
+
+            FlexibleMessageBox.Show(Program.form, summary.ToString(), "Backup Complete");
         }
 
         private async void restorebutton_Click(object sender, EventArgs e)
         {
-            ProcessOutput output = new ProcessOutput("", "");
-            string output_abRestore = string.Empty;
+            backupFolder = settings.GetEffectiveBackupDir();
 
-            if (!settings.CustomBackupDir)
+            // Create restore method dialog
+            string restoreMethod = null;
+            using (Form dialog = new Form())
             {
-                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
-            }
-            else
-            {
-                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
-            }
+                dialog.Text = "Restore Gamesaves";
+                dialog.Size = new Size(340, 130);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MaximizeBox = false;
+                dialog.MinimizeBox = false;
+                dialog.BackColor = Color.FromArgb(20, 24, 29);
+                dialog.ForeColor = Color.White;
 
-
-            FileDialog fileDialog = new OpenFileDialog();
-            fileDialog.Title = "Select a .ab Backup file or press Cancel to select a Folder";
-            fileDialog.CheckFileExists = true;
-            fileDialog.CheckPathExists = true;
-            fileDialog.ValidateNames = false;
-            fileDialog.InitialDirectory = backupFolder;
-            fileDialog.Filter = "Android Backup Files (*.ab)|*.ab|All Files (*.*)|*.*";
-
-            FolderBrowserDialog folderDialog = new FolderBrowserDialog();
-            folderDialog.Description = "Select Game Backup folder";
-            folderDialog.SelectedPath = backupFolder;
-            folderDialog.ShowNewFolderButton = false; // To prevent creating new folders
-
-            DialogResult fileDialogResult = fileDialog.ShowDialog();
-            DialogResult folderDialogResult = DialogResult.Cancel;
-
-            if (fileDialogResult == DialogResult.OK)
-            {
-                string selectedPath = fileDialog.FileName;
-                Logger.Log("Selected .ab file: " + selectedPath);
-
-                _ = FlexibleMessageBox.Show(Program.form, "Click OK on this Message...\r\nThen on your Quest, Unlock your device and confirm the backup operation by clicking on 'Restore My Data'\r\nRookie will remain frozen until the process is completed.");
-                output_abRestore = ADB.RunAdbCommandToString($"adb restore \"{selectedPath}\"").Output;
-            }
-            if (fileDialogResult != DialogResult.OK)
-            {
-                folderDialogResult = folderDialog.ShowDialog();
-            }
-
-            if (folderDialogResult == DialogResult.OK)
-            {
-                string selectedFolder = folderDialog.SelectedPath;
-                Logger.Log("Selected folder: " + selectedFolder);
-
-                Thread t1 = new Thread(() =>
+                var label = new Label
                 {
-                    if (selectedFolder.Contains("data"))
-                    {
-                        output += ADB.RunAdbCommandToString($"push \"{selectedFolder}\" /sdcard/Android/");
-                    }
-                    else
-                    {
-                        output += ADB.RunAdbCommandToString($"push \"{selectedFolder}\" /sdcard/Android/data/");
-                    }
-                })
-                {
-                    IsBackground = true
+                    Text = "Choose restore source:",
+                    ForeColor = Color.White,
+                    AutoSize = true,
+                    Location = new Point(15, 15)
                 };
-                t1.Start();
 
-                while (t1.IsAlive)
+                var btnFolder = CreateStyledButton("From Folder", DialogResult.None, new Point(15, 45));
+                btnFolder.Size = new Size(145, 32);
+                btnFolder.Click += (s, ev) => { restoreMethod = "folder"; dialog.DialogResult = DialogResult.OK; };
+
+                var btnAbFile = CreateStyledButton("From .ab File", DialogResult.None, new Point(170, 45));
+                btnAbFile.Size = new Size(145, 32);
+                btnAbFile.Click += (s, ev) => { restoreMethod = "ab"; dialog.DialogResult = DialogResult.OK; };
+
+                dialog.Controls.AddRange(new Control[] { label, btnFolder, btnAbFile });
+
+                if (dialog.ShowDialog(this) != DialogResult.OK || restoreMethod == null) return;
+            }
+
+            // .ab file restore
+            if (restoreMethod == "ab")
+            {
+                using (var fileDialog = new OpenFileDialog())
                 {
-                    await Task.Delay(100);
+                    fileDialog.Title = "Select Android Backup (.ab) file";
+                    fileDialog.InitialDirectory = backupFolder;
+                    fileDialog.Filter = "Android Backup Files (*.ab)|*.ab|All Files (*.*)|*.*";
+
+                    if (fileDialog.ShowDialog() != DialogResult.OK) return;
+
+                    Logger.Log($"Selected .ab file: {fileDialog.FileName}");
+                    FlexibleMessageBox.Show(Program.form,
+                        "Click OK, then on your Quest:\n1. Unlock device\n2. Confirm 'Restore My Data'");
+
+                    var output = ADB.RunAdbCommandToString($"restore \"{fileDialog.FileName}\"");
+                    FlexibleMessageBox.Show(Program.form,
+                        string.IsNullOrEmpty(output.Error) ? "Restore completed" : $"Restore result:\n{output.Output}\n{output.Error}",
+                        "Restore Complete");
                 }
+                return;
             }
 
-            if (folderDialogResult == DialogResult.OK)
+            // Folder restore: find newest date folder to preselect
+            string initialPath = backupFolder;
+            if (Directory.Exists(backupFolder))
             {
-                ShowPrcOutput(output);
+                var newestDateFolder = Directory.GetDirectories(backupFolder)
+                    .Select(d => new DirectoryInfo(d))
+                    .Where(d => Regex.IsMatch(d.Name, @"^\d{4}\.\d{2}\.\d{2}$"))
+                    .OrderByDescending(d => d.Name)
+                    .FirstOrDefault();
+
+                if (newestDateFolder != null)
+                    initialPath = newestDateFolder.FullName;
             }
-            else if (fileDialogResult == DialogResult.OK)
+
+            using (var folderDialog = new FolderBrowserDialog())
             {
-                _ = FlexibleMessageBox.Show(Program.form, $"{output_abRestore}");
+                folderDialog.Description = "Select a date folder (e.g., 2026.01.01) to restore ALL gamesaves,\nor a specific game folder (e.g., com.game.name) to restore just that game.";
+                folderDialog.SelectedPath = initialPath;
+                folderDialog.ShowNewFolderButton = false;
+
+                if (folderDialog.ShowDialog() != DialogResult.OK) return;
+
+                string selectedFolder = folderDialog.SelectedPath;
+                string folderName = Path.GetFileName(selectedFolder);
+                Logger.Log($"Selected folder: {selectedFolder}");
+
+                // Determine if this is a date folder or a single game folder
+                bool isDateFolder = Regex.IsMatch(folderName, @"^\d{4}\.\d{2}\.\d{2}$");
+                bool isGameFolder = folderName.Contains(".") && !isDateFolder;
+
+                List<string> gameFoldersToRestore;
+
+                if (isGameFolder)
+                {
+                    // Single game folder selected: restore just this one
+                    gameFoldersToRestore = new List<string> { folderName };
+                    // Parent folder becomes the source
+                    selectedFolder = Path.GetDirectoryName(selectedFolder);
+                }
+                else
+                {
+                    // Date folder or other: get all game subfolders
+                    gameFoldersToRestore = Directory.GetDirectories(selectedFolder)
+                        .Select(Path.GetFileName)
+                        .Where(f => !string.IsNullOrWhiteSpace(f) && f.Contains("."))
+                        .ToList();
+                }
+
+                if (gameFoldersToRestore.Count == 0)
+                {
+                    FlexibleMessageBox.Show(Program.form, "No game folders found in the selected directory.", "Nothing to Restore");
+                    return;
+                }
+
+                changeTitle("Restoring gamesaves...");
+                progressBar.IsIndeterminate = true;
+                progressBar.OperationType = "Restoring";
+
+                var successList = new List<string>();
+                var failedList = new List<string>();
+                int totalGames = gameFoldersToRestore.Count;
+                int processedGames = 0;
+
+                await Task.Run(() =>
+                {
+                    foreach (var gameFolder in gameFoldersToRestore)
+                    {
+                        processedGames++;
+                        this.Invoke(() => changeTitle($"Restoring {gameFolder} ({processedGames}/{totalGames})..."));
+
+                        string sourcePath = Path.Combine(selectedFolder, gameFolder);
+                        string targetPath = $"/sdcard/Android/data/{gameFolder}";
+
+                        var pushOutput = ADB.RunAdbCommandToString($"push \"{sourcePath}\" \"{targetPath}\"", suppressLogging: true);
+
+                        if (string.IsNullOrEmpty(pushOutput.Error))
+                        {
+                            successList.Add(gameFolder);
+                            Logger.Log($"Successfully restored: {gameFolder}", LogLevel.INFO);
+                        }
+                        else
+                        {
+                            failedList.Add($"{gameFolder}: {pushOutput.Error.Split('\n')[0].Trim()}");
+                            Logger.Log($"Failed to restore {gameFolder}: {pushOutput.Error}", LogLevel.WARNING);
+                        }
+                    }
+                });
+
+                progressBar.IsIndeterminate = false;
+                changeTitle("");
+
+                var summary = new StringBuilder();
+                summary.AppendLine($"Restore completed from:\n{selectedFolder}\\\n");
+                summary.AppendLine($"Successfully restored: {successList.Count} game(s)");
+
+                if (failedList.Count > 0)
+                {
+                    summary.AppendLine($"Failed to restore: {failedList.Count} game(s)\n");
+                    summary.AppendLine("Failed games:");
+                    foreach (var failed in failedList)
+                        summary.AppendLine($" • {failed}");
+                }
+
+                FlexibleMessageBox.Show(Program.form, summary.ToString(), "Restore Complete");
             }
         }
 
@@ -1489,7 +1637,7 @@ namespace AndroidSideloader
                         File.Delete($"{settings.MainDir}\\{gameZipName}");
 
                         this.Invoke(() => FlexibleMessageBox.Show(Program.form, $"Upload of {currentlyUploading} is complete! Thank you for your contribution!"));
-                        Directory.Delete($"{settings.MainDir}\\{packageName}", true);
+                        FileSystemUtilities.TryDeleteDirectory($"{settings.MainDir}\\{packageName}");
                     })
                     {
                         IsBackground = true
@@ -1525,14 +1673,7 @@ namespace AndroidSideloader
                 return;
             }
 
-            if (!settings.CustomBackupDir)
-            {
-                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
-            }
-            else
-            {
-                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
-            }
+            backupFolder = settings.GetEffectiveBackupDir();
 
             string packagename;
             string GameName = selectedApp;
@@ -1750,7 +1891,7 @@ namespace AndroidSideloader
                                     await Task.Delay(100);
                                 }
 
-                                Directory.Delete($"{zippath}\\{datazip}", true);
+                                FileSystemUtilities.TryDeleteDirectory($"{zippath}\\{datazip}");
                             }
                         }
                     }
@@ -1907,7 +2048,7 @@ namespace AndroidSideloader
                             await Task.Delay(100);
                         }
 
-                        Directory.Delete(foldername, true);
+                        FileSystemUtilities.TryDeleteDirectory(foldername);
                         changeTitle("");
                     }
                     // BMBF Zip extraction then push to BMBF song folder on Quest.
@@ -1937,7 +2078,7 @@ namespace AndroidSideloader
                             await Task.Delay(100);
                         }
 
-                        Directory.Delete($"{zippath}\\{datazip}", true);
+                        FileSystemUtilities.TryDeleteDirectory($"{zippath}\\{datazip}");
                     }
                     else if (extension == ".txt")
                     {
@@ -2635,7 +2776,7 @@ namespace AndroidSideloader
                         _ = ADB.RunCommandToString(cmd, path);
                         if (Directory.Exists($"{settings.MainDir}\\{game.Pckgcommand}"))
                         {
-                            Directory.Delete($"{settings.MainDir}\\{game.Pckgcommand}", true);
+                            FileSystemUtilities.TryDeleteDirectory($"{settings.MainDir}\\{game.Pckgcommand}");
                         }
                         Program.form.changeTitle("Uploading to server, you can continue to use Rookie while it uploads.");
 
@@ -3740,7 +3881,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                             // only delete after extraction; allows for resume if the fetch fails midway.
                             if (Directory.Exists($"{settings.DownloadDir}\\{gameName}"))
                             {
-                                Directory.Delete($"{settings.DownloadDir}\\{gameName}", true);
+                                FileSystemUtilities.TryDeleteDirectory($"{settings.DownloadDir}\\{gameName}");
                             }
                         }
                     }
@@ -3909,14 +4050,14 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                             if (UsingPublicConfig)
                             {
                                 if (Directory.Exists($"{settings.DownloadDir}\\{cancelledHash}"))
-                                    Directory.Delete($"{settings.DownloadDir}\\{cancelledHash}", true);
+                                    FileSystemUtilities.TryDeleteDirectory($"{settings.DownloadDir}\\{cancelledHash}");
                                 if (Directory.Exists($"{settings.DownloadDir}\\{cancelledGame}"))
-                                    Directory.Delete($"{settings.DownloadDir}\\{cancelledGame}", true);
+                                    FileSystemUtilities.TryDeleteDirectory($"{settings.DownloadDir}\\{cancelledGame}");
                             }
                             else
                             {
                                 if (Directory.Exists($"{settings.DownloadDir}\\{cancelledGame}"))
-                                    Directory.Delete($"{settings.DownloadDir}\\{cancelledGame}", true);
+                                    FileSystemUtilities.TryDeleteDirectory($"{settings.DownloadDir}\\{cancelledGame}");
                             }
                         }
                     }
@@ -4024,7 +4165,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
 
                         if (Directory.Exists($"{settings.DownloadDir}\\{gameNameHash}"))
                         {
-                            Directory.Delete($"{settings.DownloadDir}\\{gameNameHash}", true);
+                            FileSystemUtilities.TryDeleteDirectory($"{settings.DownloadDir}\\{gameNameHash}");
                         }
                     }
 
@@ -4099,7 +4240,8 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                     // Use async method with progress
                                     output += await ADB.SideloadWithProgressAsync(
                                         apkFile,
-                                        (progress, eta) => this.Invoke(() => {
+                                        (progress, eta) => this.Invoke(() =>
+                                        {
                                             if (progress == 0)
                                             {
                                                 progressBar.IsIndeterminate = true;
@@ -4113,7 +4255,8 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                                             UpdateProgressStatus("Installing", percent: (int)Math.Round(progress), eta: eta);
                                             progressBar.StatusText = $"Installing · {progress:0.0}%";
                                         }),
-                                        status => this.Invoke(() => {
+                                        status => this.Invoke(() =>
+                                        {
                                             if (!string.IsNullOrEmpty(status))
                                             {
                                                 if (status.Contains("Completing Installation"))
@@ -4192,7 +4335,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                         if (settings.DeleteAllAfterInstall && !nodeviceonstart && DeviceConnected)
                         {
                             changeTitle("Deleting game files");
-                            try { Directory.Delete(settings.DownloadDir + "\\" + gameName, true); } catch (Exception ex) { _ = FlexibleMessageBox.Show(Program.form, $"Error deleting game files: {ex.Message}"); }
+                            try { FileSystemUtilities.TryDeleteDirectory(settings.DownloadDir + "\\" + gameName); } catch (Exception ex) { _ = FlexibleMessageBox.Show(Program.form, $"Error deleting game files: {ex.Message}"); }
                         }
 
                         // Update device space after successful installation
@@ -4405,7 +4548,7 @@ If the problem persists, visit our Telegram (https://t.me/VRPirates) or Discord 
                     timerticked = false;
                     if (Directory.Exists(Path.Combine(Environment.CurrentDirectory, CurrPCKG)))
                     {
-                        Directory.Delete(Path.Combine(Environment.CurrentDirectory, CurrPCKG), true);
+                        FileSystemUtilities.TryDeleteDirectory(Path.Combine(Environment.CurrentDirectory, CurrPCKG));
                     }
 
                     changeTitle("");
@@ -5454,7 +5597,8 @@ CTRL + F4  - Instantly relaunch Rookie Sideloader");
 
             try
             {
-                var appDataFolder = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "RSL");
+                var appDataFolder = Path.Combine(Environment.CurrentDirectory, "WebView2Cache");
+                Directory.CreateDirectory(appDataFolder); // Ensure it exists
                 var env = await CoreWebView2Environment.CreateAsync(userDataFolder: appDataFolder);
 
                 await webView21.EnsureCoreWebView2Async(env);
@@ -5622,28 +5766,151 @@ function onYouTubeIframeAPIReady() {
             if (_videoIdCache.TryGetValue(gameName, out var cached))
                 return cached;
 
-            // Lightweight search
+            string cleanedName = CleanGameNameForSearch(gameName);
+            string searchTerm = $"{cleanedName} VR trailer";
+
             try
             {
-                string query = WebUtility.UrlEncode($"\"{gameName}\" VR trailer");
-                string searchUrl = $"https://www.youtube.com/results?search_query={query}";
                 using (var http = new HttpClient())
                 {
                     http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/119.0");
+                    http.Timeout = TimeSpan.FromSeconds(5);
+
+                    string query = WebUtility.UrlEncode(searchTerm);
+                    string searchUrl = $"https://www.youtube.com/results?search_query={query}";
+
                     var html = await http.GetStringAsync(searchUrl);
-                    var vid = ExtractVideoId(html);
-                    if (!string.IsNullOrEmpty(vid))
+                    var videoId = ExtractBestVideoId(html, cleanedName);
+
+                    if (!string.IsNullOrEmpty(videoId))
                     {
-                        _videoIdCache[gameName] = vid;
-                        return vid;
+                        _videoIdCache[gameName] = videoId;
+                        return videoId;
                     }
                 }
             }
             catch
             {
-                // swallow – return empty
+                // swallow
             }
+
+            // Cache empty result to prevent repeated lookups
+            _videoIdCache[gameName] = string.Empty;
             return string.Empty;
+        }
+
+        private static string CleanGameNameForSearch(string gameName)
+        {
+            if (string.IsNullOrWhiteSpace(gameName))
+                return gameName;
+
+            // Clean up game name, remove:
+            string[] patternsToRemove = new[]
+            {
+                @"\s*\([^)]+\)",                 // (anything in parentheses)
+                @"\s*\[[^\]]*\]",                // [anything in brackets]
+                @"\s+v?\d+\.\d+[\d.]*\b",        // version numbers. v1.0, 1.35.0, 1.37.0 etc.
+            };
+
+            string cleaned = gameName;
+            foreach (string pattern in patternsToRemove)
+                cleaned = Regex.Replace(cleaned, pattern, "", RegexOptions.IgnoreCase);
+
+            // Clean up trailing punctuation and whitespace
+            cleaned = Regex.Replace(cleaned, @"[-:,]+$", "");
+            cleaned = Regex.Replace(cleaned, @"\s+", " ").Trim();
+
+            // If cleaning removed everything, return original
+            return string.IsNullOrWhiteSpace(cleaned) ? gameName.Trim() : cleaned;
+        }
+
+        private static readonly Regex VideoDataRegex = new Regex(
+            @"""videoRenderer""\s*:\s*\{\s*[^}]*?""videoId""\s*:\s*""([A-Za-z0-9_\-]{11})""[\s\S]*?""title""\s*:\s*\{\s*""runs""\s*:\s*\[\s*\{\s*""text""\s*:\s*""([^""]+)""",
+            RegexOptions.Compiled);
+
+        private static readonly Regex UnicodeEscapeRegex = new Regex(
+            @"\\u([0-9A-Fa-f]{4})",
+            RegexOptions.Compiled);
+
+        private static string ExtractBestVideoId(string html, string cleanedGameName)
+        {
+            if (string.IsNullOrEmpty(html))
+                return string.Empty;
+
+            var videoMatches = VideoDataRegex.Matches(html);
+
+            // Fallback: no matches found, do simple extraction
+            if (videoMatches.Count == 0)
+            {
+                var simpleMatch = Regex.Match(html, @"\/watch\?v=([A-Za-z0-9_\-]{11})");
+                return simpleMatch.Success ? simpleMatch.Groups[1].Value : string.Empty;
+            }
+
+            // Prepare game name words for matching
+            string lowerGameName = cleanedGameName.ToLowerInvariant();
+            var gameWords = lowerGameName
+                .Split(new[] { ' ', '-', ':', '&' }, StringSplitOptions.RemoveEmptyEntries)
+                .ToList();
+
+            int requiredMatches = Math.Max(1, gameWords.Count / 2);
+            string bestVideoId = null;
+            int bestScore = 0;
+            int position = 0;
+
+            // Score each match
+            foreach (Match match in videoMatches)
+            {
+                string videoId = match.Groups[1].Value;
+                string title = match.Groups[2].Value.ToLowerInvariant();
+
+                title = UnicodeEscapeRegex.Replace(title, m =>
+                    ((char)Convert.ToInt32(m.Groups[1].Value, 16)).ToString());
+
+                // Entry must match at least half the game name
+                int matchedWords = gameWords.Count(w => title.Contains(w));
+                if (matchedWords < requiredMatches)
+                    continue;
+
+                position++;
+
+                // Only process first 5 matches
+                if (position > 5)
+                    break;
+
+                int score = matchedWords * 10;
+
+                // Position bonus
+                if (position == 1) score += 30;
+                else if (position == 2) score += 20;
+                else if (position == 3) score += 10;
+
+                // Word bonus
+                if (title.Contains("trailer")) score += 20;
+                if (title.Contains("official") || title.Contains("launch") || title.Contains("release")) score += 15;
+                if (title.Contains("announce")) score += 12; // also includes "announcement"
+                if (title.Contains("gameplay") || title.Contains("vr")) score += 5;
+
+                // Noise penalty for extra words
+                int totalWords = title.Split(new[] { ' ', '-', '|', ':', '–' },
+                    StringSplitOptions.RemoveEmptyEntries).Length;
+                int extraWords = totalWords - gameWords.Count;
+                score += extraWords * -3;  // -3 per extra word
+
+                // Hard penalties for junk
+                if (title.Contains("review") ||
+                    title.Contains("tutorial") ||
+                    title.Contains("how to") ||
+                    title.Contains("reaction"))
+                    score -= 30;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestVideoId = videoId;
+                }
+            }
+
+            return bestVideoId ?? string.Empty;
         }
 
         public async void gamesListView_SelectedIndexChanged(object sender, EventArgs e)
@@ -5930,7 +6197,7 @@ function onYouTubeIframeAPIReady() {
                 ulong VersionInt = ulong.Parse(Utilities.StringUtilities.KeepOnlyNumbers(InstalledVersionCode));
                 if (Directory.Exists($"{settings.MainDir}\\{packageName}"))
                 {
-                    Directory.Delete($"{settings.MainDir}\\{packageName}", true);
+                    FileSystemUtilities.TryDeleteDirectory($"{settings.MainDir}\\{packageName}");
                 }
 
                 ProcessOutput output = new ProcessOutput("", "");
@@ -5996,7 +6263,7 @@ function onYouTubeIframeAPIReady() {
 
                 File.Copy($"{settings.MainDir}\\{GameName} v{VersionInt} {packageName}.zip", $"{Environment.GetFolderPath(Environment.SpecialFolder.Desktop)}\\{GameName} v{VersionInt} {packageName}.zip");
                 File.Delete($"{settings.MainDir}\\{GameName} v{VersionInt} {packageName}.zip");
-                Directory.Delete($"{settings.MainDir}\\{packageName}", true);
+                FileSystemUtilities.TryDeleteDirectory($"{settings.MainDir}\\{packageName}");
                 isworking = false;
                 changeTitle("");
                 progressBar.IsIndeterminate = false;
@@ -6263,7 +6530,7 @@ function onYouTubeIframeAPIReady() {
 
             gamesListView.SelectedItems.Clear();
             _rightClickedItem.Selected = true;
-            
+
             UpdateFavoriteMenuItemText();
             favoriteGame.Show(gamesListView, e.Location);
         }
@@ -6371,7 +6638,9 @@ function onYouTubeIframeAPIReady() {
                     if (string.IsNullOrEmpty(firmware))
                     {
                         firmware = string.Empty;
-                    } else {
+                    }
+                    else
+                    {
                         firmware = Utilities.StringUtilities.RemoveEverythingBeforeFirst(firmware, "-v");
                         firmware = Utilities.StringUtilities.KeepOnlyNumbers(firmware);
                     }
@@ -6383,7 +6652,7 @@ function onYouTubeIframeAPIReady() {
                     long totalSpace = 0;
                     long usedSpace = 0;
                     long freeSpace = 0;
-                    
+
                     if (lines.Length > 1)
                     {
                         string[] parts = lines[1].Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
@@ -8000,24 +8269,17 @@ function onYouTubeIframeAPIReady() {
 
             // Confirm uninstall
             DialogResult dialogresult = FlexibleMessageBox.Show(
-                $"Are you sure you want to uninstall {gameName}?", 
+                $"Are you sure you want to uninstall {gameName}?",
                 "Proceed with uninstall?", MessageBoxButtons.YesNo);
 
             if (dialogresult == DialogResult.No)
                 return;
 
             // Ask about backup
-            if (!settings.CustomBackupDir)
-            {
-                backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
-            }
-            else
-            {
-                backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
-            }
+            backupFolder = settings.GetEffectiveBackupDir();
 
             DialogResult dialogresult2 = FlexibleMessageBox.Show(
-                $"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\", 
+                $"Do you want to attempt to automatically backup any saves to {backupFolder}\\{DateTime.Today.ToString("yyyy.MM.dd")}\\",
                 "Attempt Game Backup?", MessageBoxButtons.YesNo);
 
             if (dialogresult2 == DialogResult.Yes)
@@ -8030,7 +8292,8 @@ function onYouTubeIframeAPIReady() {
             progressBar.IsIndeterminate = true;
             progressBar.OperationType = "";
 
-            await Task.Run(() => {
+            await Task.Run(() =>
+            {
                 output += Sideloader.UninstallGame(packageName);
             });
 
