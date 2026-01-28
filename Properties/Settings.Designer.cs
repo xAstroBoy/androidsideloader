@@ -12,7 +12,7 @@ namespace AndroidSideloader.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "17.10.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "17.14.0.0")]
     internal sealed partial class Settings : global::System.Configuration.ApplicationSettingsBase {
         
         private static Settings defaultInstance = ((Settings)(global::System.Configuration.ApplicationSettingsBase.Synchronized(new Settings())));
@@ -109,7 +109,7 @@ namespace AndroidSideloader.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("Microsoft Sans Serif, 11.25pt")]
+        [global::System.Configuration.DefaultSettingValueAttribute("Microsoft Sans Serif, 10pt")]
         public global::System.Drawing.Font FontStyle {
             get {
                 return ((global::System.Drawing.Font)(this["FontStyle"]));
@@ -540,7 +540,7 @@ namespace AndroidSideloader.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("25, 25, 25")]
+        [global::System.Configuration.DefaultSettingValueAttribute("42, 45, 58")]
         public global::System.Drawing.Color SubButtonColor {
             get {
                 return ((global::System.Drawing.Color)(this["SubButtonColor"]));
@@ -564,7 +564,7 @@ namespace AndroidSideloader.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("Black")]
+        [global::System.Configuration.DefaultSettingValueAttribute("32, 35, 45")]
         public global::System.Drawing.Color ButtonColor {
             get {
                 return ((global::System.Drawing.Color)(this["ButtonColor"]));
@@ -576,7 +576,7 @@ namespace AndroidSideloader.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("1, 1, 1")]
+        [global::System.Configuration.DefaultSettingValueAttribute("31, 34, 42")]
         public global::System.Drawing.Color BackColor {
             get {
                 return ((global::System.Drawing.Color)(this["BackColor"]));

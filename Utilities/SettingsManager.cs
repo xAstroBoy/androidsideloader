@@ -120,7 +120,6 @@ namespace AndroidSideloader.Utilities
         public DateTime LastLaunch2 { get; set; } = new DateTime(1969, 4, 20, 16, 20, 0);
         public bool Wired { get; set; } = false;
         public string AppPackages { get; set; } = string.Empty;
-        public bool TrailersOn { get; set; } = false;
         public string DownloadDir { get; set; } = string.Empty;
         public bool CustomDownloadDir { get; set; } = false;
         public bool CustomBackupDir { get; set; } = false;
@@ -132,8 +131,27 @@ namespace AndroidSideloader.Utilities
         public bool CreatePubMirrorFile { get; set; } = true;
         public bool UseDownloadedFiles { get; set; } = false;
         public float BandwidthLimit { get; set; } = 0f;
-        public bool HideAdultContent { get; set; } = false;
         public string[] FavoritedGames { get; set; } = new string[0];
+        public bool useProxy { get; set; } = false;
+        public string ProxyAddress { get; set; } = string.Empty;
+        public string ProxyPort { get; set; } = string.Empty;
+        public string selectedMirror { get; set; } = string.Empty;
+        public bool TrailersEnabled { get; set; } = true;
+        public bool UseGalleryView { get; set; } = true;
+
+        // Window state persistence
+        public int WindowX { get; set; } = -1;
+        public int WindowY { get; set; } = -1;
+        public int WindowWidth { get; set; } = -1;
+        public int WindowHeight { get; set; } = -1;
+        public bool WindowMaximized { get; set; } = false;
+
+        // Sort state persistence
+        public int SortColumn { get; set; } = 0;
+        public bool SortAscending { get; set; } = true;
+
+        // Download queue persistence
+        public string[] QueuedGames { get; set; } = new string[0];
 
         private SettingsManager()
         {
@@ -242,7 +260,6 @@ namespace AndroidSideloader.Utilities
             LastLaunch2 = new DateTime(1969, 4, 20, 16, 20, 0);
             Wired = false;
             AppPackages = string.Empty;
-            TrailersOn = false;
             DownloadDir = string.Empty;
             CustomDownloadDir = false;
             CustomBackupDir = false;
@@ -254,10 +271,23 @@ namespace AndroidSideloader.Utilities
             CreatePubMirrorFile = true;
             UseDownloadedFiles = false;
             BandwidthLimit = 0f;
-            HideAdultContent = false;
             FavoritedGames = new string[0];
+            useProxy = false;
+            ProxyAddress = string.Empty;
+            ProxyPort = string.Empty;
+            selectedMirror = string.Empty;
+            TrailersEnabled = true;
+            UseGalleryView = true;
+            WindowX = -1;
+            WindowY = -1;
+            WindowWidth = -1;
+            WindowHeight = -1;
+            WindowMaximized = false;
+            SortColumn = 0;
+            SortAscending = true;
+            QueuedGames = new string[0];
 
-        Save();
+            Save();
             Debug.WriteLine("Default settings created.");
         }
 
@@ -281,6 +311,16 @@ namespace AndroidSideloader.Utilities
                 FavoritedGames = list.ToArray();
                 Save(); 
             }
+        }
+
+        public string GetEffectiveBackupDir()
+        {
+            if (CustomBackupDir && Directory.Exists(BackupDir))
+            {
+                return BackupDir;
+            }
+
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Rookie Backups");
         }
 
         public void Dispose()

@@ -51,8 +51,9 @@ namespace AndroidSideloader
                 settings.CurrentLogPath = logFilePath;
                 settings.Save();
 
-                // Initial log entry
-                Log($"Logger initialized at: {DateTime.Now:hh:mmtt(UTC)}", LogLevel.INFO);
+                // Initial log entry, make it stand out
+                string time = DateTime.UtcNow.ToString("hh:mm:ss.fff tt (UTC): ");
+                Log($"\n\n{time}------------ Logger initialized  ------------", LogLevel.INFO);
             }
             catch (Exception ex)
             {

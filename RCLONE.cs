@@ -105,6 +105,9 @@ namespace AndroidSideloader
             rclone.StartInfo.RedirectStandardOutput = true;
             rclone.StartInfo.WorkingDirectory = Path.Combine(Environment.CurrentDirectory, "rclone");
             rclone.StartInfo.CreateNoWindow = true;
+
+            setRcloneProxy();
+
             // Display RCLONE Window if the binary is being run in Debug Mode.
             if (MainForm.debugMode)
             {
@@ -204,6 +207,9 @@ namespace AndroidSideloader
             rclone.StartInfo.RedirectStandardOutput = true;
             rclone.StartInfo.WorkingDirectory = Path.Combine(Environment.CurrentDirectory, "rclone");
             rclone.StartInfo.CreateNoWindow = true;
+
+            setRcloneProxy();
+
             // Display RCLONE Window if the binary is being run in Debug Mode.
             if (MainForm.debugMode)
             {
@@ -281,6 +287,9 @@ namespace AndroidSideloader
             rclone.StartInfo.RedirectStandardOutput = true;
             rclone.StartInfo.WorkingDirectory = Path.Combine(Environment.CurrentDirectory, "rclone");
             rclone.StartInfo.CreateNoWindow = true;
+
+            setRcloneProxy();
+
             // Display RCLONE Window if the binary is being run in Debug Mode.
             if (MainForm.debugMode)
             {
@@ -345,5 +354,38 @@ namespace AndroidSideloader
 
             return prcoutput;
         }
+
+        private static void setRcloneProxy()
+        {
+            // Use the user's proxy settings if set, otherwise fallback to DNS fallback proxy if active
+            string proxyUrl = DnsHelper.ProxyUrl;
+
+            if (settings.useProxy)
+            {
+                // Use user's configured proxy
+                var url = $"http://{settings.ProxyAddress}:{settings.ProxyPort}";
+                rclone.StartInfo.EnvironmentVariables["HTTP_PROXY"] = url;
+                rclone.StartInfo.EnvironmentVariables["HTTPS_PROXY"] = url;
+                rclone.StartInfo.EnvironmentVariables["http_proxy"] = url;
+                rclone.StartInfo.EnvironmentVariables["https_proxy"] = url;
+            }
+            else if (!string.IsNullOrEmpty(proxyUrl))
+            {
+                // Use our DNS-resolving proxy
+                rclone.StartInfo.EnvironmentVariables["HTTP_PROXY"] = proxyUrl;
+                rclone.StartInfo.EnvironmentVariables["HTTPS_PROXY"] = proxyUrl;
+                rclone.StartInfo.EnvironmentVariables["http_proxy"] = proxyUrl;
+                rclone.StartInfo.EnvironmentVariables["https_proxy"] = proxyUrl;
+            }
+            else
+            {
+                // No proxy
+                rclone.StartInfo.EnvironmentVariables.Remove("HTTP_PROXY");
+                rclone.StartInfo.EnvironmentVariables.Remove("HTTPS_PROXY");
+                rclone.StartInfo.EnvironmentVariables.Remove("http_proxy");
+                rclone.StartInfo.EnvironmentVariables.Remove("https_proxy");
+            }
+        }
     }
 }
+

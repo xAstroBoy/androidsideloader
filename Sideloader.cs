@@ -17,33 +17,6 @@ namespace AndroidSideloader
         public static string TempFolder = Path.Combine(Environment.CurrentDirectory, "temp");
         public static string CrashLogPath = "crashlog.txt";
 
-        public static void killWebView2()
-        {
-            var parentProcessId = Process.GetCurrentProcess().Id;
-            var processes = Process.GetProcessesByName("msedgewebview2");
-
-            foreach (var process in processes)
-            {
-                try
-                {
-                    using (ManagementObject obj = new ManagementObject($"win32_process.handle='{process.Id}'"))
-                    {
-                        obj.Get();
-                        var ppid = Convert.ToInt32(obj["ParentProcessId"]);
-
-                        if (ppid == parentProcessId)
-                        {
-                            process.Kill();
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _ = Logger.Log($"Exception occured while attempting to shut down WebView2 with exception message: {ex.Message}", LogLevel.ERROR);
-                }
-            }
-        }
-
         //push user.json to device (required for some devices like oculus quest)
         public static void PushUserJsons()
         {
@@ -111,10 +84,6 @@ namespace AndroidSideloader
             return output;
         }
 
-
-
-
-
         //Recursive sideload any apk fileD
         public static ProcessOutput RecursiveOutput = new ProcessOutput();
         public static void RecursiveSideload(string FolderPath)
@@ -167,14 +136,7 @@ namespace AndroidSideloader
 
         public static void BackupGame(string packagename)
         {
-            if (!settings.CustomBackupDir)
-            {
-                MainForm.backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), $"Rookie Backups");
-            }
-            else
-            {
-                MainForm.backupFolder = Path.Combine((settings.BackupDir), $"Rookie Backups");
-            }
+            MainForm.backupFolder = settings.GetEffectiveBackupDir();
             if (!Directory.Exists(MainForm.backupFolder))
             {
                 _ = Directory.CreateDirectory(MainForm.backupFolder);
@@ -235,7 +197,7 @@ namespace AndroidSideloader
 
             if (Directory.Exists($"{settings.MainDir}\\{packageName}"))
             {
-                Directory.Delete($"{settings.MainDir}\\{packageName}", true);
+                FileSystemUtilities.TryDeleteDirectory($"{settings.MainDir}\\{packageName}");
             }
 
             _ = Directory.CreateDirectory($"{settings.MainDir}\\{packageName}");
