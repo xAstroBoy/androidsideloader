@@ -441,13 +441,15 @@ namespace AndroidSideloader
         {
             _ = Logger.Log("Starting AndroidSideloader Application");
 
-            // Hard kill any lingering adb.exe instances to avoid port/handle conflicts
-            KillAdbProcesses();
-
-            // ADB initialization in background
+            // Reuse an already-running adb server instead of killing it. A hard kill would
+            // tear down any active wireless (adb connect) session and force a reconnect that
+            // often fails silently. start-server is a no-op when a compatible server is already
+            // up, so the existing server - and any connected device, wired or wireless - is
+            // preserved. (Both the bundled adb and any adb in PATH are the same version now, so
+            // there is no version-mismatch bounce to guard against.)
             _adbInitTask = Task.Run(() =>
             {
-                _ = Logger.Log("Attempting to Initialize ADB Server");
+                _ = Logger.Log("Initializing ADB server (reusing existing if already running)");
                 if (File.Exists(Path.Combine(Environment.CurrentDirectory, "platform-tools", "adb.exe")))
                 {
                     _ = ADB.RunAdbCommandToString("start-server");

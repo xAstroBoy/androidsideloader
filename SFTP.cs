@@ -526,6 +526,31 @@ namespace AndroidSideloader
                 throw workerError;
             }
 
+            // Make the freshly-written OBB tree readable by the game. adb push goes through
+            // the adb daemon which lands app-readable perms; an sshd running as root can
+            // instead write root-owned/restrictive files. On FUSE-emulated storage these
+            // calls are effectively no-ops (perms/SELinux labels are synthesized), but where
+            // the sshd writes through to a real filesystem this is what lets the app open its
+            // OBB. Best-effort — failures are ignored.
+            try
+            {
+                using (SshClient ssh = new SshClient(BuildConnectionInfo(Host, Port)))
+                {
+                    ssh.Connect();
+                    using (SshCommand cmd = ssh.CreateCommand(
+                        $"chmod -R 0777 {quotedRemotePath} 2>/dev/null; restorecon -R {quotedRemotePath} 2>/dev/null; true"))
+                    {
+                        cmd.CommandTimeout = TimeSpan.FromSeconds(30);
+                        cmd.Execute();
+                    }
+                    ssh.Disconnect();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"SFTP: post-transfer chmod/restorecon skipped: {ex.Message}", LogLevel.WARNING);
+            }
+
             progressCallback?.Invoke(100, null);
             statusCallback?.Invoke("");
 

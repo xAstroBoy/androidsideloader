@@ -72,7 +72,7 @@ namespace AndroidSideloader
             return _currentDevice;
         }
 
-        public static ProcessOutput RunAdbCommandToString(string command, bool suppressLogging = false)
+        public static ProcessOutput RunAdbCommandToString(string command, bool suppressLogging = false, int timeoutMs = 0)
         {
             if (!File.Exists(adbFilePath))
             {
@@ -101,7 +101,30 @@ namespace AndroidSideloader
             }
 
             bool isConnectCommand = command.Contains("connect");
-            int timeoutMs = isConnectCommand ? 5000 : -1; // 5 second timeout for connect commands
+            // Large transfers and on-device backup/restore prompts can legitimately run
+            // for a long time, so they must never be force-killed. Every other shell
+            // command gets a safety timeout so a wedged device command (e.g. Android's
+            // `df` blocking on an unresponsive mount) can't freeze the app indefinitely.
+            bool isLongOp = command.Contains("pull") || command.Contains("push")
+                            || command.Contains("backup") || command.Contains("restore")
+                            || command.Contains("install");
+            int effectiveTimeout;
+            if (timeoutMs != 0)
+            {
+                effectiveTimeout = timeoutMs; // caller override (-1 = wait forever)
+            }
+            else if (isConnectCommand)
+            {
+                effectiveTimeout = 5000;
+            }
+            else if (isLongOp)
+            {
+                effectiveTimeout = -1;
+            }
+            else
+            {
+                effectiveTimeout = 45000;
+            }
 
             using (Process adb = new Process())
             {
@@ -119,21 +142,30 @@ namespace AndroidSideloader
 
                 try
                 {
-                    if (isConnectCommand)
+                    if (effectiveTimeout > 0)
                     {
-                        // For connect commands, we use async reading with timeout to avoid blocking on TCP timeout
+                        // Async reads + a bounded wait so a wedged device command can't block
+                        // forever (also avoids the classic sequential stdout/stderr deadlock).
                         var outputTask = adb.StandardOutput.ReadToEndAsync();
                         var errorTask = adb.StandardError.ReadToEndAsync();
 
-                        bool exited = adb.WaitForExit(timeoutMs);
+                        bool exited = adb.WaitForExit(effectiveTimeout);
 
                         if (!exited)
                         {
                             try { adb.Kill(); } catch { }
                             adb.WaitForExit(1000);
-                            output = "Connection timed out";
-                            error = "cannot connect: Connection timed out";
-                            Logger.Log($"ADB connect command timed out after {timeoutMs}ms", LogLevel.WARNING);
+                            if (isConnectCommand)
+                            {
+                                output = "Connection timed out";
+                                error = "cannot connect: Connection timed out";
+                            }
+                            else
+                            {
+                                output = "";
+                                error = $"adb command timed out after {effectiveTimeout}ms";
+                            }
+                            Logger.Log($"ADB command timed out after {effectiveTimeout}ms: {command.Trim()}", LogLevel.WARNING);
                         }
                         else
                         {
@@ -144,7 +176,7 @@ namespace AndroidSideloader
                     }
                     else
                     {
-                        // For non-connect commands, read output normally
+                        // Long-running op (transfer/backup/restore/install): read to completion.
                         output = adb.StandardOutput.ReadToEnd();
                         error = adb.StandardError.ReadToEnd();
                     }
