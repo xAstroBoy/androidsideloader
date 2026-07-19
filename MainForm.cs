@@ -52,6 +52,7 @@ namespace AndroidSideloader
 #endif
         private readonly ListViewColumnSorter lvwColumnSorter;
         private static readonly SettingsManager settings = SettingsManager.Instance;
+        private bool _sftpCredsPrompted = false;
         private double _totalQueueSizeMB = 0;
         private double _effectiveQueueSizeMB = 0;
         private Dictionary<string, double> _queueEffectiveSizes = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
@@ -1093,7 +1094,9 @@ namespace AndroidSideloader
         {
             Devices.Clear();
             ADB.DeviceID = GetDeviceID();
-            string output = await Task.Run(() => ADB.RunAdbCommandToString("devices").Output); // Run off UI thread
+            // Resilient: rides through an adb daemon restart so a version-mismatch server
+            // bounce doesn't briefly clear the device and flash "No Device Connected".
+            string output = await Task.Run(() => ADB.GetDevicesResilient().Output); // Run off UI thread
 
             string[] line = output.Split('\n');
             int i = 0;
@@ -1243,9 +1246,42 @@ namespace AndroidSideloader
             }
             else if (Devices.Count > 0 && Devices[0].Length > 1) // Check if Devices list is not empty and the first device has a valid length
             {
-                this.Invoke(() => { Text = "Rookie Sideloader " + Updater.LocalVersion + " | Device Connected: " + Devices[0].Replace("device", String.Empty).Trim(); });
+                string deviceTitle = "Rookie Sideloader " + Updater.LocalVersion + " | Device Connected: " + Devices[0].Replace("device", String.Empty).Trim();
+                this.Invoke(() => { Text = deviceTitle; });
                 DeviceConnected = true;
                 nodeviceonstart = false; // Device connected, clear the flag
+
+                // Detect root + SFTP availability in the background and reflect it in the titlebar
+                _ = Task.Run(async () =>
+                {
+                    await SFTP.DetectAsync(force: true);
+                    try
+                    {
+                        this.Invoke(() => { Text = deviceTitle + SFTP.TitleSuffix; });
+
+                        // A server answered but our credentials didn't work: ask the user
+                        // (once per session) for a password or key file, then retry
+                        if (!SFTP.IsSftpAvailable && SFTP.AuthFailedButServerPresent
+                            && settings.EnableSftpTransfers && !_sftpCredsPrompted)
+                        {
+                            _sftpCredsPrompted = true;
+                            bool retry = false;
+                            this.Invoke(() =>
+                            {
+                                using (SftpCredentialsForm dialog = new SftpCredentialsForm())
+                                {
+                                    retry = dialog.ShowDialog(this) == DialogResult.OK;
+                                }
+                            });
+                            if (retry)
+                            {
+                                await SFTP.DetectAsync(force: true);
+                                this.Invoke(() => { Text = deviceTitle + SFTP.TitleSuffix; });
+                            }
+                        }
+                    }
+                    catch { }
+                });
             }
             else
             {
@@ -10214,7 +10250,7 @@ function onYouTubeIframeAPIReady() {
             // Run a quick device check in background
             try
             {
-                string output = await Task.Run(() => ADB.RunAdbCommandToString("devices", suppressLogging: true).Output);
+                string output = await Task.Run(() => ADB.GetDevicesResilient().Output);
 
                 string[] lines = output.Split('\n');
                 bool hasDeviceNow = false;
