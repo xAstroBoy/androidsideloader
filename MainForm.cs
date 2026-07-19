@@ -7882,10 +7882,22 @@ function onYouTubeIframeAPIReady() {
             {
                 try
                 {
-                    ADB.DeviceID = GetDeviceID();
+                    // Fetch device info OFF the UI thread. These adb shell calls can block for
+                    // tens of seconds if the adb server is mid-restart (e.g. a version-mismatched
+                    // adb elsewhere bounces the daemon); running them here would freeze the whole UI.
+                    var info = await Task.Run(() =>
+                    {
+                        ADB.DeviceID = GetDeviceID();
+                        return new
+                        {
+                            Model = ADB.RunAdbCommandToString("shell getprop ro.product.model").Output.Trim(),
+                            Firmware = ADB.RunAdbCommandToString("shell getprop ro.build.branch").Output.Trim(),
+                            Storage = ADB.RunAdbCommandToString("shell df /data").Output
+                        };
+                    });
 
                     // Get device model
-                    string deviceModel = ADB.RunAdbCommandToString("shell getprop ro.product.model").Output.Trim();
+                    string deviceModel = info.Model;
                     if (string.IsNullOrEmpty(deviceModel))
                     {
                         deviceModel = "No Device Found";
@@ -7893,7 +7905,7 @@ function onYouTubeIframeAPIReady() {
                         bShowStatus = false;
                     }
 
-                    string firmware = ADB.RunAdbCommandToString("shell getprop ro.build.branch").Output.Trim(); // releases-oculus-14.0-v78
+                    string firmware = info.Firmware; // releases-oculus-14.0-v78
                     if (string.IsNullOrEmpty(firmware))
                     {
                         firmware = string.Empty;
@@ -7905,7 +7917,7 @@ function onYouTubeIframeAPIReady() {
                     }
 
                     // Get storage info
-                    string storageOutput = ADB.RunAdbCommandToString("shell df /data").Output;
+                    string storageOutput = info.Storage;
                     string[] lines = storageOutput.Split('\n');
 
                     long totalSpace = 0;
