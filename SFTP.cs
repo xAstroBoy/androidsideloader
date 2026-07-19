@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace AndroidSideloader
@@ -356,17 +357,19 @@ namespace AndroidSideloader
 
             string[] files = Directory.GetFiles(localPath, "*", SearchOption.AllDirectories);
             long totalBytes = files.Sum(f => new FileInfo(f).Length);
-            long transferredBytes = 0;
+            long transferredBytes = 0; // shared across worker threads (Interlocked)
 
+            DateTime startTime = DateTime.UtcNow;
             DateTime lastProgressUpdate = DateTime.MinValue;
             float lastReportedPercent = -1;
             const int ThrottleMs = 100;
             EtaEstimator eta = new EtaEstimator(alpha: 0.10, reanchorThreshold: 0.20);
+            object progressLock = new object();
 
+            // Recreate the OBB folder fresh, matching the adb push behaviour
             using (SshClient ssh = new SshClient(BuildConnectionInfo(Host, Port)))
             {
                 ssh.Connect();
-                // Recreate the OBB folder fresh, matching the adb push behaviour
                 using (SshCommand cmd = ssh.CreateCommand($"rm -rf {quotedRemotePath} && mkdir -p {quotedRemotePath}"))
                 {
                     cmd.CommandTimeout = TimeSpan.FromSeconds(60);
@@ -379,68 +382,155 @@ namespace AndroidSideloader
                 ssh.Disconnect();
             }
 
-            using (SftpClient sftp = new SftpClient(BuildConnectionInfo(Host, Port)))
+            // Map every local file to its remote path, and pre-create all remote
+            // subdirectories up front on a single connection. Doing this before the
+            // parallel phase avoids races on directory creation between workers.
+            var remoteFiles = new Dictionary<string, string>(files.Length, StringComparer.Ordinal);
+            var remoteDirs = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string file in files)
             {
-                sftp.Connect();
-                sftp.BufferSize = TransferBufferSize;
-
-                HashSet<string> createdDirs = new HashSet<string> { remotePath };
-                statusCallback?.Invoke($"Copying: {folderName} (SFTP)");
-
-                foreach (string file in files)
+                string relativePath = file.Substring(localPath.Length)
+                                          .TrimStart('\\', '/')
+                                          .Replace('\\', '/');
+                string remoteFilePath = $"{remotePath}/{relativePath}";
+                remoteFiles[file] = remoteFilePath;
+                int slash = remoteFilePath.LastIndexOf('/');
+                if (slash > 0)
                 {
-                    string relativePath = file.Substring(localPath.Length)
-                                              .TrimStart('\\', '/')
-                                              .Replace('\\', '/');
-                    string remoteFilePath = $"{remotePath}/{relativePath}";
-                    string fileName = Path.GetFileName(file);
-
-                    string remoteDir = remoteFilePath.Substring(0, remoteFilePath.LastIndexOf('/'));
-                    EnsureRemoteDirectory(sftp, remoteDir, createdDirs);
-
-                    long fileSize = new FileInfo(file).Length;
-                    long baseTransferred = transferredBytes;
-
-                    using (FileStream stream = File.OpenRead(file))
-                    {
-                        sftp.UploadFile(stream, remoteFilePath, true, uploaded =>
-                        {
-                            long totalProgressBytes = baseTransferred + (long)uploaded;
-
-                            float overallPercent = totalBytes > 0
-                                ? (float)(totalProgressBytes * 100.0 / totalBytes)
-                                : 0f;
-                            overallPercent = Math.Max(0, Math.Min(100, overallPercent));
-
-                            if (totalBytes > 0 && totalProgressBytes > 0 && overallPercent < 100)
-                            {
-                                eta.Update(totalUnits: totalBytes, doneUnits: totalProgressBytes);
-                            }
-                            TimeSpan? displayEta = eta.GetDisplayEta();
-
-                            DateTime now = DateTime.UtcNow;
-                            bool shouldUpdate = (now - lastProgressUpdate).TotalMilliseconds >= ThrottleMs
-                                                || Math.Abs(overallPercent - lastReportedPercent) >= 0.1f;
-                            if (shouldUpdate)
-                            {
-                                lastProgressUpdate = now;
-                                lastReportedPercent = overallPercent;
-                                progressCallback?.Invoke(overallPercent, displayEta);
-                                statusCallback?.Invoke($"{fileName} · SFTP");
-                            }
-                        });
-                    }
-
-                    transferredBytes += fileSize;
+                    remoteDirs.Add(remoteFilePath.Substring(0, slash));
                 }
+            }
+            if (remoteDirs.Any(d => d != remotePath))
+            {
+                using (SftpClient dirClient = new SftpClient(BuildConnectionInfo(Host, Port)))
+                {
+                    dirClient.Connect();
+                    HashSet<string> created = new HashSet<string> { remotePath };
+                    foreach (string dir in remoteDirs)
+                    {
+                        EnsureRemoteDirectory(dirClient, dir, created);
+                    }
+                    dirClient.Disconnect();
+                }
+            }
 
-                sftp.Disconnect();
+            // How many files to push at once. Each worker gets its own SFTP connection,
+            // since a single SSH.NET client is not safe for concurrent uploads.
+            int degree = settings.SingleThreadMode ? 1 : Math.Max(1, settings.DownloadThreads);
+            degree = Math.Min(degree, Math.Max(1, files.Length));
+
+            statusCallback?.Invoke($"Copying: {folderName} (SFTP ×{degree})");
+
+            // Reports overall progress + throughput; called from every worker thread.
+            Action<string> report = (fileName) =>
+            {
+                DateTime now = DateTime.UtcNow;
+                long done = Interlocked.Read(ref transferredBytes);
+                lock (progressLock)
+                {
+                    float overallPercent = totalBytes > 0
+                        ? (float)(done * 100.0 / totalBytes)
+                        : 0f;
+                    overallPercent = Math.Max(0, Math.Min(100, overallPercent));
+
+                    if (totalBytes > 0 && done > 0 && overallPercent < 100)
+                    {
+                        eta.Update(totalUnits: totalBytes, doneUnits: done);
+                    }
+                    TimeSpan? displayEta = eta.GetDisplayEta();
+
+                    bool shouldUpdate = (now - lastProgressUpdate).TotalMilliseconds >= ThrottleMs
+                                        || Math.Abs(overallPercent - lastReportedPercent) >= 0.1f;
+                    if (shouldUpdate)
+                    {
+                        lastProgressUpdate = now;
+                        lastReportedPercent = overallPercent;
+                        double elapsed = (now - startTime).TotalSeconds;
+                        double speedMBps = elapsed > 0.1 ? (done / 1048576.0) / elapsed : 0;
+                        progressCallback?.Invoke(overallPercent, displayEta);
+                        statusCallback?.Invoke($"{fileName} · {speedMBps:0.0} MB/s · SFTP");
+                    }
+                }
+            };
+
+            // Distribute files across workers greedily by size so each connection
+            // carries a roughly equal number of bytes.
+            List<string>[] buckets = new List<string>[degree];
+            long[] bucketBytes = new long[degree];
+            for (int i = 0; i < degree; i++)
+            {
+                buckets[i] = new List<string>();
+            }
+            foreach (string file in files.OrderByDescending(f => new FileInfo(f).Length))
+            {
+                int target = 0;
+                long min = long.MaxValue;
+                for (int i = 0; i < degree; i++)
+                {
+                    if (bucketBytes[i] < min) { min = bucketBytes[i]; target = i; }
+                }
+                buckets[target].Add(file);
+                bucketBytes[target] += new FileInfo(file).Length;
+            }
+
+            Exception workerError = null;
+            Parallel.For(0, degree, new ParallelOptions { MaxDegreeOfParallelism = degree }, w =>
+            {
+                if (buckets[w].Count == 0)
+                {
+                    return;
+                }
+                try
+                {
+                    using (SftpClient sftp = new SftpClient(BuildConnectionInfo(Host, Port)))
+                    {
+                        sftp.Connect();
+                        sftp.BufferSize = TransferBufferSize;
+
+                        foreach (string file in buckets[w])
+                        {
+                            string remoteFilePath = remoteFiles[file];
+                            string fileName = Path.GetFileName(file);
+                            long lastUploaded = 0;
+
+                            using (FileStream stream = File.OpenRead(file))
+                            {
+                                sftp.UploadFile(stream, remoteFilePath, true, uploaded =>
+                                {
+                                    long u = (long)uploaded;
+                                    long delta = u - lastUploaded;
+                                    lastUploaded = u;
+                                    if (delta != 0)
+                                    {
+                                        Interlocked.Add(ref transferredBytes, delta);
+                                    }
+                                    report(fileName);
+                                });
+                            }
+                        }
+
+                        sftp.Disconnect();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    lock (progressLock)
+                    {
+                        if (workerError == null) workerError = ex;
+                    }
+                }
+            });
+
+            if (workerError != null)
+            {
+                throw workerError;
             }
 
             progressCallback?.Invoke(100, null);
             statusCallback?.Invoke("");
 
-            Logger.Log($"SFTP: OBB '{folderName}' transferred ({totalBytes / 1048576.0:0.0} MB via {User}@{Host}:{Port})");
+            double totalSecs = Math.Max(0.1, (DateTime.UtcNow - startTime).TotalSeconds);
+            Logger.Log($"SFTP: OBB '{folderName}' transferred ({totalBytes / 1048576.0:0.0} MB in {totalSecs:0.0}s = {(totalBytes / 1048576.0) / totalSecs:0.0} MB/s via {degree}× {User}@{Host}:{Port})");
             return new ProcessOutput($"{gameName}: OBB transfer (SFTP): Success\n", "");
         }
 

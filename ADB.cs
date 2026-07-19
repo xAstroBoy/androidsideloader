@@ -501,6 +501,7 @@ namespace AndroidSideloader
                 long transferredBytes = 0;
 
                 // Throttle UI updates to prevent lag
+                DateTime pushStartTime = DateTime.UtcNow;
                 DateTime lastProgressUpdate = DateTime.MinValue;
                 float lastReportedPercent = -1;
                 const int ThrottleMs = 100; // Update UI every 100ms
@@ -555,7 +556,9 @@ namespace AndroidSideloader
                                 lastProgressUpdate = now2;
                                 lastReportedPercent = overallPercent;
                                 progressCallback?.Invoke(overallPercent, displayEta);
-                                statusCallback?.Invoke(fileName);
+                                double pushElapsed = (now2 - pushStartTime).TotalSeconds;
+                                double pushMBps = pushElapsed > 0.1 ? (totalProgressBytes / 1048576.0) / pushElapsed : 0;
+                                statusCallback?.Invoke($"{fileName} · {pushMBps:0.0} MB/s");
                             }
                         };
 
