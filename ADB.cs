@@ -172,6 +172,78 @@ namespace AndroidSideloader
             }
         }
 
+        // Returns true if the `adb devices` output lists at least one usable device.
+        private static bool HasOnlineDevice(string devicesOutput)
+        {
+            if (string.IsNullOrEmpty(devicesOutput))
+            {
+                return false;
+            }
+
+            string[] lines = devicesOutput.Split('\n');
+            for (int i = 1; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (line.Length == 0)
+                {
+                    continue;
+                }
+                if (line.IndexOf("List of devices", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    continue;
+                }
+                if (line.IndexOf("unauthorized", StringComparison.OrdinalIgnoreCase) >= 0
+                    || line.IndexOf("offline", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    continue;
+                }
+                if (line.IndexOf("device", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // `adb devices` briefly reports nothing while the daemon is (re)starting - which
+        // happens whenever a different-version adb client (e.g. one in PATH) forces the
+        // server to kill and restart. Reading that transient empty result as a disconnect
+        // is what makes the UI flash "No Device Connected". This retries across the restart
+        // window so a server bounce never registers as a disconnect. Call off the UI thread.
+        public static ProcessOutput GetDevicesResilient(int maxAttempts = 4, int delayMs = 600)
+        {
+            ProcessOutput result = new ProcessOutput("", "");
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                result = RunAdbCommandToString("devices", suppressLogging: true);
+                if (HasOnlineDevice(result.Output))
+                {
+                    return result;
+                }
+
+                string combined = (result.Output ?? "") + (result.Error ?? "");
+                bool daemonRestarting =
+                    combined.IndexOf("daemon not running", StringComparison.OrdinalIgnoreCase) >= 0
+                    || combined.IndexOf("daemon started", StringComparison.OrdinalIgnoreCase) >= 0
+                    || combined.IndexOf("killing", StringComparison.OrdinalIgnoreCase) >= 0
+                    || combined.IndexOf("doesn't match this client", StringComparison.OrdinalIgnoreCase) >= 0
+                    || combined.IndexOf("cannot connect to daemon", StringComparison.OrdinalIgnoreCase) >= 0
+                    || combined.IndexOf("starting now", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                // If the daemon is up and simply reports no device, don't keep waiting.
+                if (!daemonRestarting && attempt >= 1)
+                {
+                    break;
+                }
+
+                if (attempt < maxAttempts - 1)
+                {
+                    System.Threading.Thread.Sleep(delayMs);
+                }
+            }
+            return result;
+        }
+
         // Executes a shell command on the device.
         private static void ExecuteShellCommand(AdbClient client, DeviceData device, string command)
         {
@@ -402,6 +474,15 @@ namespace AndroidSideloader
                 if (device.Serial == null)
                 {
                     return new ProcessOutput("", "No device connected");
+                }
+
+                // Fast path: rooted headsets running an SSH server take OBBs over SFTP,
+                // which is far faster than adb push. Returns null when unavailable.
+                ProcessOutput sftpResult = await SFTP.TryCopyObbWithProgressAsync(
+                    localPath, progressCallback, statusCallback, gameName);
+                if (sftpResult != null)
+                {
+                    return sftpResult;
                 }
 
                 var client = GetAdbClient();
