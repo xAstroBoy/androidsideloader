@@ -532,6 +532,13 @@ namespace AndroidSideloader
                 long totalBytes = files.Sum(f => new FileInfo(f).Length);
                 long transferredBytes = 0;
 
+                // Surface each file in the transfer window (adb push path).
+                var pushItems = new System.Collections.Generic.Dictionary<string, TransferItem>(StringComparer.Ordinal);
+                foreach (var pf in files)
+                {
+                    pushItems[pf] = TransferQueue.Add(Path.GetFileName(pf), "Push", new FileInfo(pf).Length);
+                }
+
                 // Throttle UI updates to prevent lag
                 DateTime pushStartTime = DateTime.UtcNow;
                 DateTime lastProgressUpdate = DateTime.MinValue;
@@ -561,9 +568,17 @@ namespace AndroidSideloader
                         long fileSize = fileInfo.Length;
                         long capturedTransferredBytes = transferredBytes;
 
+                        TransferItem pushItem = pushItems[file];
+                        TransferQueue.SetState(pushItem, TransferState.Active);
+                        DateTime fileStart = DateTime.UtcNow;
+
                         Action<SyncProgressChangedEventArgs> progressHandler = (args) =>
                         {
                             long totalProgressBytes = capturedTransferredBytes + args.ReceivedBytesSize;
+
+                            double feSecs = (DateTime.UtcNow - fileStart).TotalSeconds;
+                            double fileMBps = feSecs > 0.1 ? (args.ReceivedBytesSize / 1048576.0) / feSecs : 0;
+                            TransferQueue.Report(pushItem, args.ReceivedBytesSize, fileMBps);
 
                             float overallPercent = totalBytes > 0
                                 ? (float)(totalProgressBytes * 100.0 / totalBytes)
@@ -608,6 +623,8 @@ namespace AndroidSideloader
                             });
                         }
 
+                        TransferQueue.Report(pushItem, fileSize, 0);
+                        TransferQueue.SetState(pushItem, TransferState.Done);
                         transferredBytes += fileSize;
                     }
                 }

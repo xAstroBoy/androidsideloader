@@ -124,9 +124,12 @@ namespace AndroidSideloader.Utilities
         public bool CustomBackupDir { get; set; } = false;
         public string BackupDir { get; set; } = string.Empty;
         public bool SingleThreadMode { get; set; } = false;
-        // Number of files transferred in parallel when multithreading is enabled
-        // (download parts, and OBB files over SFTP). Ignored when SingleThreadMode is on.
+        // Number of download parts fetched in parallel when multithreading is enabled.
+        // Ignored when SingleThreadMode is on.
         public int DownloadThreads { get; set; } = 6;
+        // Number of OBB files uploaded concurrently over SFTP (FileZilla-style queue).
+        // Kept modest so the on-device sshd / FUSE storage is not overwhelmed.
+        public int SftpThreads { get; set; } = 3;
         public bool VirtualFilesystemCompatibility { get; set; } = false;
         public bool UpdateSettings { get; set; } = true;
         public string UUID { get; set; } = Guid.NewGuid().ToString();
@@ -283,6 +286,7 @@ namespace AndroidSideloader.Utilities
             BackupDir = string.Empty;
             SingleThreadMode = false;
             DownloadThreads = 6;
+            SftpThreads = 3;
             VirtualFilesystemCompatibility = false;
             UpdateSettings = true;
             UUID = Guid.NewGuid().ToString();

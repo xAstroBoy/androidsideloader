@@ -414,12 +414,24 @@ namespace AndroidSideloader
                 }
             }
 
-            // How many files to push at once. Each worker gets its own SFTP connection,
-            // since a single SSH.NET client is not safe for concurrent uploads.
-            int degree = settings.SingleThreadMode ? 1 : Math.Max(1, settings.DownloadThreads);
+            // How many files to push at once. Each worker gets its own SFTP connection
+            // (a single SSH.NET client is not safe for concurrent uploads) and pulls the
+            // next file from a shared queue, FileZilla-style, so no more than `degree`
+            // files transfer at any moment regardless of how many OBB files there are.
+            int degree = settings.SingleThreadMode ? 1 : Math.Max(1, settings.SftpThreads);
             degree = Math.Min(degree, Math.Max(1, files.Length));
 
             statusCallback?.Invoke($"Copying: {folderName} (SFTP ×{degree})");
+
+            // Register every file in the transfer window (largest first) and build the work queue.
+            string[] ordered = files.OrderByDescending(f => new FileInfo(f).Length).ToArray();
+            Dictionary<string, TransferItem> transferItems = new Dictionary<string, TransferItem>(StringComparer.Ordinal);
+            foreach (string file in ordered)
+            {
+                transferItems[file] = TransferQueue.Add(Path.GetFileName(file), "SFTP", new FileInfo(file).Length);
+            }
+            System.Collections.Concurrent.ConcurrentQueue<string> workQueue =
+                new System.Collections.Concurrent.ConcurrentQueue<string>(ordered);
 
             // Reports overall progress + throughput; called from every worker thread.
             Action<string> report = (fileName) =>
@@ -453,76 +465,75 @@ namespace AndroidSideloader
                 }
             };
 
-            // Distribute files across workers greedily by size so each connection
-            // carries a roughly equal number of bytes.
-            List<string>[] buckets = new List<string>[degree];
-            long[] bucketBytes = new long[degree];
-            for (int i = 0; i < degree; i++)
-            {
-                buckets[i] = new List<string>();
-            }
-            foreach (string file in files.OrderByDescending(f => new FileInfo(f).Length))
-            {
-                int target = 0;
-                long min = long.MaxValue;
-                for (int i = 0; i < degree; i++)
-                {
-                    if (bucketBytes[i] < min) { min = bucketBytes[i]; target = i; }
-                }
-                buckets[target].Add(file);
-                bucketBytes[target] += new FileInfo(file).Length;
-            }
-
             Exception workerError = null;
-            Parallel.For(0, degree, new ParallelOptions { MaxDegreeOfParallelism = degree }, w =>
+            List<Task> workers = new List<Task>();
+            for (int w = 0; w < degree; w++)
             {
-                if (buckets[w].Count == 0)
+                workers.Add(Task.Run(() =>
                 {
-                    return;
-                }
-                try
-                {
-                    using (SftpClient sftp = new SftpClient(BuildConnectionInfo(Host, Port)))
+                    try
                     {
-                        sftp.Connect();
-                        sftp.BufferSize = TransferBufferSize;
-
-                        foreach (string file in buckets[w])
+                        using (SftpClient sftp = new SftpClient(BuildConnectionInfo(Host, Port)))
                         {
-                            string remoteFilePath = remoteFiles[file];
-                            string fileName = Path.GetFileName(file);
-                            long lastUploaded = 0;
+                            sftp.Connect();
+                            sftp.BufferSize = TransferBufferSize;
 
-                            using (FileStream stream = File.OpenRead(file))
+                            while (workQueue.TryDequeue(out string file))
                             {
-                                sftp.UploadFile(stream, remoteFilePath, true, uploaded =>
-                                {
-                                    long u = (long)uploaded;
-                                    long delta = u - lastUploaded;
-                                    lastUploaded = u;
-                                    if (delta != 0)
-                                    {
-                                        Interlocked.Add(ref transferredBytes, delta);
-                                    }
-                                    report(fileName);
-                                });
-                            }
-                        }
+                                string remoteFilePath = remoteFiles[file];
+                                string fileName = Path.GetFileName(file);
+                                TransferItem item = transferItems[file];
+                                long fileTotal = new FileInfo(file).Length;
+                                DateTime fileStart = DateTime.UtcNow;
+                                long lastUploaded = 0;
 
-                        sftp.Disconnect();
+                                TransferQueue.SetState(item, TransferState.Active);
+
+                                using (FileStream stream = File.OpenRead(file))
+                                {
+                                    sftp.UploadFile(stream, remoteFilePath, true, uploaded =>
+                                    {
+                                        long u = (long)uploaded;
+                                        long delta = u - lastUploaded;
+                                        lastUploaded = u;
+                                        if (delta != 0)
+                                        {
+                                            Interlocked.Add(ref transferredBytes, delta);
+                                        }
+                                        double fe = (DateTime.UtcNow - fileStart).TotalSeconds;
+                                        double fileMBps = fe > 0.1 ? (u / 1048576.0) / fe : 0;
+                                        TransferQueue.Report(item, u, fileMBps);
+                                        report(fileName);
+                                    });
+                                }
+
+                                TransferQueue.Report(item, fileTotal, 0);
+                                TransferQueue.SetState(item, TransferState.Done);
+                            }
+
+                            sftp.Disconnect();
+                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    lock (progressLock)
+                    catch (Exception ex)
                     {
-                        if (workerError == null) workerError = ex;
+                        lock (progressLock)
+                        {
+                            if (workerError == null) workerError = ex;
+                        }
                     }
-                }
-            });
+                }));
+            }
+            Task.WaitAll(workers.ToArray());
 
             if (workerError != null)
             {
+                foreach (KeyValuePair<string, TransferItem> kv in transferItems)
+                {
+                    if (kv.Value.State != TransferState.Done)
+                    {
+                        TransferQueue.SetState(kv.Value, TransferState.Failed);
+                    }
+                }
                 throw workerError;
             }
 
