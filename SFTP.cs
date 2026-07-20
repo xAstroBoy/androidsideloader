@@ -465,76 +465,120 @@ namespace AndroidSideloader
                 }
             };
 
-            Exception workerError = null;
+            int failedCount = 0;
+            Exception lastError = null;
             List<Task> workers = new List<Task>();
             for (int w = 0; w < degree; w++)
             {
                 workers.Add(Task.Run(() =>
                 {
+                    SftpClient sftp = null;
                     try
                     {
-                        using (SftpClient sftp = new SftpClient(BuildConnectionInfo(Host, Port)))
+                        while (workQueue.TryDequeue(out string file))
                         {
-                            sftp.Connect();
-                            sftp.BufferSize = TransferBufferSize;
+                            string remoteFilePath = remoteFiles[file];
+                            string fileName = Path.GetFileName(file);
+                            TransferItem item = transferItems[file];
+                            long fileTotal = new FileInfo(file).Length;
 
-                            while (workQueue.TryDequeue(out string file))
+                            bool ok = false;
+                            Exception fileError = null;
+                            for (int attempt = 0; attempt < 3 && !ok; attempt++)
                             {
-                                string remoteFilePath = remoteFiles[file];
-                                string fileName = Path.GetFileName(file);
-                                TransferItem item = transferItems[file];
-                                long fileTotal = new FileInfo(file).Length;
-                                DateTime fileStart = DateTime.UtcNow;
+                                long fileCounted = 0;
                                 long lastUploaded = 0;
-
-                                TransferQueue.SetState(item, TransferState.Active);
-
-                                using (FileStream stream = File.OpenRead(file))
+                                DateTime fileStart = DateTime.UtcNow;
+                                try
                                 {
-                                    sftp.UploadFile(stream, remoteFilePath, true, uploaded =>
+                                    if (sftp == null || !sftp.IsConnected)
                                     {
-                                        long u = (long)uploaded;
-                                        long delta = u - lastUploaded;
-                                        lastUploaded = u;
-                                        if (delta != 0)
-                                        {
-                                            Interlocked.Add(ref transferredBytes, delta);
-                                        }
-                                        double fe = (DateTime.UtcNow - fileStart).TotalSeconds;
-                                        double fileMBps = fe > 0.1 ? (u / 1048576.0) / fe : 0;
-                                        TransferQueue.Report(item, u, fileMBps);
-                                        report(fileName);
-                                    });
-                                }
+                                        try { sftp?.Dispose(); } catch { }
+                                        sftp = new SftpClient(BuildConnectionInfo(Host, Port));
+                                        // A wedged channel makes each SFTP write request time out and
+                                        // throw instead of blocking UploadFile forever (the softlock).
+                                        sftp.OperationTimeout = TimeSpan.FromSeconds(60);
+                                        sftp.Connect();
+                                        sftp.BufferSize = TransferBufferSize;
+                                    }
 
-                                TransferQueue.Report(item, fileTotal, 0);
-                                TransferQueue.SetState(item, TransferState.Done);
+                                    TransferQueue.SetState(item, TransferState.Active);
+                                    TransferQueue.Report(item, 0, 0);
+
+                                    using (FileStream stream = File.OpenRead(file))
+                                    {
+                                        sftp.UploadFile(stream, remoteFilePath, true, uploaded =>
+                                        {
+                                            long u = (long)uploaded;
+                                            long delta = u - lastUploaded;
+                                            lastUploaded = u;
+                                            if (delta != 0)
+                                            {
+                                                Interlocked.Add(ref transferredBytes, delta);
+                                                fileCounted += delta;
+                                            }
+                                            double fe = (DateTime.UtcNow - fileStart).TotalSeconds;
+                                            double fileMBps = fe > 0.1 ? (u / 1048576.0) / fe : 0;
+                                            TransferQueue.Report(item, u, fileMBps);
+                                            report(fileName);
+                                        });
+                                    }
+
+                                    // Verify the file actually landed at the target path with the
+                                    // exact size. A "completed" upload that isn't really there (or is
+                                    // truncated) is a failure and must be retried, not reported as done.
+                                    var attrs = sftp.GetAttributes(remoteFilePath);
+                                    if (attrs == null || attrs.Size != fileTotal)
+                                    {
+                                        throw new Exception($"verification failed for {fileName}: remote size {(attrs != null ? attrs.Size : -1)} != {fileTotal}");
+                                    }
+
+                                    TransferQueue.Report(item, fileTotal, 0);
+                                    TransferQueue.SetState(item, TransferState.Done);
+                                    ok = true;
+                                }
+                                catch (Exception ex)
+                                {
+                                    fileError = ex;
+                                    // undo this attempt's partial contribution to the overall total
+                                    if (fileCounted != 0) Interlocked.Add(ref transferredBytes, -fileCounted);
+                                    try { sftp?.Dispose(); } catch { }
+                                    sftp = null; // force a fresh connection next attempt
+                                    Logger.Log($"SFTP: '{fileName}' attempt {attempt + 1}/3 failed: {ex.Message}", LogLevel.WARNING);
+                                    if (attempt < 2) System.Threading.Thread.Sleep(500 * (attempt + 1));
+                                }
                             }
 
-                            sftp.Disconnect();
+                            if (!ok)
+                            {
+                                string capturedFile = file;
+                                string capturedRemote = remoteFilePath;
+                                TransferItem capturedItem = item;
+                                capturedItem.Retry = () => RetryUpload(capturedItem, capturedFile, capturedRemote);
+                                TransferQueue.SetState(item, TransferState.Failed);
+                                Interlocked.Increment(ref failedCount);
+                                lock (progressLock) { if (lastError == null) lastError = fileError; }
+                            }
                         }
                     }
                     catch (Exception ex)
                     {
-                        lock (progressLock)
-                        {
-                            if (workerError == null) workerError = ex;
-                        }
+                        lock (progressLock) { if (lastError == null) lastError = ex; }
+                    }
+                    finally
+                    {
+                        try { sftp?.Dispose(); } catch { }
                     }
                 }));
             }
             Task.WaitAll(workers.ToArray());
 
-            if (workerError != null)
+            // If every file failed, the SFTP path is unusable (server gone / auth lost) - throw so
+            // the caller falls back to adb push. If only some failed, leave them in the transfer
+            // strip (marked Failed, each with a Retry action) instead of re-pushing the whole set.
+            if (failedCount >= files.Length && lastError != null)
             {
-                foreach (KeyValuePair<string, TransferItem> kv in transferItems)
-                {
-                    if (kv.Value.State != TransferState.Done)
-                    {
-                        TransferQueue.SetState(kv.Value, TransferState.Failed);
-                    }
-                }
-                throw workerError;
+                throw lastError;
             }
 
             // Make the freshly-written OBB tree readable by the game. adb push goes through
@@ -568,6 +612,85 @@ namespace AndroidSideloader
             double totalSecs = Math.Max(0.1, (DateTime.UtcNow - startTime).TotalSeconds);
             Logger.Log($"SFTP: OBB '{folderName}' transferred ({totalBytes / 1048576.0:0.0} MB in {totalSecs:0.0}s = {(totalBytes / 1048576.0) / totalSecs:0.0} MB/s via {degree}× {User}@{Host}:{Port})");
             return new ProcessOutput($"{gameName}: OBB transfer (SFTP): Success\n", "");
+        }
+
+        // Re-uploads a single OBB file that previously failed. Runs on its own connection and
+        // updates the transfer item in place. Wired to the transfer strip's "Retry" action.
+        public static void RetryUpload(TransferItem item, string localFile, string remoteFilePath)
+        {
+            Task.Run(() =>
+            {
+                try
+                {
+                    if (!File.Exists(localFile))
+                    {
+                        Logger.Log($"SFTP retry: local file missing: {localFile}", LogLevel.ERROR);
+                        TransferQueue.SetState(item, TransferState.Failed);
+                        return;
+                    }
+
+                    TransferQueue.SetState(item, TransferState.Queued);
+                    TransferQueue.Report(item, 0, 0);
+
+                    using (SftpClient sftp = new SftpClient(BuildConnectionInfo(Host, Port)))
+                    {
+                        sftp.OperationTimeout = TimeSpan.FromSeconds(60);
+                        sftp.Connect();
+                        sftp.BufferSize = TransferBufferSize;
+
+                        int slash = remoteFilePath.LastIndexOf('/');
+                        if (slash > 0)
+                        {
+                            EnsureRemoteDirectory(sftp, remoteFilePath.Substring(0, slash), new HashSet<string>());
+                        }
+
+                        long total = new FileInfo(localFile).Length;
+                        DateTime start = DateTime.UtcNow;
+                        using (FileStream stream = File.OpenRead(localFile))
+                        {
+                            sftp.UploadFile(stream, remoteFilePath, true, uploaded =>
+                            {
+                                long u = (long)uploaded;
+                                double e = (DateTime.UtcNow - start).TotalSeconds;
+                                double mbps = e > 0.1 ? (u / 1048576.0) / e : 0;
+                                TransferQueue.Report(item, u, mbps);
+                            });
+                        }
+
+                        var vattrs = sftp.GetAttributes(remoteFilePath);
+                        if (vattrs == null || vattrs.Size != total)
+                        {
+                            throw new Exception($"verification failed: remote size {(vattrs != null ? vattrs.Size : -1)} != {total}");
+                        }
+
+                        TransferQueue.Report(item, total, 0);
+                        TransferQueue.SetState(item, TransferState.Done);
+                        sftp.Disconnect();
+                    }
+
+                    // best-effort perms fix on the retried file
+                    try
+                    {
+                        string q = "'" + remoteFilePath.Replace("'", "'\\''") + "'";
+                        using (SshClient ssh = new SshClient(BuildConnectionInfo(Host, Port)))
+                        {
+                            ssh.Connect();
+                            using (SshCommand cmd = ssh.CreateCommand($"chmod 0777 {q} 2>/dev/null; restorecon {q} 2>/dev/null; true"))
+                            {
+                                cmd.CommandTimeout = TimeSpan.FromSeconds(15);
+                                cmd.Execute();
+                            }
+                            ssh.Disconnect();
+                        }
+                    }
+                    catch { }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"SFTP retry failed for {Path.GetFileName(localFile)}: {ex.Message}", LogLevel.ERROR);
+                    TransferQueue.SetState(item, TransferState.Failed);
+                }
+            });
         }
 
         private static void EnsureRemoteDirectory(SftpClient sftp, string remoteDir, HashSet<string> created)

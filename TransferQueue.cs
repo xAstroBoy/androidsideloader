@@ -5,7 +5,7 @@ namespace AndroidSideloader
 {
     public enum TransferState { Queued, Active, Done, Failed }
 
-    // A single file transfer surfaced in the TransferWindow.
+    // A single file transfer surfaced in the integrated transfer strip.
     public class TransferItem
     {
         public string Name;
@@ -14,10 +14,13 @@ namespace AndroidSideloader
         public long TransferredBytes;
         public double SpeedMBps;
         public TransferState State = TransferState.Queued;
+        public DateTime? CompletedUtc; // set when the item reaches Done/Failed, for auto-clear
+        public Action Retry;           // re-attempts this single file; set when it fails
     }
 
     // Thread-safe registry of in-flight file transfers. Producers are the transfer
-    // workers (background threads); the consumer is the TransferWindow UI timer.
+    // workers (background threads); the consumer is the TransferStrip UI timer, which
+    // polls Snapshot() and auto-removes finished rows via PurgeCompleted().
     public static class TransferQueue
     {
         private static readonly object _lock = new object();
@@ -30,7 +33,6 @@ namespace AndroidSideloader
             {
                 _items.Add(item);
             }
-            TransferWindow.NotifyActivity();
             return item;
         }
 
@@ -40,6 +42,10 @@ namespace AndroidSideloader
             lock (_lock)
             {
                 item.State = state;
+                if (state == TransferState.Done || state == TransferState.Failed)
+                {
+                    item.CompletedUtc = DateTime.UtcNow;
+                }
             }
         }
 
@@ -65,6 +71,30 @@ namespace AndroidSideloader
             }
         }
 
+        // Auto-clears *successful* rows a short while after they finish, so a "Done" row is
+        // visible briefly then disappears. Failed rows are kept so the user can retry them.
+        public static void PurgeCompleted(double doneSeconds)
+        {
+            DateTime now = DateTime.UtcNow;
+            lock (_lock)
+            {
+                _items.RemoveAll(i =>
+                    i.State == TransferState.Done &&
+                    i.CompletedUtc.HasValue &&
+                    (now - i.CompletedUtc.Value).TotalSeconds >= doneSeconds);
+            }
+        }
+
+        public static void Remove(TransferItem item)
+        {
+            if (item == null) return;
+            lock (_lock)
+            {
+                _items.Remove(item);
+            }
+        }
+
+        // Clears finished rows on demand (both Done and Failed).
         public static void ClearFinished()
         {
             lock (_lock)

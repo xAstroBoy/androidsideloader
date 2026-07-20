@@ -4,41 +4,54 @@ using System.Windows.Forms;
 
 namespace AndroidSideloader
 {
-    // FileZilla-style popup showing every in-flight file transfer (SFTP / push / pull)
-    // with a live per-file progress bar, speed and status. Non-modal so it never blocks
-    // the app; hides on close and re-shows itself when new transfers start.
-    public class TransferWindow : Form
+    // Integrated, collapsible transfer strip. It overlays the bottom of the games list
+    // whenever files are moving (SFTP / push), themed to match the main window, and hides
+    // itself when idle. Finished rows auto-clear a couple of seconds after they complete.
+    // This is a child of the main form, not a separate window.
+    public class TransferStrip : Panel
     {
-        private static TransferWindow _instance;
-        private static readonly object _instLock = new object();
-
         private readonly ListView _list;
         private readonly Timer _timer;
+        private Control _anchor;                 // control whose bottom edge we sit on (games list)
+        private const int ExpandedHeight = 150;
 
-        private static readonly Color Bg = Color.FromArgb(25, 25, 25);
-        private static readonly Color BgAlt = Color.FromArgb(32, 32, 32);
-        private static readonly Color Fg = Color.White;
-        private static readonly Color HeaderBg = Color.FromArgb(35, 35, 35);
-        private static readonly Color BarBack = Color.FromArgb(52, 52, 52);
-        private static readonly Color Accent = Color.FromArgb(0, 120, 215);
-        private static readonly Color DoneColor = Color.FromArgb(60, 160, 90);
-        private static readonly Color FailColor = Color.FromArgb(200, 70, 70);
+        private readonly Color _bg;
+        private readonly Color _bgAlt;
+        private readonly Color _header;
+        private readonly Color _barBack;
+        private readonly Color _fg;
+        private readonly Color _accent = Color.FromArgb(70, 130, 220);
+        private readonly Color _doneColor = Color.FromArgb(70, 165, 95);
+        private readonly Color _failColor = Color.FromArgb(200, 80, 80);
 
         private sealed class BufferedListView : ListView
         {
             public BufferedListView() { DoubleBuffered = true; }
         }
 
-        private TransferWindow()
+        public TransferStrip(Color themeBack, Color themeFore)
         {
-            Text = "Transfers";
-            ClientSize = new Size(680, 340);
-            MinimumSize = new Size(420, 200);
-            StartPosition = FormStartPosition.CenterScreen;
-            BackColor = Bg;
-            ForeColor = Fg;
-            ShowInTaskbar = true;
-            try { if (Program.form != null && !Program.form.IsDisposed) Icon = Program.form.Icon; } catch { }
+            _bg = themeBack;
+            _bgAlt = Shift(themeBack, 8);
+            _header = Shift(themeBack, 18);
+            _barBack = Shift(themeBack, 28);
+            _fg = themeFore;
+
+            DoubleBuffered = true;
+            BackColor = _header;
+            Visible = false;
+            Padding = new Padding(1, 0, 1, 1);
+
+            Label title = new Label
+            {
+                Text = "  TRANSFERS",
+                Dock = DockStyle.Top,
+                Height = 22,
+                BackColor = _header,
+                ForeColor = _fg,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font("Segoe UI", 8.25f, FontStyle.Bold)
+            };
 
             _list = new BufferedListView
             {
@@ -47,85 +60,96 @@ namespace AndroidSideloader
                 FullRowSelect = true,
                 GridLines = false,
                 OwnerDraw = true,
-                BackColor = Bg,
-                ForeColor = Fg,
+                BackColor = _bg,
+                ForeColor = _fg,
                 BorderStyle = BorderStyle.None,
                 HeaderStyle = ColumnHeaderStyle.Nonclickable
             };
             _list.Columns.Add("File", 300);
-            _list.Columns.Add("Size", 90, HorizontalAlignment.Right);
-            _list.Columns.Add("Progress", 140);
+            _list.Columns.Add("Size", 80, HorizontalAlignment.Right);
+            _list.Columns.Add("Progress", 150);
             _list.Columns.Add("Speed", 80, HorizontalAlignment.Right);
             _list.Columns.Add("Status", 70, HorizontalAlignment.Left);
             _list.DrawColumnHeader += OnDrawHeader;
-            _list.DrawItem += (s, e) => { /* per-subitem drawing below */ };
+            _list.DrawItem += (s, e) => { /* handled per-subitem */ };
             _list.DrawSubItem += OnDrawSubItem;
 
-            Panel bottom = new Panel { Dock = DockStyle.Bottom, Height = 40, BackColor = BgAlt };
-            Button clearBtn = new Button
-            {
-                Text = "Clear finished",
-                FlatStyle = FlatStyle.Flat,
-                ForeColor = Fg,
-                BackColor = Color.FromArgb(45, 45, 45),
-                Width = 130,
-                Height = 26,
-                Anchor = AnchorStyles.Right | AnchorStyles.Top
-            };
-            clearBtn.FlatAppearance.BorderColor = Color.FromArgb(70, 70, 70);
-            clearBtn.Location = new Point(bottom.ClientSize.Width - clearBtn.Width - 8, 7);
-            clearBtn.Click += (s, e) => TransferQueue.ClearFinished();
-            bottom.Controls.Add(clearBtn);
-
             Controls.Add(_list);
-            Controls.Add(bottom);
+            Controls.Add(title);
 
-            _timer = new Timer { Interval = 250 };
-            _timer.Tick += (s, e) => RefreshList();
-            _timer.Start();
-
-            FormClosing += (s, e) =>
+            // Right-click menu: retry a failed file, remove a row, or clear finished rows.
+            ContextMenuStrip menu = new ContextMenuStrip { BackColor = _header, ForeColor = _fg };
+            ToolStripMenuItem retryMi = new ToolStripMenuItem("Retry");
+            ToolStripMenuItem removeMi = new ToolStripMenuItem("Remove");
+            ToolStripMenuItem clearMi = new ToolStripMenuItem("Clear finished");
+            retryMi.Click += (s, e) => { TransferItem t = _menuTarget; if (t != null && t.Retry != null) t.Retry(); };
+            removeMi.Click += (s, e) => { if (_menuTarget != null) TransferQueue.Remove(_menuTarget); };
+            clearMi.Click += (s, e) => TransferQueue.ClearFinished();
+            menu.Items.Add(retryMi);
+            menu.Items.Add(removeMi);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(clearMi);
+            menu.Opening += (s, e) =>
             {
-                // Hide (keep the singleton alive) rather than dispose on the X button.
-                if (e.CloseReason == CloseReason.UserClosing)
+                retryMi.Enabled = _menuTarget != null && _menuTarget.State == TransferState.Failed && _menuTarget.Retry != null;
+                removeMi.Enabled = _menuTarget != null;
+            };
+            _list.ContextMenuStrip = menu;
+            _list.MouseDown += (s, e) =>
+            {
+                if (e.Button == MouseButtons.Right)
                 {
-                    e.Cancel = true;
-                    Hide();
+                    ListViewHitTestInfo hit = _list.HitTest(e.Location);
+                    _menuTarget = hit.Item != null ? hit.Item.Tag as TransferItem : null;
                 }
             };
+
+            _timer = new Timer { Interval = 250 };
+            _timer.Tick += (s, e) => Tick();
         }
 
-        // Called from any thread when a transfer is added/updated. Creates and shows the
-        // window on the UI thread if needed.
-        public static void NotifyActivity()
+        private TransferItem _menuTarget;
+
+        // Attaches the strip to a parent form and anchors it to a control's bottom edge.
+        public void AttachTo(Control parent, Control anchor)
         {
-            Form owner = Program.form;
-            if (owner == null || owner.IsDisposed) return;
+            _anchor = anchor;
+            if (parent != null && !parent.IsDisposed)
+            {
+                parent.Controls.Add(this);
+                BringToFront();
+            }
+            _timer.Start();
+        }
+
+        private void Tick()
+        {
             try
             {
-                owner.BeginInvoke((Action)(() =>
+                TransferQueue.PurgeCompleted(2.0);
+                var items = TransferQueue.Snapshot();
+
+                if (items.Count == 0)
                 {
-                    lock (_instLock)
-                    {
-                        if (_instance == null || _instance.IsDisposed)
-                        {
-                            _instance = new TransferWindow();
-                        }
-                    }
-                    if (!_instance.Visible)
-                    {
-                        _instance.Show(owner);
-                    }
-                    _instance.BringToFront();
-                }));
+                    if (Visible) Visible = false;
+                    return;
+                }
+
+                if (_anchor != null && !_anchor.IsDisposed)
+                {
+                    int h = Math.Min(ExpandedHeight, Math.Max(64, _anchor.Height - 30));
+                    SetBounds(_anchor.Left, _anchor.Bottom - h, _anchor.Width, h);
+                }
+
+                if (!Visible) Visible = true;
+                BringToFront();
+                RefreshRows(items);
             }
             catch { }
         }
 
-        private void RefreshList()
+        private void RefreshRows(System.Collections.Generic.List<TransferItem> items)
         {
-            var items = TransferQueue.Snapshot();
-
             _list.BeginUpdate();
             while (_list.Items.Count > items.Count)
             {
@@ -179,15 +203,23 @@ namespace AndroidSideloader
             return mb >= 1024 ? (mb / 1024.0).ToString("0.00") + " GB" : mb.ToString("0.0") + " MB";
         }
 
+        private static Color Shift(Color c, int amt)
+        {
+            return Color.FromArgb(
+                Math.Min(255, Math.Max(0, c.R + amt)),
+                Math.Min(255, Math.Max(0, c.G + amt)),
+                Math.Min(255, Math.Max(0, c.B + amt)));
+        }
+
         private void OnDrawHeader(object sender, DrawListViewColumnHeaderEventArgs e)
         {
-            using (SolidBrush b = new SolidBrush(HeaderBg))
+            using (SolidBrush b = new SolidBrush(_header))
             {
                 e.Graphics.FillRectangle(b, e.Bounds);
             }
             TextRenderer.DrawText(e.Graphics, e.Header.Text, Font, e.Bounds, Color.Gainsboro,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.LeftAndRightPadding);
-            using (Pen p = new Pen(Color.FromArgb(55, 55, 55)))
+            using (Pen p = new Pen(Shift(_bg, 40)))
             {
                 e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
             }
@@ -196,7 +228,7 @@ namespace AndroidSideloader
         private void OnDrawSubItem(object sender, DrawListViewSubItemEventArgs e)
         {
             TransferItem t = e.Item.Tag as TransferItem;
-            Color rowBg = (e.ItemIndex % 2 == 0) ? Bg : BgAlt;
+            Color rowBg = (e.ItemIndex % 2 == 0) ? _bg : _bgAlt;
             using (SolidBrush b = new SolidBrush(rowBg))
             {
                 e.Graphics.FillRectangle(b, e.Bounds);
@@ -206,21 +238,21 @@ namespace AndroidSideloader
             {
                 Rectangle r = e.Bounds;
                 r.Inflate(-4, -5);
-                using (SolidBrush bb = new SolidBrush(BarBack))
+                using (SolidBrush bb = new SolidBrush(_barBack))
                 {
                     e.Graphics.FillRectangle(bb, r);
                 }
                 double frac = t.TotalBytes > 0 ? Math.Max(0, Math.Min(1, (double)t.TransferredBytes / t.TotalBytes)) : 0;
                 Rectangle fill = r;
                 fill.Width = (int)(r.Width * frac);
-                Color barColor = t.State == TransferState.Failed ? FailColor
-                               : t.State == TransferState.Done ? DoneColor
-                               : Accent;
+                Color barColor = t.State == TransferState.Failed ? _failColor
+                               : t.State == TransferState.Done ? _doneColor
+                               : _accent;
                 using (SolidBrush fb = new SolidBrush(barColor))
                 {
                     e.Graphics.FillRectangle(fb, fill);
                 }
-                TextRenderer.DrawText(e.Graphics, (frac * 100).ToString("0.0") + "%", Font, e.Bounds, Fg,
+                TextRenderer.DrawText(e.Graphics, (frac * 100).ToString("0.0") + "%", Font, e.Bounds, _fg,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
             else
@@ -230,10 +262,10 @@ namespace AndroidSideloader
                 {
                     flags |= TextFormatFlags.Right;
                 }
-                Color txt = Fg;
+                Color txt = _fg;
                 if (e.ColumnIndex == 4 && t != null)
                 {
-                    txt = t.State == TransferState.Done ? Color.FromArgb(120, 200, 140)
+                    txt = t.State == TransferState.Done ? Color.FromArgb(120, 205, 145)
                         : t.State == TransferState.Failed ? Color.FromArgb(230, 120, 120)
                         : t.State == TransferState.Active ? Color.FromArgb(120, 180, 240)
                         : Color.Gainsboro;

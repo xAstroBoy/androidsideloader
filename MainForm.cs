@@ -91,6 +91,7 @@ namespace AndroidSideloader
         private const int TILE_SPACING = 10;
         private string freeSpaceText = "";
         private string freeSpaceTextDetailed = "";
+        private TransferStrip _transferStrip;
         private int _questStorageProgress = 0;
         private Color _mirrorPillColor = Color.FromArgb(32, 36, 44);
         private DateTime _mirrorMenuClosedAt = DateTime.MinValue;
@@ -466,6 +467,11 @@ namespace AndroidSideloader
             gamesListView.GridLines = false;
             speedLabel.Text = String.Empty;
             diskLabel.Text = String.Empty;
+
+            // Integrated transfer strip: overlays the bottom of the games list while files
+            // are moving (SFTP / push), themed to match the list, and hides itself when idle.
+            _transferStrip = new TransferStrip(gamesListView.BackColor, gamesListView.ForeColor);
+            _transferStrip.AttachTo(this, gamesListView);
 
             settings.MainDir = Environment.CurrentDirectory;
             settings.Save();

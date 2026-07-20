@@ -313,8 +313,8 @@
     <Compile Include="Properties\ApiKey.cs" />
     <Compile Include="SelectFolder.cs" />
     <Compile Include="TransferQueue.cs" />
-    <Compile Include="TransferWindow.cs">
-      <SubType>Form</SubType>
+    <Compile Include="TransferStrip.cs">
+      <SubType>Component</SubType>
     </Compile>
     <Compile Include="Utilities\SettingsManager.cs" />
     <Compile Include="Utilities\StringUtilities.cs" />
