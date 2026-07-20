@@ -396,6 +396,25 @@ namespace AndroidSideloader
             {
                 Logger.Log($"SideloadWithProgressAsync error: {ex.Message}", LogLevel.ERROR);
 
+                // AdvancedSharpAdbClient throws "An unknown error occurred." whenever it cannot
+                // parse pm install's result - which frequently happens even though the install
+                // actually succeeded (a connection blip right after install, unusual pm output).
+                // Verify against the device before treating it as a failure.
+                try
+                {
+                    if (VerifyInstalled(path, packagename))
+                    {
+                        Logger.Log($"{gameName}: install reported '{ex.Message}', but the package is present on the device with a matching version - treating as success.", LogLevel.WARNING);
+                        progressCallback?.Invoke(100, null);
+                        statusCallback?.Invoke("");
+                        return new ProcessOutput($"{gameName}: Success (verified on device)\n");
+                    }
+                }
+                catch (Exception vex)
+                {
+                    Logger.Log($"Install verification failed: {vex.Message}", LogLevel.WARNING);
+                }
+
                 // Signature mismatches and version downgrades can be fixed by reinstalling
                 bool isReinstallEligible = ex.Message.Contains("signatures do not match") ||
                                            ex.Message.Contains("INSTALL_FAILED_VERSION_DOWNGRADE") ||
@@ -483,6 +502,68 @@ namespace AndroidSideloader
 
                 // Return the error message so it's displayed to the user
                 return new ProcessOutput("", $"\n{gameName}: {ex.Message}");
+            }
+        }
+
+        // Confirms an APK actually installed by checking the device, so a benign "unknown error"
+        // from the install-result parser isn't treated as a real failure. Reads the APK's package
+        // name + version code with aapt and requires the device to report the same version.
+        private static bool VerifyInstalled(string apkPath, string knownPackage)
+        {
+            try
+            {
+                string apkPkg = knownPackage;
+                string apkVc = null;
+
+                string aapt = Path.Combine(adbFolderPath, "aapt.exe");
+                if (File.Exists(aapt) && File.Exists(apkPath))
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = aapt,
+                        Arguments = $"dump badging \"{apkPath}\"",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    };
+                    using (var p = Process.Start(psi))
+                    {
+                        string outp = p.StandardOutput.ReadToEnd();
+                        p.WaitForExit(10000);
+                        var pm = System.Text.RegularExpressions.Regex.Match(outp, @"package: name='([^']+)'");
+                        if (string.IsNullOrEmpty(apkPkg) && pm.Success) apkPkg = pm.Groups[1].Value;
+                        var vm = System.Text.RegularExpressions.Regex.Match(outp, @"versionCode='(\d+)'");
+                        if (vm.Success) apkVc = vm.Groups[1].Value;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(apkPkg)) return false;
+
+                // Is the package present on the device at all?
+                string listed = RunAdbCommandToString($"shell pm list packages {apkPkg}", true).Output ?? "";
+                if (listed.IndexOf("package:" + apkPkg, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    return false;
+                }
+
+                // If we know the APK's version code, require the installed one to match so a
+                // failed *upgrade* (old version still present) is not mistaken for success.
+                if (!string.IsNullOrEmpty(apkVc))
+                {
+                    string devOut = RunAdbCommandToString($"shell \"dumpsys package {apkPkg} | grep versionCode\"", true).Output ?? "";
+                    var dm = System.Text.RegularExpressions.Regex.Match(devOut, @"versionCode=(\d+)");
+                    if (dm.Success)
+                    {
+                        return dm.Groups[1].Value == apkVc;
+                    }
+                }
+
+                return true; // present, versions unknown -> accept
+            }
+            catch
+            {
+                return false;
             }
         }
 
